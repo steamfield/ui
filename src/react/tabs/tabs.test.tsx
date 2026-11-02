@@ -2,15 +2,11 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { type ReactElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { Tab, TabList, TabPanel, Tabs, type TabsProps } from "./tabs.tsx";
 
 beforeEach(() => {
   history.replaceState(null, "", "/");
-});
-
-afterEach(() => {
-  cleanup();
 });
 
 const commands = [
@@ -227,26 +223,23 @@ test("in controlled mode a hash on mount reaches the parent through onValueChang
   expect(onValueChange).toHaveBeenCalledWith("d");
 });
 
-test("hash true pushes, hash 'replace' replaces, and hashchange selects", async () => {
+test("hash true adds history, hash 'replace' doesn't, and hashchange selects", async () => {
   const user = userEvent.setup();
-  const push = vi.spyOn(history, "pushState");
-  const replace = vi.spyOn(history, "replaceState");
+  const before = history.length;
   render(<Four hash />);
   await user.click(tab("B"));
-  expect(push).toHaveBeenCalledTimes(1);
   expect(location.hash).toBe("#t-b");
+  expect(history.length).toBe(before + 1);
   history.replaceState(null, "", "#t-d");
   act(() => {
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   });
   expect(shownPanel().textContent).toBe("panel d");
   cleanup();
-  replace.mockClear();
   render(<Four hash="replace" />);
   await user.click(tab("A"));
-  expect(replace).toHaveBeenCalledTimes(1);
-  push.mockRestore();
-  replace.mockRestore();
+  expect(location.hash).toBe("#t-a");
+  expect(history.length).toBe(before + 1);
 });
 
 test("hash true replaces for arrow-key auto activation and pushes for clicks and Enter", async () => {

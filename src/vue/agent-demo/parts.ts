@@ -27,7 +27,7 @@ import {
   spinnerFrame,
   toolHidden,
   toolName,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
 import type { DemoEntry, DemoView } from "../../sequencer/view.ts";
@@ -37,7 +37,7 @@ export type {
   AgentDemoLabels,
   AgentDemoLayout,
   AnnounceMode,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 
 /** A registry icon: text, a vnode, or a component rendered with no props. */
 export type ToolIcon = string | VNode | Component;

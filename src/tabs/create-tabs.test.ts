@@ -157,21 +157,17 @@ test("reads the hash on setup and on hashchange without firing the event", () =>
   expect(events).toEqual([]);
 });
 
-test("hash 'replace' syncs with replaceState; hash true pushes", () => {
-  const replace = vi.spyOn(history, "replaceState");
-  const push = vi.spyOn(history, "pushState");
+test("hash 'replace' syncs without adding history; hash true adds an entry", () => {
+  const before = history.length;
   dispose = createTabs(root(), { hash: "replace" });
   tab("B").click();
   expect(location.hash).toBe("#p-b");
-  expect(replace).toHaveBeenCalled();
-  expect(push).not.toHaveBeenCalled();
+  expect(history.length).toBe(before);
   dispose();
   dispose = createTabs(root(), { hash: true });
   tab("D").click();
   expect(location.hash).toBe("#p-d");
-  expect(push).toHaveBeenCalledTimes(1);
-  replace.mockRestore();
-  push.mockRestore();
+  expect(history.length).toBe(before + 1);
 });
 
 test("hash true replaces for arrow-key auto activation and pushes for clicks and Enter", () => {

@@ -1,6 +1,7 @@
-import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+import { stubClipboard, stubExecCommand } from "../../../tests/helpers/dom.ts";
 import { enhanceCopyButtons } from "../../copy/enhance.ts";
 import { CopyCommand } from "./copy-command.tsx";
 import { useCopy } from "./use-copy.ts";
@@ -9,12 +10,7 @@ const writeText = vi.fn<(text: string) => Promise<void>>();
 
 beforeEach(() => {
   writeText.mockReset().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-});
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
+  stubClipboard(writeText);
 });
 
 test("server markup keeps the command readable and the button hidden", () => {
@@ -72,7 +68,7 @@ test("useCopy flips copied, resets, and reports to onCopy", async () => {
 
 test("useCopy reports failure without throwing", async () => {
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   const { result } = renderHook(() => useCopy());
   await act(async () => {
     expect(await result.current.copy("x")).toBe(false);

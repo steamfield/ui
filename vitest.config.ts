@@ -4,7 +4,8 @@ import { defineConfig } from "vitest/config";
 // map, boundaries, hooks) runs in Node.
 export default defineConfig({
   test: {
-    testTimeout: 30_000,
+    unstubGlobals: true,
+    restoreMocks: true,
     projects: [
       {
         extends: true,
@@ -12,11 +13,18 @@ export default defineConfig({
           name: "library",
           environment: "happy-dom",
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+          setupFiles: ["tests/helpers/library-setup.ts"],
         },
       },
       {
         extends: true,
-        test: { name: "tooling", environment: "node", include: ["tests/**/*.test.ts"] },
+        // Tooling tests spawn processes (hooks, builds), so they get a longer timeout.
+        test: {
+          name: "tooling",
+          environment: "node",
+          include: ["tests/**/*.test.ts"],
+          testTimeout: 30_000,
+        },
       },
     ],
     coverage: {

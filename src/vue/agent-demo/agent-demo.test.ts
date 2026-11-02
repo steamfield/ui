@@ -1,7 +1,14 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createSSRApp, defineComponent, h, nextTick, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
+import {
+  FakeIntersectionObserver,
+  setTabHidden,
+  stubAnimationFrame,
+  stubIntersectionObserver,
+  stubReducedMotion,
+} from "../../../tests/helpers/dom.ts";
 import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
 import { compile } from "../../sequencer/compile.ts";
@@ -48,16 +55,6 @@ const terminalTimeline = compile(terminalScript, { timing: presets.terminal });
 const TOTAL = terminalTimeline.duration;
 const startOf = (i: number): number => terminalTimeline.steps[i]?.start ?? 0;
 
-function stubReducedMotion(reduce: boolean): void {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: reduce && query.includes("reduce"),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
-}
-
-const wrappers: VueWrapper[] = [];
-
 /** Mounts and waits for the post-mount gate. */
 async function mountDemo(
   props: Partial<AgentDemoProps> = {},
@@ -68,7 +65,6 @@ async function mountDemo(
     slots: slots as never,
     attachTo: document.body,
   });
-  wrappers.push(wrapper);
   await nextTick();
   return wrapper;
 }
@@ -87,21 +83,10 @@ function button(w: VueWrapper, name: string) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  // A rAF on the fake clock, so the gate's frames advance with vi.advanceTimersByTime.
-  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) =>
-    setTimeout(() => cb(performance.now()), 16),
-  );
-  vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+  stubAnimationFrame();
   // No IntersectionObserver: the demo counts as on screen.
   vi.stubGlobal("IntersectionObserver", undefined);
   stubReducedMotion(false);
-});
-
-afterEach(() => {
-  for (const w of wrappers.splice(0)) w.unmount();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
 });
 
 describe("server render", () => {
@@ -201,7 +186,6 @@ describe("server render", () => {
         },
       },
     });
-    wrappers.push(wrapper);
     const html = wrapper.html({ raw: true });
     expect(html).toContain("~/demo $");
     expect(html).toContain('data-tone="warn"');
@@ -259,7 +243,6 @@ describe("time mode", () => {
     expect(onComplete).toHaveBeenCalledTimes(2);
     await button(w, "Replay").trigger("click");
     w.unmount();
-    wrappers.splice(wrappers.indexOf(w), 1);
     await advance(TOTAL + 100);
     expect(onComplete).toHaveBeenCalledTimes(2);
   });
@@ -268,8 +251,7 @@ describe("time mode", () => {
     const w = await mountDemo();
     await advance(300);
     const typed = region(w);
-    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    document.dispatchEvent(new Event("visibilitychange"));
+    setTabHidden(true);
     await advance(10_000);
     expect(region(w)).toBe(typed);
   });
@@ -576,7 +558,6 @@ describe("click mode (mcp-bet-demo beats)", () => {
         );
     });
     const w = mount(Probe);
-    wrappers.push(w);
     await nextTick();
     expect(demo?.playCount.value).toBe(1);
     expect(w.text()).toBe("0");
@@ -616,7 +597,7 @@ describe("useAgentDemo", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     expect(demo?.mode.value).toBe("static");
     await nextTick();
     expect(demo?.ready.value).toBe(true);
@@ -646,7 +627,7 @@ describe("useAgentDemo", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     await nextTick();
     expect(() => demo?.controls.setSpeed(0)).toThrow(
       expect.objectContaining({ code: "invalid_option", field: "speed" }),
@@ -671,7 +652,7 @@ describe("useAgentDemo", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     const first = demo?.timeline.value;
     speed.value = 3;
     await nextTick();
@@ -693,7 +674,7 @@ describe("useAgentDemo", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     expect(early).toEqual(expect.objectContaining({ code: "invalid_option", field: "speed" }));
     await nextTick();
     expect(demo?.ready.value).toBe(true);
@@ -711,7 +692,7 @@ describe("useAgentDemo", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     const shown = demo?.timeline.value;
     hidden.value = true;
     await nextTick();
@@ -782,7 +763,7 @@ describe("completion, reduced motion and the play label", () => {
       demo = result;
       return () => h("div", { ref: result.el });
     });
-    wrappers.push(mount(Probe));
+    mount(Probe);
     await nextTick();
     demo?.controls.seek(startOf(2));
     await nextTick();
@@ -880,32 +861,10 @@ describe("terminal tool header", () => {
 
 // Parity with react/playback's element rules: the same cases as the React playback suite.
 describe("useAgentDemo element rules", () => {
-  class FakeObserver {
-    static instances: FakeObserver[] = [];
-    readonly targets = new Set<Element>();
-    disconnected = false;
-    readonly callback: IntersectionObserverCallback;
-    constructor(callback: IntersectionObserverCallback) {
-      this.callback = callback;
-      FakeObserver.instances.push(this);
-    }
-    observe(target: Element): void {
-      this.targets.add(target);
-    }
-    unobserve(target: Element): void {
-      this.targets.delete(target);
-    }
-    disconnect(): void {
-      this.disconnected = true;
-    }
-  }
-  const live = (): FakeObserver[] => FakeObserver.instances.filter((o) => !o.disconnected);
+  const live = (): FakeIntersectionObserver[] => FakeIntersectionObserver.live();
   const targets = (): Element[] => [...(live()[0]?.targets ?? [])];
   const scroll = async (isIntersecting: boolean): Promise<void> => {
-    for (const observer of live()) {
-      const entries = [...observer.targets].map((target) => ({ target, isIntersecting }));
-      observer.callback(entries as unknown as IntersectionObserverEntry[], observer as never);
-    }
+    for (const observer of live()) observer.fire(isIntersecting);
     await nextTick();
   };
 
@@ -935,14 +894,12 @@ describe("useAgentDemo element rules", () => {
           : h("p", "no element");
     });
     const w = mount(Probe, { attachTo: document.body });
-    wrappers.push(w);
     await nextTick();
     return w;
   }
 
   beforeEach(() => {
-    FakeObserver.instances = [];
-    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    stubIntersectionObserver();
     show.value = true;
     which.value = "a";
     threshold.value = undefined;
@@ -1010,12 +967,12 @@ describe("useAgentDemo element rules", () => {
     await mountProbe();
     await scroll(true);
     await advance(800);
-    const before = FakeObserver.instances.length;
+    const before = FakeIntersectionObserver.instances.length;
     which.value = "b";
     threshold.value = 0.5;
     await nextTick();
     await nextTick();
-    expect(FakeObserver.instances.length).toBe(before + 1);
+    expect(FakeIntersectionObserver.instances.length).toBe(before + 1);
     expect(targets()).toEqual([document.querySelector('[data-testid="b"]')]);
     expect(hook().started.value).toBe(true);
     expect(hook().view.value.elapsed).toBe(0);
@@ -1025,12 +982,12 @@ describe("useAgentDemo element rules", () => {
     await mountProbe();
     await scroll(true);
     await advance(400);
-    const gates = FakeObserver.instances.length;
+    const gates = FakeIntersectionObserver.instances.length;
     show.value = false;
     await nextTick();
     await scroll(false);
     await advance(400);
-    expect(FakeObserver.instances.length).toBe(gates);
+    expect(FakeIntersectionObserver.instances.length).toBe(gates);
     expect(hook().playing.value).toBe(false);
   });
 

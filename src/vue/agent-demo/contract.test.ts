@@ -2,12 +2,13 @@
 // ARIA attributes and text as the React one, so `agent-demo/styles.css` styles both. Each case
 // renders one script with both bindings and compares a flattened outline of the DOM.
 import { act, cleanup, render as renderReact } from "@testing-library/react";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createSSRApp, h, nextTick } from "vue";
 import { renderToString } from "vue/server-renderer";
+import { stubAnimationFrame, stubReducedMotion } from "../../../tests/helpers/dom.ts";
 import {
   AgentDemo as ReactAgentDemo,
   StaticTranscript as ReactStaticTranscript,
@@ -96,23 +97,10 @@ function parse(html: string): Element {
 const parts = (o: { elements: string[] }): string[] =>
   o.elements.map((e) => /data-part=(\S+)/.exec(e)?.[1]).filter((p) => p !== undefined);
 
-const vueWrappers: VueWrapper[] = [];
-
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("IntersectionObserver", undefined);
-  vi.stubGlobal("matchMedia", () => ({
-    matches: false,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
-});
-
-afterEach(() => {
-  cleanup();
-  for (const w of vueWrappers.splice(0)) w.unmount();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
+  stubReducedMotion(false);
 });
 
 describe.each([
@@ -168,7 +156,6 @@ describe("live markup", () => {
         createElement(ReactAgentDemo, { script: mcpBet, layout, position: { click: 0 } }),
       );
       const vue = mount(AgentDemo, { props: { script: mcpBet, layout, position: { click: 0 } } });
-      vueWrappers.push(vue);
       await nextTick();
       for (const click of [0, 1, 2, 3, 4, clicks, 2, 0, clicks]) {
         react.rerender(
@@ -184,10 +171,7 @@ describe("live markup", () => {
   });
 
   test("time mode matches React frame by frame, controls included", async () => {
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) =>
-      setTimeout(() => cb(performance.now()), 16),
-    );
-    vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+    stubAnimationFrame();
     for (const layout of ["terminal", "chat"] as const) {
       const props = {
         script: everyKind,
@@ -199,7 +183,6 @@ describe("live markup", () => {
       } as const;
       const react = renderReact(createElement(ReactAgentDemo, props));
       const vue = mount(AgentDemo, { props });
-      vueWrappers.push(vue);
       await nextTick();
       const duration = compile(everyKind, { timing: presets.terminal }).duration;
       const beats = new Set<string>();

@@ -8,7 +8,7 @@ or {
     `import($src)`
   } where {
     $filename <: r".*/src/.*",
-    $src <: r"[\"'](?:node:[^\"']+|bun|bun:[^\"']*)[\"']",
+    $src <: r"[\"'`](?:node:[^\"'`]+|bun|bun:[^\"'`]*)[\"'`]",
     register_diagnostic(span=$src, message="src/ is platform neutral: it runs in Node, Bun, Deno and browsers. Take what you need as a parameter instead of importing a runtime module.")
   },
   JsModuleSource() as $src where {
@@ -23,16 +23,26 @@ or {
     $filename <: r".*/src/.*",
     register_diagnostic(span=$p, message="A library never reads the process (env, argv, exit). Take it as an option from the caller.")
   },
-  `console.$m($args)` as $c where {
+  or {
+    JsReferenceIdentifier() as $ref where { $ref <: "console" },
+    `globalThis.console`,
+    `window.console`,
+    `self.console`
+  } as $c where {
     $filename <: r".*/src/.*",
     $filename <: not r".*\.test\.tsx?",
     register_diagnostic(span=$c, message="A library never writes to the console. Return the value, or throw LibraryError with a code.")
   },
-  `throw new $cls($args)` as $t where {
-    $cls <: r"(?:Error|TypeError|RangeError|SyntaxError)",
+  // Building any built-in error, with or without `new`, covers throw, Promise.reject and return.
+  or {
+    `new $cls($args)`,
+    `$cls($args)`
+  } as $t where {
+    $cls <: r"(?:(?:[A-Z][A-Za-z]*)?Error|DOMException)",
+    $cls <: not "LibraryError",
     $filename <: r".*/src/.*",
     $filename <: not r".*\.test\.tsx?",
-    register_diagnostic(span=$t, message="Throw LibraryError with a code from src/errors.ts, so callers can branch on error.code.")
+    register_diagnostic(span=$t, message="Throw or reject only with LibraryError and one of its codes (defined in src/internal/errors.ts, public from src/script/errors.ts), so callers can branch on error.code.")
   },
   or {
     JsExportDefaultDeclarationClause(),

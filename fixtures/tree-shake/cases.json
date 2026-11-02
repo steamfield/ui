@@ -1,8 +1,13 @@
 [
   {
     "entry": "copy-only.tsx",
+    "present": ["data-copy-command", "react.transitional.element"],
+    "absent": ["data-sf-agent-demo", "tab-panel", "data-motion-ready", "sf:reveal-ready"]
+  },
+  {
+    "entry": "copy-vanilla.ts",
     "present": ["data-copy-command"],
-    "absent": ["sf-agent-demo", "tab-panel", "data-motion-ready", "sf:reveal-ready"]
+    "absent": ["react.transitional.element", "data-sf-agent-demo", "tab-panel", "sf:reveal-ready"]
   },
   {
     "entry": "agent-demo-only.tsx",
@@ -12,11 +17,16 @@
   {
     "entry": "vue-agent-demo.ts",
     "present": ["data-sf-agent-demo"],
-    "absent": ["react.transitional.element", "__SECRET_INTERNALS", "data-copy-command"]
+    "absent": ["react.transitional.element", "data-copy-command"]
   },
   {
     "entry": "tabs-only.tsx",
     "present": ["tab-panel"],
-    "absent": ["sf-agent-demo", "data-copy-command", "sf:reveal-ready"]
+    "absent": ["data-sf-agent-demo", "data-copy-command", "sf:reveal-ready"]
+  },
+  {
+    "entry": "reveal-only.ts",
+    "present": ["sf:reveal-ready"],
+    "absent": ["react.transitional.element", "data-sf-agent-demo", "data-copy-command", "tab-panel"]
   }
 ]

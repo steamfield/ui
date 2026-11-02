@@ -1,9 +1,7 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import { DemoWindow } from "./index.ts";
-
-afterEach(cleanup);
 
 test("renders dots, a title, a controls slot and the body, with no heading", () => {
   const { container } = render(

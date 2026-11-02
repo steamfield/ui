@@ -1,8 +1,11 @@
 // The framework-free half of the agent demo renderers: default strings and glyphs, the tool
-// registry shape, and the text helpers both the React and the Vue parts render from. Neither
-// binding re-exports this module directly; each names the public types from its own files.
-// `internal` imports no other subpath, so the step helpers below take the structural slice of
-// `Step` and `DemoEntry` they read; both are assignable to it.
+// registry shape, and the text helpers both the React and the Vue parts render from. The
+// agent-demo area has no entry (only styles.css is exported), so nothing imports this module but
+// the two bindings, and neither re-exports it directly; each names the public types from its own
+// files.
+import type { Step } from "../script/types.ts";
+import type { ToolCallStep } from "../sequencer/timing.ts";
+import type { DemoEntry } from "../sequencer/view.ts";
 
 /** Every string the demo shows or announces. Each one has a neutral default. */
 export interface AgentDemoLabels {
@@ -139,10 +142,7 @@ export function toolLabel(tools: ToolRegistry | undefined, name: string, running
 }
 
 /** The fields of a tool-call step that name it. */
-export interface ToolNameStep {
-  readonly name: string;
-  readonly server?: string;
-}
+export type ToolNameStep = Pick<ToolCallStep, "name" | "server">;
 
 /**
  * What a tool call's header shows and its beat announces: the registry label in the chat layout,
@@ -178,27 +178,8 @@ export function spinnerFrame(frames: readonly string[], elapsed: number): string
   return frames[Math.floor(elapsed / SPINNER_FRAME_MS) % Math.max(1, frames.length)] ?? "";
 }
 
-/** The fields of a script step the text helpers read. Every `Step` is assignable to it. */
-export type StepText =
-  | {
-      readonly kind: "user" | "agent-text" | "command" | "prompt";
-      readonly text: string;
-      readonly lead?: string;
-    }
-  | { readonly kind: "output"; readonly lines: readonly (string | { readonly text: string })[] }
-  | { readonly kind: "tool-call"; readonly name: string; readonly server?: string }
-  | { readonly kind: "thinking" | "pause" };
-
-/** The fields of a view entry `beatText` reads. Every `DemoEntry` is assignable to it. */
-export interface EntryText {
-  readonly index: number;
-  readonly phase: string;
-  readonly status?: string;
-  readonly step: StepText;
-}
-
 /** The prompt in force before step `index`: the latest `prompt` step's text, else `fallback`. */
-export function promptFor(steps: readonly StepText[], index: number, fallback: string): string {
+export function promptFor(steps: readonly Step[], index: number, fallback: string): string {
   for (let i = index - 1; i >= 0; i--) {
     const step = steps[i];
     if (step?.kind === "prompt") return step.text;
@@ -212,11 +193,11 @@ export interface BeatConfig {
   readonly labels: AgentDemoLabels;
   readonly glyphs: AgentDemoGlyphs;
   readonly tools: ToolRegistry | undefined;
-  readonly steps: readonly StepText[];
+  readonly steps: readonly Step[];
 }
 
 /** What a screen reader hears when a beat finishes; empty while it still plays. */
-export function beatText(entry: EntryText | undefined, config: BeatConfig): string {
+export function beatText(entry: DemoEntry | undefined, config: BeatConfig): string {
   if (entry?.phase !== "done") return "";
   const { step } = entry;
   const { labels } = config;
@@ -240,7 +221,7 @@ export function beatText(entry: EntryText | undefined, config: BeatConfig): stri
 }
 
 /** The latest finished beat's announcement among `entries`, or "". */
-export function lastBeat(entries: readonly EntryText[], config: BeatConfig): string {
+export function lastBeat(entries: readonly DemoEntry[], config: BeatConfig): string {
   for (let i = entries.length - 1; i >= 0; i--) {
     const text = beatText(entries[i], config);
     if (text) return text;

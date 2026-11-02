@@ -21,14 +21,14 @@ Run these from the repo root. Tests and scripts run on Node (`.node-version`); B
 | `bun run coverage` | Vitest with coverage thresholds (95/95/90/95) |
 | `bun run build` | tsdown into `dist/`, one file per source file, CSS copied beside its module |
 | `bun run lint:package` | publint, then Are the Types Wrong over every JS subpath (CSS subpaths excluded) |
-| `bun run test:consumer` | Pack the tarball, install it with the React and markdown peers into a temp copy of `tests/consumer/`, typecheck and run it on Node |
+| `bun run test:consumer` | Pack the tarball, install it with the React, Vue and markdown peers into a temp copy of `tests/consumer/`, and with no peers into `tests/consumer-no-peers/`; typecheck and run both on Node |
 | `bun run size` | size-limit budgets per entry (`.size-limit.json`, peers external) |
 | `bun run test:tree-shake` | Build each app in `fixtures/tree-shake/` against `dist/` and grep for present/absent sentinels |
 | `bun run playground` | Vite dev server for the playground on :5199 |
 | `bun run test:a11y` | Build and preview the playground, then Playwright + axe in light/dark and reduced motion |
-| `bun run check` | lint, typecheck, coverage, package lint, consumer |
+| `bun run check` | lint, typecheck, coverage, build, package lint, consumer, size, tree-shake (what CI's `checks` job runs) |
 
-`size`, `test:tree-shake` and `lint:package` read `dist/`: run `bun run build` first.
+`size`, `test:tree-shake` and `lint:package` read `dist/`: `check` builds first; run `bun run build` before running one alone.
 
 ## Architecture map
 
@@ -38,12 +38,13 @@ src/
   sequencer/      compile(script) -> timeline; pure stateAt(timeline, {ms}|{click}); finalState; presets
   playback/       createPlaybackGate: in-view + tab-visible + motion gating, rAF clock
   copy/ tabs/ reveal/ markdown/ docs/   framework-free cores (plain DOM or pure functions)
-  agent-demo/     styles.css only: the data-part contract both renderers share
+  agent-demo/     no entry: styles.css (the data-part contract) and core.ts, the renderer core both bindings share
   react/          React wrappers: agent-demo, window, playback, copy, tabs, install-tabs
   vue/            Vue binding for the agent demo (decks)
   internal/       private helpers; never exported from an entry
 tests/            tooling tests (export map, dependency graph, public API pins, boundaries, CSS contract)
-tests/consumer/   the packed-tarball consumer fixture
+tests/consumer/   the packed-tarball consumer fixture, with every peer
+tests/consumer-no-peers/  the framework-free subpaths with no peers installed
 tests/browser/    Playwright specs against the built playground
 playground/       Vite app with one page per component
 fixtures/tree-shake/  tree-shake apps and cases.json
@@ -86,7 +87,7 @@ Shared guidance for those rules: [docs/guidance/typescript-library/index.md](doc
 ## Testing
 
 - Unit tests sit beside the code (`*.test.ts(x)`) and run in happy-dom. React tests use Testing Library; Vitest globals are off, so call `cleanup()` in `afterEach`. Timers and rAF are faked the way `src/react/playback/playback.test.tsx` does. Markdown tests run on Node (`// @vitest-environment node`) through the real Sätteri processor.
-- `tests/*.test.ts` are tooling tests on Node: the export map, the dependency graph, public API pins, the Grit boundary rules, and the reveal CSS contract.
+- `tests/*.test.ts` are tooling tests on Node: the export map, the dependency graph (over `src/` and a fresh build), public API pins (runtime and type names), the Grit boundary rules, and the CSS contract for every stylesheet.
 - `test:consumer` is the only test of what users install. `test:tree-shake` proves subpaths stay out of each other's bundles. `test:a11y` runs axe over every playground page; add a page and its name to `tests/browser/pages.ts` for each new component.
 - Behavior-focused tests against real dependencies where practical. Fake only what crosses the network to third parties.
 - A bug fix starts with a test that reproduces the bug.
@@ -116,7 +117,7 @@ Shared guidance for those rules: [docs/guidance/typescript-library/index.md](doc
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pushes to `main`, pull requests and manual dispatch. The `checks` job runs lint, typecheck, coverage, build, package lint, the consumer check, size budgets and the tree-shake fixture; `browser` runs the Playwright/axe suite; `ci-ok` requires both. Actions are pinned by SHA with the tag in a comment; Dependabot (`.github/dependabot.yml`) proposes weekly grouped updates for npm and actions.
+`.github/workflows/ci.yml` runs on pushes to `main`, pull requests and manual dispatch. The `checks` job runs `bun run check` (and, on pull requests, `changeset status` against `origin/main`, so a PR needs a changeset); `consumer` runs the consumer check again on Node 22, the `engines` floor; `browser` runs the Playwright/axe suite and uploads `test-results/` on failure; `ci-ok` requires all three. The Bun install cache and Playwright's browsers are cached on `bun.lock`. Actions are pinned by SHA with the tag in a comment; Dependabot (`.github/dependabot.yml`) proposes weekly grouped updates for Bun packages and actions.
 
 ## Git hooks
 

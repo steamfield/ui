@@ -19,7 +19,9 @@ function pluginMessages(path: string, source: string): string[] {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, source);
   const biome = join(ROOT, "node_modules/.bin/biome");
-  const result = spawnSync(biome, ["lint", "--reporter=json", file], { encoding: "utf8" });
+  // .gitignore lists the fixture directories, and Biome skips ignored files unless told not to.
+  const args = ["lint", "--vcs-use-ignore-file=false", "--reporter=json", file];
+  const result = spawnSync(biome, args, { encoding: "utf8" });
   if (!result.stdout) throw new Error(result.stderr);
   const report = JSON.parse(result.stdout) as {
     diagnostics?: { category?: string; message?: string }[];
@@ -39,6 +41,13 @@ test.each([
   ["src/x.ts", "export const debug = process.env.DEBUG;", "never reads the process"],
   ["src/x.ts", 'console.warn("deprecated");', "never writes to the console"],
   ["src/x.ts", 'throw new TypeError("bad input");', "LibraryError"],
+  ["src/x.ts", 'throw Error("bad input");', "LibraryError"],
+  ["src/x.ts", "throw new Error();", "LibraryError"],
+  ["src/x.ts", 'export const fail = () => Promise.reject(new Error("x"));', "src/script/errors.ts"],
+  ["src/x.ts", 'throw new DOMException("gone", "AbortError");', "LibraryError"],
+  ["src/x.ts", 'globalThis.console.log("x");', "never writes to the console"],
+  ["src/x.ts", "export const log = console;", "never writes to the console"],
+  ["src/x.ts", "export const load = () => import(`node:fs`);", "platform neutral"],
   ["src/x.ts", "export default function slugify() {}", "Export by name"],
   ["src/x.ts", "const api = {};\nexport default api;", "Export by name"],
   ["src/index.ts", 'export * from "./slugify.ts";', "Export by name"],
@@ -52,6 +61,9 @@ test.each([
   ["src/index.ts", 'export { slugify } from "./slugify.ts";'],
   ["src/slugify.ts", 'import { words } from "./internal/words.ts";'],
   ["src/x.ts", 'throw new LibraryError("invalid_input");'],
+  ["src/x.ts", "export function rethrow(error: unknown) {\n  throw error;\n}"],
+  ["src/x.ts", "export const load = () => import(`./lazy.ts`);"],
+  ["src/x.ts", "export const ok = (x: { console: number }) => x.console;"],
   ["src/x.test.ts", 'console.log("debugging a test");'],
   ["src/x.test.tsx", 'console.log("debugging a test");'],
   ["src/copy/enhance.ts", 'import { ids } from "../internal/ids.ts";'],

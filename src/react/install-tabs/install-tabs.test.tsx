@@ -3,7 +3,8 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+import { stubClipboard, stubExecCommand } from "../../../tests/helpers/dom.ts";
 import { InstallTabs } from "./install-tabs.tsx";
 
 const options = [
@@ -14,26 +15,17 @@ const options = [
 
 const writeText = vi.fn<(text: string) => Promise<void>>();
 
-const stubClipboard = (): void => {
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-};
-
 /** userEvent.setup() installs its own clipboard, so the stub goes on after it. */
 function setup(): ReturnType<typeof userEvent.setup> {
   const user = userEvent.setup();
-  stubClipboard();
+  stubClipboard(writeText);
   return user;
 }
 
 beforeEach(() => {
   history.replaceState(null, "", "/");
   writeText.mockReset().mockResolvedValue(undefined);
-  stubClipboard();
-});
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
+  stubClipboard(writeText);
 });
 
 const status = (): string => screen.getByRole("status").textContent ?? "";
@@ -130,7 +122,7 @@ test("the copied state resets on a tab switch", async () => {
 test("a clipboard rejection shows a failure message instead of escaping", async () => {
   const user = setup();
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   const onCopy = vi.fn();
   render(<InstallTabs options={options} onCopy={onCopy} />);
   await user.click(screen.getByRole("button", { name: "Copy" }));

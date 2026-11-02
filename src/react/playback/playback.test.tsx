@@ -1,7 +1,13 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { StrictMode, useEffect } from "react";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  FakeIntersectionObserver,
+  setTabHidden as hideTab,
+  stubIntersectionObserver,
+  stubReducedMotion as stubMotion,
+} from "../../../tests/helpers/dom.ts";
 import type { MotionSource } from "../../playback/motion.ts";
 import { useAgentDemo } from "../agent-demo/index.ts";
 import {
@@ -11,53 +17,17 @@ import {
   usePlayback,
 } from "./index.ts";
 
-class FakeObserver {
-  static instances: FakeObserver[] = [];
-  readonly targets = new Set<Element>();
-  disconnected = false;
-  readonly callback: IntersectionObserverCallback;
-  constructor(callback: IntersectionObserverCallback) {
-    this.callback = callback;
-    FakeObserver.instances.push(this);
-  }
-  observe(target: Element): void {
-    this.targets.add(target);
-  }
-  unobserve(target: Element): void {
-    this.targets.delete(target);
-  }
-  disconnect(): void {
-    this.disconnected = true;
-  }
-}
-
 /** Reports every live observer's targets as entering or leaving the viewport. */
 const scroll = (isIntersecting: boolean): void =>
   act(() => {
-    for (const observer of FakeObserver.instances.filter((o) => !o.disconnected)) {
-      const entries = [...observer.targets].map((target) => ({ target, isIntersecting }));
-      observer.callback(entries as unknown as IntersectionObserverEntry[], observer as never);
-    }
+    for (const observer of FakeIntersectionObserver.live()) observer.fire(isIntersecting);
   });
 
-const live = (): FakeObserver[] => FakeObserver.instances.filter((o) => !o.disconnected);
+const live = (): FakeIntersectionObserver[] => FakeIntersectionObserver.live();
 
 function stubReducedMotion(initial: boolean): (next: boolean) => void {
-  let matches = initial;
-  const listeners = new Set<() => void>();
-  vi.stubGlobal("matchMedia", () => ({
-    get matches() {
-      return matches;
-    },
-    addEventListener: (_: string, cb: () => void) => listeners.add(cb),
-    removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
-  }));
-  return (next) => {
-    matches = next;
-    act(() => {
-      for (const cb of listeners) cb();
-    });
-  };
+  const set = stubMotion(initial);
+  return (next) => act(() => set(next));
 }
 
 const advance = (ms: number): void =>
@@ -65,11 +35,7 @@ const advance = (ms: number): void =>
     vi.advanceTimersByTime(ms);
   });
 
-const setTabHidden = (hidden: boolean): void =>
-  act(() => {
-    vi.spyOn(document, "visibilityState", "get").mockReturnValue(hidden ? "hidden" : "visible");
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
+const setTabHidden = (hidden: boolean): void => act(() => hideTab(hidden));
 
 const DURATION = 10_000;
 
@@ -215,16 +181,8 @@ const flags = (): { ready: boolean; playing: boolean; reduced: boolean } =>
 
 beforeEach(() => {
   vi.useFakeTimers();
-  FakeObserver.instances = [];
-  vi.stubGlobal("IntersectionObserver", FakeObserver);
+  stubIntersectionObserver();
   stubReducedMotion(false);
-});
-
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
 });
 
 let earlySpeedError: unknown;
@@ -437,7 +395,7 @@ describe("usePlayback", () => {
     // The inline callback detaches and reattaches the same node each commit: no rebuild.
     rerender(<Manual />);
     rerender(<Manual />);
-    expect(FakeObserver.instances).toHaveLength(1);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
   });
 
   test("an element swap carries elapsed, started, paused and the rate into the new gate", () => {
@@ -470,9 +428,9 @@ describe("usePlayback", () => {
     const { rerender } = render(<Carry which="a" />);
     scroll(true);
     advance(1000);
-    const before = FakeObserver.instances.length;
+    const before = FakeIntersectionObserver.instances.length;
     rerender(<Carry which="b" threshold={0.5} />);
-    expect(FakeObserver.instances.length).toBe(before + 1);
+    expect(FakeIntersectionObserver.instances.length).toBe(before + 1);
     expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("b")]);
     expect(hook()).toMatchObject({ elapsed: 0, started: true, paused: false });
   });
@@ -481,12 +439,12 @@ describe("usePlayback", () => {
     const { rerender } = render(<Carry which="a" />);
     scroll(true);
     advance(500);
-    const gates = FakeObserver.instances.length;
+    const gates = FakeIntersectionObserver.instances.length;
     rerender(<Carry which="a" show={false} />);
     // A browser reports a removed target as no longer intersecting.
     scroll(false);
     advance(500);
-    expect(FakeObserver.instances.length).toBe(gates);
+    expect(FakeIntersectionObserver.instances.length).toBe(gates);
     expect(hook().playing).toBe(false);
   });
 

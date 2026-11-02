@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { InstallTabs } from "../../src/react/install-tabs/index.ts";
 import { Tab, TabList, TabPanel, Tabs } from "../../src/react/tabs/index.ts";
+import { builtStylesheet } from "./built-css.ts";
 
 const h = '[aria-label="Horizontal sections"]';
 const v = '[aria-label="Vertical sections"]';
@@ -71,8 +72,7 @@ test.describe("JavaScript disabled", () => {
   // The playground is client-rendered, so with no JS it has no DOM. This serves the component's
   // own server markup (renderToString) with the built stylesheet.
   test("every panel is reachable by its anchor", async ({ page, request }) => {
-    const index = await (await request.get("/")).text();
-    const css = /href="([^"]+\.css)"/.exec(index)?.[1] ?? "";
+    const css = await builtStylesheet(request);
     const names = ["one", "two", "three"];
     const markup = renderToString(
       createElement(
@@ -136,8 +136,7 @@ test.describe("JavaScript disabled", () => {
   // A nested set always has a data-default panel (InstallTabs) or none (Tabs); neither may change
   // which outer panel shows, and the outer set's state must not reach the inner one.
   test("nested tab sets keep their own fallback", async ({ page, request }) => {
-    const index = await (await request.get("/")).text();
-    const css = /href="([^"]+\.css)"/.exec(index)?.[1] ?? "";
+    const css = await builtStylesheet(request);
     const set = (
       id: string,
       names: string[],

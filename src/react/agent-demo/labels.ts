@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import type {
   ToolInfo as BaseToolInfo,
   ToolRegistry as BaseToolRegistry,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 
-export type { AgentDemoGlyphs, AgentDemoLabels } from "../../internal/agent-demo.ts";
-export { defaultGlyphs, defaultLabels, humanize, toolLabel } from "../../internal/agent-demo.ts";
+export type { AgentDemoGlyphs, AgentDemoLabels } from "../../agent-demo/core.ts";
+export { defaultGlyphs, defaultLabels, humanize, toolLabel } from "../../agent-demo/core.ts";
 
 /** How one tool reads in the chat layout's card header. */
 export type ToolInfo = BaseToolInfo<ReactNode>;

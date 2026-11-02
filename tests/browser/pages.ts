@@ -1,9 +1,2 @@
-// Playground routes the browser suite visits. Keep in step with playground/main.tsx.
-export const PAGES: readonly string[] = [
-  "copy",
-  "agent-demo",
-  "tabs",
-  "install-tabs",
-  "reveal",
-  "playback",
-];
+// Playground routes the browser suite visits: the same list playground/main.tsx renders.
+export { ROUTES as PAGES } from "../../playground/routes.ts";

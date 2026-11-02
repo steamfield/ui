@@ -8,7 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { setTabHidden as hideTab, stubReducedMotion } from "../../../tests/helpers/dom.ts";
 import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
 import { compile } from "../../sequencer/compile.ts";
@@ -53,24 +54,12 @@ const terminalTimeline = compile(terminalScript, { timing: presets.terminal });
 const TOTAL = terminalTimeline.duration;
 const startOf = (i: number): number => terminalTimeline.steps[i]?.start ?? 0;
 
-function stubReducedMotion(reduce: boolean): void {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: reduce && query.includes("reduce"),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  }));
-}
-
 const advance = (ms: number): void =>
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 
-const setTabHidden = (hidden: boolean): void =>
-  act(() => {
-    vi.spyOn(document, "visibilityState", "get").mockReturnValue(hidden ? "hidden" : "visible");
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
+const setTabHidden = (hidden: boolean): void => act(() => hideTab(hidden));
 
 function Terminal(props: Partial<AgentDemoProps>) {
   return (
@@ -90,13 +79,6 @@ beforeEach(() => {
   // No IntersectionObserver: the demo counts as on screen.
   vi.stubGlobal("IntersectionObserver", undefined);
   stubReducedMotion(false);
-});
-
-afterEach(() => {
-  cleanup();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
 });
 
 describe("server render", () => {

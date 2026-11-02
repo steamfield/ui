@@ -11,7 +11,7 @@ import {
   type AgentDemoLayout,
   defaultGlyphs,
   defaultLabels,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 import type { DemoScript } from "../../script/types.ts";
 import { compile } from "../../sequencer/compile.ts";
 import { type FinalPolicy, finalState } from "../../sequencer/view.ts";

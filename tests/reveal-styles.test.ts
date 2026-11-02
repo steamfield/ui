@@ -1,7 +1,9 @@
 // The reveal stylesheet's safety contract, checked against its text (Vitest blanks CSS imports,
-// so the file is read from disk).
+// so the file is read from disk). The conventions every stylesheet shares (@layer sf, :where(),
+// --sf-* fallbacks) are in tests/stylesheets.test.ts.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import postcss, { type AtRule, type ChildNode, type Container } from "postcss";
 import { describe, expect, test } from "vitest";
 import { motionTokens } from "../src/reveal/tokens.ts";
 
@@ -14,31 +16,24 @@ interface Rule {
   readonly within: readonly string[];
 }
 
-/** A small brace parser: enough for a stylesheet of plain rules nested in @layer and @media. */
+/** The sheet's style rules, with each body as `prop: value;` declarations. */
 function parse(text: string): { rules: Rule[]; topLevel: string[] } {
-  const source = text.replace(/\/\*[\s\S]*?\*\//g, "");
+  const root = postcss.parse(text);
+  const prelude = (node: ChildNode | Container): string =>
+    node.type === "atrule" ? `@${(node as AtRule).name} ${(node as AtRule).params}` : "";
   const rules: Rule[] = [];
-  const topLevel: string[] = [];
-  const stack: string[] = [];
-  let buffer = "";
-  for (const char of source) {
-    if (char === "{") {
-      const prelude = buffer.trim();
-      buffer = "";
-      if (stack.length === 0) topLevel.push(prelude);
-      stack.push(prelude);
-    } else if (char === "}") {
-      const prelude = stack.pop() ?? "";
-      if (!prelude.startsWith("@")) {
-        rules.push({ selector: prelude, body: buffer.trim(), within: [...stack] });
-      }
-      buffer = "";
-    } else {
-      buffer += char;
+  root.walkRules((rule) => {
+    const within: string[] = [];
+    for (let node = rule.parent; node && node.type !== "root"; node = node.parent) {
+      within.unshift(prelude(node as Container));
     }
-  }
-  const rest = buffer.trim();
-  if (rest) topLevel.push(rest);
+    const body = rule.nodes
+      .filter((node) => node.type === "decl")
+      .map((decl) => `${decl.prop}: ${decl.value}${decl.important ? " !important" : ""};`)
+      .join(" ");
+    rules.push({ selector: rule.selector, body, within });
+  });
+  const topLevel = root.nodes.filter((node) => node.type !== "comment").map(prelude);
   return { rules, topLevel };
 }
 
@@ -79,16 +74,10 @@ const hides = (rule: Rule): boolean =>
   /visibility:\s*hidden/.test(rule.body);
 
 describe("reveal/styles.css contract", () => {
-  test("everything sits inside one @layer sf", () => {
+  test("the parse sees every rule inside @layer sf", () => {
     expect(topLevel).toEqual(["@layer sf"]);
     expect(rules.length).toBeGreaterThan(20);
     for (const rule of rules) expect(rule.within[0]).toBe("@layer sf");
-  });
-
-  test("every selector is wrapped in :where()", () => {
-    for (const rule of rules) {
-      for (const selector of splitList(rule.selector)) expect(selector).toMatch(/^:where\(.*\)$/s);
-    }
   });
 
   test("nothing hides content outside html[data-motion-ready] and no-preference", () => {

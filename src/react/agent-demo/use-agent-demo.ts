@@ -1,10 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  countAt,
-  hiddenToolNames,
-  signature,
-  type ToolRegistry,
-} from "../../internal/agent-demo.ts";
+import { countAt, hiddenToolNames, signature, type ToolRegistry } from "../../agent-demo/core.ts";
 import { defined } from "../../internal/options.ts";
 import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";

@@ -1,12 +1,24 @@
 # Testing
 
-Vitest runs every test on Node: `src/**/*.test.ts` and `tests/**/*.test.ts`. Never `bun test`.
+Vitest runs two projects from `vitest.config.ts`. Never `bun test` or `--bun`.
 
-- **Unit tests** beside the code (`src/slugify.test.ts`, `src/options.test.ts`, `src/errors.test.ts`). Table-driven with `test.each`: each row an input and the exact output, or an input and the error `code` and `field` it raises. Assert errors with `expect.objectContaining({ code, field })`, not the message text.
-- **Public API** in `tests/public-api.test.ts`: the sorted list of runtime exports, and the error type through the public entry. A new export adds its name there, which forces the release decision.
-- **Boundary probes** in `tests/boundaries.test.ts`: each Grit rule fires on a fixture file and stays quiet where the thing is allowed. A new rule adds a row to both tables.
-- **Consumer** in `tests/consumer/`, run by `bun run test:consumer` (`scripts/consumer.ts`), not Vitest. It packs the package, installs the tarball into a temporary copy of the fixture, typechecks `index.ts` with strict NodeNext resolution and runs `index.ts` and `index.mjs` with Node. A new export gets a call in `index.ts` (with its types) and, if JavaScript callers can misuse it, a runtime check in `index.mjs`.
+- `library`: `src/**/*.test.ts(x)` in happy-dom, since the library targets browsers. A file that needs Node APIs the DOM shim lacks opts out with `// @vitest-environment node` (the markdown tests do, for shiki's wasm).
+- `tooling`: `tests/**/*.test.ts` in Node. These check the repo and the package, not one component.
 
-Coverage thresholds live in `vitest.config.ts` (`bun run coverage`); every branch of a public function is reachable from its inputs, so cover it through the public function rather than lowering a threshold.
+## Where each kind of test lives
 
-Scope a run with `bun run test <file>` or `bun run test -t "<name>"`, and read the counts: a filter that matches nothing passes with every test skipped.
+- **Unit and component tests** beside the code: `src/<subpath>/*.test.ts` for the framework-free core, `src/react/<name>/*.test.tsx` with Testing Library, `src/vue/<name>/*.test.ts` with Vue Test Utils. Test behavior through the public functions and rendered markup (`data-part` hooks, roles, accessible names). Table-driven with `test.each` where inputs vary; assert errors with `expect.objectContaining({ code, field })`, never the message text.
+- **Export map and dependency graph** in `tests/package-shape.test.ts`: every `src/**/index.ts(x)` has an `exports` entry (`{ types, default }`), every stylesheet is exported, `.size-limit.json` and both consumer fixtures cover every JS subpath, imports stay inside `ALLOWED` and each area's `PACKAGES` (type imports included), JSX only under `react/`, and the same rules over a fresh tsdown build of the JS and `.d.ts`.
+- **Public API pins** in `tests/public-api.test.ts`: the runtime names and the type names of each entry. A new export adds its name there, which forces the release decision.
+- **Boundary probes** in `tests/boundaries.test.ts`: each Grit rule in `biome-plugins/boundaries.grit` fires on a fixture file and stays quiet where the thing is allowed. A new rule adds a row to both tables.
+- **CSS contract** in `tests/stylesheets.test.ts` (every `src/**/styles.css`: one `@layer sf`, `:where()` selectors, `--sf-*` properties with fallbacks) and `tests/reveal-styles.test.ts` (reveal's own hiding and backstop rules). Both parse with postcss.
+- **Consumers** in `tests/consumer/` (every subpath, with every optional peer) and `tests/consumer-no-peers/` (the framework-free subpaths with nothing but the tarball), run by `bun run test:consumer`, not Vitest. A new subpath gets a block in `tests/consumer/index.ts`, and in the no-peers fixture too if its area imports no package.
+- **Tree-shaking** in `fixtures/tree-shake/` (`bun run test:tree-shake`): each case lists sentinels that must be in its bundle and ones that must not. An absent sentinel has to exist somewhere in `dist/` or React, or the check fails as vacuous.
+- **Browser** in `tests/browser/` (`bun run test:a11y`): Playwright and axe over the built playground, in light, dark and reduced motion.
+
+## Habits
+
+- Fake timers and rAF the way `src/react/playback/playback.test.tsx` does. Globals are off, so React tests call `cleanup()` in `afterEach`.
+- When you strengthen a guard, prove it can fail: add a reject row, or add the violating code, watch the guard fail, then remove it.
+- Coverage thresholds (95/95/90/95) live in `vitest.config.ts` (`bun run coverage`). Cover a branch through the public function rather than lowering a threshold.
+- Scope a run with `bun run test <file>` or `bun run test -t "<name>"`, and read the counts: a filter that matches nothing passes with every test skipped.

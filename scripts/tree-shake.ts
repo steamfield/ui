@@ -3,6 +3,7 @@
 // dist/ (resolved through the package's own `exports`, as a consumer would), then greps the
 // output. Each case lists sentinel strings that must appear (proving the imported module made it
 // in, so the check can't pass vacuously) and ones that must not (proving siblings stayed out).
+// An absent sentinel must itself exist in dist/ or React, or its absence would prove nothing.
 import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import react from "@vitejs/plugin-react";
@@ -11,7 +12,7 @@ import { build } from "vite";
 const root = join(import.meta.dirname, "..");
 const fixtures = join(root, "fixtures/tree-shake");
 const { exports } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
-  exports: Record<string, string | { import: string }>;
+  exports: Record<string, string | { default: string }>;
 };
 
 // The subpath -> dist file map a bundler would resolve from `exports`.
@@ -19,7 +20,7 @@ const alias = Object.entries(exports)
   .filter(([key, value]) => key !== "./package.json" && typeof value === "object")
   .map(([key, value]) => ({
     find: `@steamfield/ui/${key.slice(2)}`,
-    replacement: join(root, (value as { import: string }).import),
+    replacement: join(root, (value as { default: string }).default),
   }))
   .sort((a, b) => b.find.length - a.find.length);
 
@@ -34,7 +35,24 @@ const cases: readonly Case[] = JSON.parse(
   readFileSync(join(fixtures, "cases.json"), "utf8"),
 ) as Case[];
 
+/** The text of every .js file under `dir`. */
+const jsUnder = (dir: string): string[] =>
+  (readdirSync(dir, { recursive: true }) as string[])
+    .filter((file) => file.endsWith(".js"))
+    .map((file) => readFileSync(join(dir, file), "utf8"));
+
 let failed = false;
+const corpus = [...jsUnder(join(root, "dist")), ...jsUnder(join(root, "node_modules/react"))];
+for (const sentinel of new Set(cases.flatMap(({ absent }) => absent))) {
+  if (!corpus.some((text) => text.includes(sentinel))) {
+    console.error(
+      `sentinel "${sentinel}" matches nothing in dist/ or react, so its absence is vacuous`,
+    );
+    failed = true;
+  }
+}
+if (failed) process.exit(1);
+
 for (const { entry, present, absent } of cases) {
   const outDir = join(fixtures, "out", entry.replace(/\.\w+$/, ""));
   rmSync(outDir, { recursive: true, force: true });

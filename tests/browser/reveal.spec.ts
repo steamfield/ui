@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { builtStylesheet } from "./built-css.ts";
 
 const late = '[data-role="lift-xl"]';
 
@@ -39,21 +40,39 @@ test.describe("JavaScript disabled", () => {
   // The playground is client-rendered, so with no JS there is no DOM to look at. Serve reveal
   // markup as static HTML with the built stylesheet instead: without data-motion-ready the CSS
   // must leave every entrance in its final state.
-  test("everything is visible", async ({ page, request }) => {
-    const index = await (await request.get("/")).text();
-    const css = /href="([^"]+\.css)"/.exec(index)?.[1] ?? "";
+  const markup = `<section data-reveal><div data-motion="lift-xl" style="margin-top:3000px">Late</div>
+    <ul><li data-motion-part>One</li><li data-motion-part>Two</li></ul></section>`;
+  const serve = async (page: Page, request: APIRequestContext, html: string): Promise<void> => {
+    const css = await builtStylesheet(request);
     await page.route("**/static-reveal.html", (route) =>
       route.fulfill({
         contentType: "text/html",
-        body: `<!doctype html><html><head><link rel="stylesheet" href="${css}"></head><body>
-          <section data-reveal><div data-motion="lift-xl" style="margin-top:3000px">Late</div>
-          <ul><li data-motion-part>One</li><li data-motion-part>Two</li></ul></section></body></html>`,
+        body: `<!doctype html>${html.replace("<head>", `<head><link rel="stylesheet" href="${css}">`)}`,
       }),
     );
     await page.goto("/static-reveal.html");
+  };
+
+  test("everything is visible", async ({ page, request }) => {
+    await serve(page, request, `<html><head></head><body>${markup}</body></html>`);
     const motion = page.locator("[data-motion], [data-motion-part]");
     await expect(motion).toHaveCount(3);
     for (const el of await motion.all()) await expect(el).toHaveCSS("opacity", "1");
+  });
+
+  test("the same markup under data-motion-ready starts hidden (control)", async ({
+    page,
+    request,
+  }) => {
+    // Proves the stylesheet loaded and applies to this markup, so the check above can fail.
+    await serve(
+      page,
+      request,
+      `<html data-motion-ready="true"><head></head><body>${markup}</body></html>`,
+    );
+    const motion = page.locator("[data-motion], [data-motion-part]");
+    await expect(motion).toHaveCount(3);
+    for (const el of await motion.all()) await expect(el).toHaveCSS("opacity", "0");
   });
 });
 

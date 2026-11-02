@@ -31,3 +31,6 @@ logs/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Boundary rule fixtures (tests/boundaries.test.ts); removed after each test
+.boundary-fixture-*/

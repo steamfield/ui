@@ -15,7 +15,7 @@ import {
   defaultGlyphs,
   defaultLabels,
   lastBeat,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 import type { DemoScript } from "../../script/types.ts";
 import type { Timeline } from "../../sequencer/compile.ts";
 import type { DemoView, Position } from "../../sequencer/view.ts";

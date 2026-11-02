@@ -1,58 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  FakeIntersectionObserver,
+  stubIntersectionObserver,
+  stubReducedMotion,
+} from "../../tests/helpers/dom.ts";
 import { initReveal } from "./index.ts";
 
-class FakeObserver {
-  static instances: FakeObserver[] = [];
-  readonly targets = new Set<Element>();
-  disconnected = false;
-  readonly callback: IntersectionObserverCallback;
-  readonly options: IntersectionObserverInit;
-  constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit) {
-    this.callback = callback;
-    this.options = options;
-    FakeObserver.instances.push(this);
-  }
-  observe(target: Element): void {
-    this.targets.add(target);
-  }
-  unobserve(target: Element): void {
-    this.targets.delete(target);
-  }
-  disconnect(): void {
-    this.disconnected = true;
-    this.targets.clear();
-  }
-  enter(target: Element): void {
-    const entry = { target, isIntersecting: true };
-    this.callback([entry] as unknown as IntersectionObserverEntry[], this as never);
-  }
-  leave(target: Element): void {
-    const entry = { target, isIntersecting: false };
-    this.callback([entry] as unknown as IntersectionObserverEntry[], this as never);
-  }
-}
-
-const observer = (): FakeObserver => {
-  const last = FakeObserver.instances.at(-1);
-  if (!last) throw new Error("no observer");
-  return last;
-};
-
-function stubReducedMotion(initial: boolean): (next: boolean) => void {
-  let matches = initial;
-  const listeners = new Set<() => void>();
-  vi.stubGlobal("matchMedia", () => ({
-    get matches() {
-      return matches;
-    },
-    addEventListener: (_: string, cb: () => void) => listeners.add(cb),
-    removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
-  }));
-  return (next) => {
-    matches = next;
-    for (const cb of [...listeners]) cb();
-  };
-}
+const observer = (): FakeIntersectionObserver => FakeIntersectionObserver.last();
 
 const root = document.documentElement;
 const byId = (id: string): HTMLElement => {
@@ -63,8 +17,7 @@ const byId = (id: string): HTMLElement => {
 let dispose: () => void = () => {};
 
 beforeEach(() => {
-  FakeObserver.instances = [];
-  vi.stubGlobal("IntersectionObserver", FakeObserver);
+  stubIntersectionObserver();
   stubReducedMotion(false);
   document.body.innerHTML = `
     <section id="a" data-reveal><h2 data-motion="lift-lg">A</h2></section>
@@ -79,8 +32,6 @@ afterEach(() => {
   dispose();
   delete root.dataset.motionReady;
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 describe("initReveal", () => {
@@ -147,7 +98,7 @@ describe("initReveal", () => {
     stubReducedMotion(true);
     dispose = initReveal();
     expect(root.dataset.motionReady).toBeUndefined();
-    expect(FakeObserver.instances).toEqual([]);
+    expect(FakeIntersectionObserver.instances).toEqual([]);
   });
 
   test('motion: "reduce" vetoes setup', () => {

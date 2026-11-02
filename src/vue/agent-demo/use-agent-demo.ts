@@ -11,12 +11,7 @@ import {
   toValue,
   watch,
 } from "vue";
-import {
-  countAt,
-  hiddenToolNames,
-  signature,
-  type ToolRegistry,
-} from "../../internal/agent-demo.ts";
+import { countAt, hiddenToolNames, signature, type ToolRegistry } from "../../agent-demo/core.ts";
 import { carryOver, sameInputs } from "../../internal/gate-rebuild.ts";
 import { defined } from "../../internal/options.ts";
 import {

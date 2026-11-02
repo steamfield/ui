@@ -1,34 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  FakeIntersectionObserver,
+  stubIntersectionObserver,
+  stubReducedMotion,
+} from "../../tests/helpers/dom.ts";
 import { initReveal, revealGateScript } from "./index.ts";
-
-class FakeObserver {
-  static instances: FakeObserver[] = [];
-  disconnected = false;
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {
-    this.disconnected = true;
-  }
-  constructor() {
-    FakeObserver.instances.push(this);
-  }
-}
-
-function stubReducedMotion(initial: boolean): (next: boolean) => void {
-  let matches = initial;
-  const listeners = new Set<() => void>();
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    get matches() {
-      return query === "(prefers-reduced-motion: reduce)" && matches;
-    },
-    addEventListener: (_: string, cb: () => void) => listeners.add(cb),
-    removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
-  }));
-  return (next) => {
-    matches = next;
-    for (const cb of [...listeners]) cb();
-  };
-}
 
 const root = document.documentElement;
 /** Runs the snippet the way an inline classic script would: in the page's global scope. */
@@ -37,8 +13,7 @@ const runGate = (): void => new Function(revealGateScript)();
 let dispose: () => void = () => {};
 
 beforeEach(() => {
-  FakeObserver.instances = [];
-  vi.stubGlobal("IntersectionObserver", FakeObserver);
+  stubIntersectionObserver();
   stubReducedMotion(false);
   document.body.innerHTML = `<section data-reveal><h1 data-motion>Hi</h1></section>`;
 });
@@ -50,7 +25,6 @@ afterEach(() => {
   delete root.dataset.revealLive;
   root.removeAttribute("data-sf-motion");
   document.body.innerHTML = "";
-  vi.unstubAllGlobals();
 });
 
 describe("revealGateScript", () => {
@@ -113,9 +87,6 @@ describe("the gate's fallback", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   test("removes the gate after 3s when initReveal never runs", () => {
     runGate();
@@ -142,7 +113,7 @@ describe("initReveal after the gate", () => {
     runGate();
     dispose = initReveal();
     expect(root.dataset.motionReady).toBe("true");
-    expect(FakeObserver.instances).toHaveLength(1);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
     dispose();
     expect(root.hasAttribute("data-motion-ready")).toBe(false);
   });
@@ -153,13 +124,13 @@ describe("initReveal after the gate", () => {
     dispose = initReveal();
     set(true);
     expect(root.hasAttribute("data-motion-ready")).toBe(false);
-    expect(FakeObserver.instances[0]?.disconnected).toBe(true);
+    expect(FakeIntersectionObserver.instances[0]?.disconnected).toBe(true);
   });
 
   test("removes the gate when its motion source says no at setup", () => {
     runGate();
     dispose = initReveal({ motion: "reduce" });
     expect(root.hasAttribute("data-motion-ready")).toBe(false);
-    expect(FakeObserver.instances).toEqual([]);
+    expect(FakeIntersectionObserver.instances).toEqual([]);
   });
 });

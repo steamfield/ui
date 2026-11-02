@@ -25,6 +25,7 @@
         "@vue/test-utils": "^2.5.1",
         "github-slugger": "^2.0.0",
         "happy-dom": "^21.0.4",
+        "postcss": "^8.5.32",
         "publint": "^0.3.25",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",

@@ -6,6 +6,7 @@
 @import "@steamfield/ui/tabs/styles.css";
 @import "@steamfield/ui/react/install-tabs/styles.css";
 @import "@steamfield/ui/reveal/styles.css";
+@import "@steamfield/ui/markdown/styles.css";
 
 @layer playground {
   :root {
@@ -48,7 +49,7 @@
 
   .pg-shell {
     display: grid;
-    grid-template-columns: 14rem 1fr;
+    grid-template-columns: 14rem minmax(0, 1fr);
     min-height: 100vh;
   }
 
@@ -104,6 +105,13 @@
     height: 0.625rem;
     border-radius: 0.25rem;
     background: var(--sf-accent);
+  }
+
+  /* The markdown page's table of contents: links tall enough to be 24px targets. */
+  .pg-toc a {
+    display: inline-block;
+    padding-block: 0.25rem;
+    color: var(--sf-fg);
   }
 
   .pg-vertical {
@@ -166,7 +174,7 @@
 
   @media (max-width: 40rem) {
     .pg-shell {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .pg-nav {
       border-right: 0;

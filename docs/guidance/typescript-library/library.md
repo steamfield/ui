@@ -23,7 +23,7 @@ While the version is `0.x`, a breaking change bumps the minor. Write what change
 
 ## Errors
 
-- Throw only `LibraryError` with a code from `LibraryErrorCode` (`src/errors.ts`). Each code has one fixed message in `messages`. A new failure adds a code there, a row in README.md's error table and a test.
+- Throw only `LibraryError` with a code from `LibraryErrorCode` (`src/internal/errors.ts`, public from `src/script/errors.ts`). Each code has one fixed message in `messages`. A new failure adds a code there, a row in README.md's error table and a test.
 - `field` names the argument or option at fault, never the value: values may be large or private.
 - Wrap a lower-level failure with `cause` rather than rethrowing it, so callers still get a code.
 - `isLibraryError` checks name and code, so it works across two installed copies of the package; `instanceof` doesn't.

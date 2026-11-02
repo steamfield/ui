@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Browser checks run against the built playground (vite preview), never the dev server, so they
-// see what a consumer's bundler would produce.
+// Browser checks run against the built playground (vite preview), never the dev server. The
+// playground is built against the built package (PLAYGROUND_DIST=1 resolves @steamfield/ui/* to
+// the dist/ targets in package.json exports), so they see what a consumer's bundler would.
 export default defineConfig({
   testDir: "tests/browser",
   fullyParallel: true,
@@ -11,9 +12,11 @@ export default defineConfig({
   use: { baseURL: "http://localhost:5199", trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "bun run playground:build && bun run playground:preview",
+    command: "bun run build && bun run playground:build && bun run playground:preview",
     url: "http://localhost:5199",
-    reuseExistingServer: !process.env.CI,
+    env: { PLAYGROUND_DIST: "1" },
+    // A server already on the port may be serving a stale build, so always start a fresh one.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

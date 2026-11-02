@@ -1,56 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  FakeIntersectionObserver,
+  setTabHidden,
+  stubIntersectionObserver,
+  stubReducedMotion,
+} from "../../tests/helpers/dom.ts";
 import { LibraryError } from "../script/errors.ts";
 import { createPlaybackGate, type MotionSource, type PlaybackGate } from "./index.ts";
 
-/** An IntersectionObserver the test drives by hand. */
-class FakeObserver {
-  static instances: FakeObserver[] = [];
-  readonly targets = new Set<Element>();
-  disconnected = false;
-  readonly callback: IntersectionObserverCallback;
-  readonly options: IntersectionObserverInit;
-  constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit = {}) {
-    this.callback = callback;
-    this.options = options;
-    FakeObserver.instances.push(this);
-  }
-  observe(target: Element): void {
-    this.targets.add(target);
-  }
-  unobserve(target: Element): void {
-    this.targets.delete(target);
-  }
-  disconnect(): void {
-    this.disconnected = true;
-    this.targets.clear();
-  }
-  fire(isIntersecting: boolean): void {
-    const entries = [...this.targets].map((target) => ({ target, isIntersecting }));
-    this.callback(entries as unknown as IntersectionObserverEntry[], this as never);
-  }
-}
-
-const observer = (): FakeObserver => {
-  const last = FakeObserver.instances.at(-1);
-  if (!last) throw new Error("no observer");
-  return last;
-};
-
-function setReducedMotion(initial: boolean): (next: boolean) => void {
-  let matches = initial;
-  const listeners = new Set<() => void>();
-  vi.stubGlobal("matchMedia", () => ({
-    get matches() {
-      return matches;
-    },
-    addEventListener: (_: string, cb: () => void) => listeners.add(cb),
-    removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
-  }));
-  return (next) => {
-    matches = next;
-    for (const cb of listeners) cb();
-  };
-}
+const observer = (): FakeIntersectionObserver => FakeIntersectionObserver.last();
 
 function store(initial: boolean): MotionSource & { set(next: boolean): void } {
   let allowed = initial;
@@ -68,11 +26,6 @@ function store(initial: boolean): MotionSource & { set(next: boolean): void } {
   };
 }
 
-const setTabHidden = (hidden: boolean): void => {
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue(hidden ? "hidden" : "visible");
-  document.dispatchEvent(new Event("visibilitychange"));
-};
-
 let el: HTMLElement;
 let gate: PlaybackGate | undefined;
 const advance = (ms: number): void => {
@@ -81,9 +34,8 @@ const advance = (ms: number): void => {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  FakeObserver.instances = [];
-  vi.stubGlobal("IntersectionObserver", FakeObserver);
-  setReducedMotion(false);
+  stubIntersectionObserver();
+  stubReducedMotion(false);
   el = document.createElement("div");
   document.body.append(el);
 });
@@ -92,9 +44,6 @@ afterEach(() => {
   gate?.destroy();
   gate = undefined;
   el.remove();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
 });
 
 const make = (options: Parameters<typeof createPlaybackGate>[1] = {}): PlaybackGate => {
@@ -356,7 +305,7 @@ describe("leave grace period", () => {
 
 describe("reduced motion", () => {
   test("end policy shows the final frame", () => {
-    setReducedMotion(true);
+    stubReducedMotion(true);
     const onFrame = vi.fn();
     const g = make({ onFrame });
     expect(g.getState()).toMatchObject({ reduced: true, complete: true, elapsed: 10_000 });
@@ -364,7 +313,7 @@ describe("reduced motion", () => {
   });
 
   test("hold policy freezes the current frame and resumes when motion returns", () => {
-    const set = setReducedMotion(false);
+    const set = stubReducedMotion(false);
     const g = make({ reducedPolicy: "hold" });
     observer().fire(true);
     advance(1000);
@@ -398,7 +347,7 @@ describe("reduced motion", () => {
   });
 
   test("full ignores the media query", () => {
-    setReducedMotion(true);
+    stubReducedMotion(true);
     const g = make({ motion: "full" });
     expect(g.getState().reduced).toBe(false);
   });

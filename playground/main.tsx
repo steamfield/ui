@@ -3,25 +3,32 @@ import { createRoot } from "react-dom/client";
 import { AgentDemoPage } from "./pages/agent-demo.tsx";
 import { CopyPage } from "./pages/copy.tsx";
 import { InstallTabsPage } from "./pages/install-tabs.tsx";
+import { MarkdownPage } from "./pages/markdown.tsx";
 import { PlaybackPage } from "./pages/playback.tsx";
 import { RevealPage } from "./pages/reveal.tsx";
 import { TabsPage } from "./pages/tabs.tsx";
+import { VueAgentDemoPage } from "./pages/vue-agent-demo.tsx";
+import { WindowPage } from "./pages/window.tsx";
+import { ROUTES, type Route } from "./routes.ts";
 
 // One page per component. Each page renders sample scripts and content for manual QA; the
 // Playwright suite in tests/browser/ loads every route in light, dark and reduced-motion modes.
 // The page is picked from the hash (#/copy), so the static build needs no server routing.
-const pages: Record<string, () => ReactElement> = {
+const pages: Record<Route, () => ReactElement> = {
   copy: CopyPage,
   "agent-demo": AgentDemoPage,
+  "vue-agent-demo": VueAgentDemoPage,
+  window: WindowPage,
   tabs: TabsPage,
   "install-tabs": InstallTabsPage,
   reveal: RevealPage,
   playback: PlaybackPage,
+  markdown: MarkdownPage,
 };
 
-function current(): string {
+function current(): Route {
   const name = location.hash.replace(/^#\/?/, "").split("?")[0] ?? "";
-  return name in pages ? name : (Object.keys(pages)[0] ?? "");
+  return ROUTES.find((route) => route === name) ?? ROUTES[0];
 }
 
 function App(): ReactElement {
@@ -35,11 +42,11 @@ function App(): ReactElement {
     const theme = new URLSearchParams(location.search).get("theme");
     if (theme) document.documentElement.dataset.theme = theme;
   }, []);
-  const Page = pages[page] ?? CopyPage;
+  const Page = pages[page];
   return (
     <div className="pg-shell">
       <nav className="pg-nav" aria-label="Components">
-        {Object.keys(pages).map((name) => (
+        {ROUTES.map((name) => (
           <a key={name} href={`#/${name}`} aria-current={name === page ? "page" : undefined}>
             {name}
           </a>

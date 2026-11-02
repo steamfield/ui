@@ -13,13 +13,13 @@ import {
   spinnerFrame,
   toolHidden,
   toolName,
-} from "../../internal/agent-demo.ts";
+} from "../../agent-demo/core.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
 import type { DemoEntry, DemoView } from "../../sequencer/view.ts";
 import type { AgentDemoGlyphs, AgentDemoLabels, ToolRegistry } from "./labels.ts";
 
-export type { AgentDemoLayout } from "../../internal/agent-demo.ts";
+export type { AgentDemoLayout } from "../../agent-demo/core.ts";
 
 /** What `renderToolCall` and `renderToolBody` receive. */
 export interface ToolCallContext<TData = unknown> {

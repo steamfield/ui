@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { type AnnounceMode, lastBeat as lastBeatOf } from "../../internal/agent-demo.ts";
+import { type AnnounceMode, lastBeat as lastBeatOf } from "../../agent-demo/core.ts";
 import type { DemoScript } from "../../script/types.ts";
 import type { DemoView } from "../../sequencer/view.ts";
 import { DemoWindow } from "../window/demo-window.tsx";
@@ -24,7 +24,7 @@ import {
   useAgentDemo,
 } from "./use-agent-demo.ts";
 
-export type { AnnounceMode } from "../../internal/agent-demo.ts";
+export type { AnnounceMode } from "../../agent-demo/core.ts";
 
 /**
  * Which controls show once hydrated (never under reduced motion or a fixed `position`):

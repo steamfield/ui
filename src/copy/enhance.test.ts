@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
+import { removeClipboard, stubClipboard, stubExecCommand } from "../../tests/helpers/dom.ts";
 import { copyText } from "./copy-text.ts";
 import { enhanceCopyButtons } from "./enhance.ts";
 
@@ -8,7 +9,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   writeText.mockReset().mockResolvedValue(undefined);
   document.getSelection()?.removeAllRanges();
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  stubClipboard(writeText);
   document.body.innerHTML = `
     <div data-copy-root>
       <code id="cmd">npx stacks new</code>
@@ -22,10 +23,6 @@ beforeEach(() => {
         <span data-copy-label>Copy</span>
       </button>
     </div>`;
-});
-
-afterEach(() => {
-  vi.useRealTimers();
 });
 
 const button = (): HTMLButtonElement =>
@@ -67,7 +64,7 @@ test("a second click while showing Copied still resets to the idle label", async
 
 test("on failure it selects the text, opens details and shows a subject-aware message", async () => {
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   const details = document.createElement("details");
   details.append(document.getElementById("cmd") as HTMLElement);
   document.querySelector("[data-copy-root]")?.prepend(details);
@@ -113,12 +110,12 @@ test("the disposer removes listeners", async () => {
 });
 
 test("copyText falls back to execCommand and respects its result", async () => {
-  Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-  document.execCommand = vi.fn(() => true);
+  removeClipboard();
+  stubExecCommand(() => true);
   expect(await copyText("a")).toBe(true);
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   expect(await copyText("a")).toBe(false);
-  document.execCommand = vi.fn(() => {
+  stubExecCommand(() => {
     throw new Error("nope");
   });
   expect(await copyText("a")).toBe(false);
@@ -127,7 +124,7 @@ test("copyText falls back to execCommand and respects its result", async () => {
 
 test("a hidden target is not selected and the message points elsewhere", async () => {
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   (document.getElementById("cmd") as HTMLElement).hidden = true;
   enhanceCopyButtons(document);
   await click();
@@ -137,7 +134,7 @@ test("a hidden target is not selected and the message points elsewhere", async (
 
 test("custom messages, subjects and labels replace the defaults", async () => {
   writeText.mockRejectedValueOnce(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   button().setAttribute("aria-label", "Copy snippet");
   enhanceCopyButtons(document, {
     subjects: { "Copy snippet": "snippet" },
@@ -157,7 +154,7 @@ test("custom messages, subjects and labels replace the defaults", async () => {
 
 test("an unknown label falls back to 'text', and a button without parts still works", async () => {
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   document.body.innerHTML = `<p id="t">hi</p><button hidden data-copy-command aria-controls="t"></button>`;
   const onCopy = vi.fn();
   enhanceCopyButtons(document, { onCopy });
@@ -185,7 +182,7 @@ test("disposing clears a pending reset", async () => {
 });
 
 test("copyText reports false with no clipboard and no document", async () => {
-  Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  removeClipboard();
   const doc = globalThis.document;
   vi.stubGlobal("document", undefined);
   try {
@@ -200,7 +197,7 @@ test("a failure after a success restores the idle label", async () => {
   await click();
   expect(label()).toBe("Copied");
   writeText.mockRejectedValue(new Error("denied"));
-  document.execCommand = vi.fn(() => false);
+  stubExecCommand(() => false);
   delete button().dataset.state;
   await click();
   expect(button().dataset.state).toBe("failed");
