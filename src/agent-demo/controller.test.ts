@@ -222,6 +222,47 @@ describe("onStepStart", () => {
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalled();
   });
+
+  test("a throwing onStepStart doesn't stop the clock or the view", () => {
+    let calls = 0;
+    const onStepStart = vi.fn((_index: number) => {
+      calls += 1;
+      if (calls === 2) throw new Error("boom");
+    });
+    const c = make({ onStepStart });
+    expect(() => advance(startOf(1) + 50)).toThrow("boom");
+    expect(c.getState().view.current).toBe(1);
+    advance(startOf(3) - startOf(1));
+    expect(c.getState()).toMatchObject({ playing: true, turn: 1 });
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3]);
+  });
+
+  test("a callback that replays stops the rest of that settle; each run fires in order", () => {
+    let replayed = false;
+    const c = make();
+    const onStepStart = vi.fn((index: number) => {
+      if (index === 1 && !replayed) {
+        replayed = true;
+        c.getState().controls.replay();
+      }
+    });
+    c.update(script, { ...options, onStepStart });
+    c.getState().controls.seek(startOf(3) + 1);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([1, 0]);
+    advance(startOf(3) + 50);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([1, 0, 1, 2, 3]);
+  });
+
+  test("a throwing callback doesn't drop the ones after it; the first error is rethrown", () => {
+    const onStepStart = vi.fn((index: number) => {
+      if (index === 1) throw new Error("first");
+      if (index === 2) throw new Error("second");
+    });
+    const c = make({ autoStart: false, onStepStart });
+    c.getState().controls.play();
+    expect(() => c.getState().controls.seek(startOf(3) + 1)).toThrow("first");
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3]);
+  });
 });
 
 describe("end", () => {
@@ -298,6 +339,40 @@ describe("end", () => {
     const c = make({ reducedPolicy: "hold" });
     expect(c.getState().view.entries).toHaveLength(script.steps.length);
   });
+
+  test("onComplete calling replay plays again cleanly", () => {
+    const c = make();
+    const onComplete = vi.fn(() => c.getState().controls.replay());
+    c.update(script, { ...options, onComplete });
+    advance(TOTAL + 50);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(c.getState()).toMatchObject({ playing: true, complete: false });
+    expect(c.getState().view.elapsed).toBeLessThan(200);
+    advance(TOTAL + 50);
+    expect(onComplete).toHaveBeenCalledTimes(2);
+  });
+
+  test("onComplete still fires when the last onStepStart throws in the same settle", () => {
+    const short: DemoScript = {
+      steps: [
+        { kind: "output", lines: ["a"] },
+        { kind: "output", lines: ["b"] },
+      ],
+    };
+    const end = compile(short).duration;
+    const onComplete = vi.fn();
+    make(
+      {
+        onStepStart: (index) => {
+          if (index === 1) throw new Error("last");
+        },
+        onComplete,
+      },
+      { own: short },
+    );
+    expect(() => advance(end + 500)).toThrow("last");
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("script identity", () => {
@@ -365,6 +440,38 @@ describe("script identity", () => {
     // A new registry with the same hidden names keeps it.
     c.update(script, { ...options, tools: { Bash: { hidden: true } } });
     expect(c.getState().timeline).toBe(hidden);
+  });
+
+  test("an inline function finalPolicy doesn't count as a change on every update", () => {
+    const c = make({ autoStart: false, finalPolicy: () => [0] });
+    const listener = vi.fn();
+    c.subscribe(listener);
+    for (let i = 0; i < 3; i++) {
+      c.update(script, { ...options, autoStart: false, finalPolicy: () => [0] });
+    }
+    expect(listener).not.toHaveBeenCalled();
+    expect(c.getState().view.entries).toHaveLength(1);
+    c.update(script, { ...options, autoStart: false, finalPolicy: () => [0, 1, 2, 3, 4] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(c.getState().view.entries).toHaveLength(script.steps.length);
+  });
+
+  test("a function finalPolicy compares by source text, so a closure change isn't seen", () => {
+    // The documented limit, as for `timing`: same source, different captured value.
+    const first = (n: number) => () => Array.from({ length: n }, (_, i) => i);
+    const c = make({ autoStart: false, finalPolicy: first(1) });
+    c.update(script, { ...options, autoStart: false, finalPolicy: first(3) });
+    expect(c.getState().view.entries).toHaveLength(1);
+  });
+
+  test("a bound or native finalPolicy compares by identity", () => {
+    function keep(this: { n: number }): number[] {
+      return Array.from({ length: this.n }, (_, i) => i);
+    }
+    const c = make({ autoStart: false, finalPolicy: keep.bind({ n: 1 }) });
+    expect(c.getState().view.entries).toHaveLength(1);
+    c.update(script, { ...options, autoStart: false, finalPolicy: keep.bind({ n: 3 }) });
+    expect(c.getState().view.entries).toHaveLength(3);
   });
 });
 
@@ -457,48 +564,6 @@ describe("lifecycle", () => {
     expect(c.getState()).toMatchObject({ started: false });
     expect(c.getState().view.entries).toHaveLength(script.steps.length);
   });
-});
-
-describe("review regressions", () => {
-  test("an inline function finalPolicy doesn't count as a change on every update", () => {
-    const c = make({ autoStart: false, finalPolicy: () => [0] });
-    const listener = vi.fn();
-    c.subscribe(listener);
-    for (let i = 0; i < 3; i++) {
-      c.update(script, { ...options, autoStart: false, finalPolicy: () => [0] });
-    }
-    expect(listener).not.toHaveBeenCalled();
-    expect(c.getState().view.entries).toHaveLength(1);
-    c.update(script, { ...options, autoStart: false, finalPolicy: () => [0, 1, 2, 3, 4] });
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(c.getState().view.entries).toHaveLength(script.steps.length);
-  });
-
-  test("a throwing onStepStart doesn't stop the clock or the view", () => {
-    let calls = 0;
-    const onStepStart = vi.fn((_index: number) => {
-      calls += 1;
-      if (calls === 2) throw new Error("boom");
-    });
-    const c = make({ onStepStart });
-    expect(() => advance(startOf(1) + 50)).toThrow("boom");
-    expect(c.getState().view.current).toBe(1);
-    advance(startOf(3) - startOf(1));
-    expect(c.getState()).toMatchObject({ playing: true, turn: 1 });
-    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3]);
-  });
-
-  test("onComplete calling replay plays again cleanly", () => {
-    const c = make();
-    const onComplete = vi.fn(() => c.getState().controls.replay());
-    c.update(script, { ...options, onComplete });
-    advance(TOTAL + 50);
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(c.getState()).toMatchObject({ playing: true, complete: false });
-    expect(c.getState().view.elapsed).toBeLessThan(200);
-    advance(TOTAL + 50);
-    expect(onComplete).toHaveBeenCalledTimes(2);
-  });
 
   test("a changed speed option replaces a setSpeed rate, also across a remount", () => {
     const c = make();
@@ -513,6 +578,18 @@ describe("review regressions", () => {
   test("a setSpeed rate survives a remount when the option didn't change", () => {
     const c = make({ speed: 2 });
     c.getState().controls.setSpeed(3);
+    c.destroy();
+    c.mount();
+    expect(c.getState().speed).toBe(3);
+  });
+
+  test("a bad speed option throws and keeps the setSpeed rate", () => {
+    const c = make();
+    c.getState().controls.setSpeed(3);
+    expect(() => c.update(script, { ...options, speed: 0 })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "speed" }),
+    );
+    expect(c.getState().speed).toBe(3);
     c.destroy();
     c.mount();
     expect(c.getState().speed).toBe(3);

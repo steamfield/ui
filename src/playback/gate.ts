@@ -111,18 +111,29 @@ export function createPlaybackGate(
  *   element gone; binding that element again changes nothing.
  * - Changing an option other than `speed` and `onFrame` starts over at 0, keeping the rate, with
  *   one new observer. `speed` and `onFrame` change in place.
+ * - The rate is the last of the `speed` option and `setSpeed`: a rate set with `setSpeed` holds
+ *   until the `speed` option changes, across `disconnect()` and `connect()` too.
+ *
+ * It starts disconnected and reads no browser state until `connect()`, so a binding can create
+ * it during render (on the server too) and hold it for its whole life, connecting it on mount and
+ * disconnecting it on unmount. While disconnected nothing is observed and the clock doesn't run,
+ * but the state, element, options and rate stay, and commands still apply.
  */
 export interface BoundGate extends PlaybackGate {
   /** Binds the element whose visibility gates playback, or unbinds with `null`. */
   readonly attach: (element: Element | null) => void;
   /** Applies new options. Throws `invalid_option` on a bad `speed` before changing anything. */
   readonly configure: (options: PlaybackGateOptions) => void;
+  /** Starts observing the element, the tab and motion, and runs the clock. */
+  readonly connect: () => void;
+  /** Stops observing and stops the clock, keeping everything else. `connect()` resumes. */
+  readonly disconnect: () => void;
 }
 
-/** Creates a `BoundGate` with no element. Create it in the browser, like `createPlaybackGate`. */
+/** Creates a disconnected `BoundGate` with no element. */
 export function createBoundGate(options: PlaybackGateOptions = {}): BoundGate {
-  const { gate, attach, configure } = build(null, options, true);
-  return { ...gate, attach, configure };
+  const { gate, ...binding } = build(null, options, true);
+  return { ...gate, ...binding };
 }
 
 /** Options whose change starts a bound gate over. */
@@ -140,7 +151,7 @@ function build(
   el: Element | null,
   initial: PlaybackGateOptions,
   bound: boolean,
-): Pick<BoundGate, "attach" | "configure"> & { gate: PlaybackGate } {
+): Pick<BoundGate, "attach" | "configure" | "connect" | "disconnect"> & { gate: PlaybackGate } {
   let options = initial;
   let config = readOptions(options);
   let clocked = options.duration !== undefined || options.onFrame !== undefined;
@@ -153,10 +164,11 @@ function build(
   let started = autoStart();
   let paused = false;
   let inView = true;
-  let tabVisible = isTabVisible();
+  let tabVisible = true;
   let reduced = false;
   let elapsed = 0;
   let destroyed = false;
+  let connected = false;
   let running = false;
   let frame: number | undefined;
   let last: number | undefined;
@@ -194,7 +206,7 @@ function build(
   };
 
   const syncClock = (): void => {
-    const run = clocked && state.playing;
+    const run = connected && clocked && state.playing;
     if (run === running) return;
     running = run;
     if (run) {
@@ -237,6 +249,7 @@ function build(
   // IntersectionObserver) counts as in view. `from` is the element a swap leaves, whose observer
   // then follows the new one; otherwise a new observer is made.
   const watchView = (from: Element | null): void => {
+    if (!connected) return;
     clearTimeout(grace);
     grace = undefined;
     inView = observed === null || typeof IntersectionObserver === "undefined";
@@ -258,6 +271,7 @@ function build(
 
   // The motion source depends on the element (`"auto"` reads its ancestors), so it follows it.
   const watchMotion = (): void => {
+    if (!connected) return;
     unsubscribeMotion();
     const motion = motionSourceFor(config.motion, observed);
     reduced = !motion.get();
@@ -267,16 +281,36 @@ function build(
     });
   };
 
-  watchView(null);
   const onVisibility = (): void => {
     tabVisible = isTabVisible();
     update();
   };
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisibility);
-  }
-  watchMotion();
-  update();
+  const connect = (): void => {
+    if (destroyed || connected) return;
+    connected = true;
+    tabVisible = isTabVisible();
+    watchView(null);
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    watchMotion();
+    update();
+  };
+  const disconnect = (): void => {
+    if (!connected) return;
+    connected = false;
+    observer?.disconnect();
+    observer = undefined;
+    clearTimeout(grace);
+    grace = undefined;
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibility);
+    }
+    unsubscribeMotion();
+    unsubscribeMotion = () => {};
+    syncClock();
+  };
+  if (!bound) connect();
 
   const play = (): void => {
     started = true;
@@ -319,16 +353,8 @@ function build(
     },
     destroy() {
       if (destroyed) return;
+      disconnect();
       destroyed = true;
-      observer?.disconnect();
-      clearTimeout(grace);
-      if (frame !== undefined) cancelFrame(frame);
-      frame = undefined;
-      running = false;
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility);
-      }
-      unsubscribeMotion();
       listeners.clear();
     },
     getState: () => state,
@@ -342,6 +368,8 @@ function build(
 
   return {
     gate,
+    connect,
+    disconnect,
     attach(element) {
       // Unbinding keeps the observer on the old element, so it reads as out of view as soon as
       // the browser reports it gone, and an inline ref that detaches and reattaches the same

@@ -295,6 +295,32 @@ describe("playback (terminal)", () => {
     advance(startOf(1) - 100);
     expect(within(region()).getByRole("img", { name: "Agent thinking" })).toBeTruthy();
   });
+
+  test("StrictMode's mount, unmount, mount leaves one live gate; callbacks fire once each", () => {
+    stubIntersectionObserver();
+    const onStepStart = vi.fn();
+    const onComplete = vi.fn();
+    render(
+      <StrictMode>
+        <Terminal onStepStart={onStepStart} onComplete={onComplete} />
+      </StrictMode>,
+    );
+    expect(FakeIntersectionObserver.live()).toHaveLength(1);
+    act(() => FakeIntersectionObserver.live()[0]?.fire(true));
+    advance(TOTAL + 1000);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2]);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+    advance(startOf(1) + 50);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const paused = region().textContent;
+    advance(5000);
+    expect(region().textContent).toBe(paused);
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    advance(TOTAL);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 0, 1, 2]);
+    expect(onComplete).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("composer (chat)", () => {
@@ -672,6 +698,12 @@ describe("useAgentDemo", () => {
     rerender();
     expect(result.current.timeline).toBe(first);
   });
+
+  test("an inline function finalPolicy renders without looping", () => {
+    const { rerender } = render(<Inline n={1} />);
+    rerender(<Inline n={2} />);
+    expect(screen.getByTestId("inline").textContent).toBe("2:1");
+  });
 });
 
 describe("every step kind", () => {
@@ -886,37 +918,3 @@ function Inline({ n }: { n: number }) {
   });
   return <span data-testid="inline">{`${n}:${demo.view.entries.length}`}</span>;
 }
-
-describe("review regressions", () => {
-  test("an inline function finalPolicy renders without looping", () => {
-    const { rerender } = render(<Inline n={1} />);
-    rerender(<Inline n={2} />);
-    expect(screen.getByTestId("inline").textContent).toBe("2:1");
-  });
-
-  test("StrictMode's mount, unmount, mount leaves one live gate; callbacks fire once each", () => {
-    stubIntersectionObserver();
-    const onStepStart = vi.fn();
-    const onComplete = vi.fn();
-    render(
-      <StrictMode>
-        <Terminal onStepStart={onStepStart} onComplete={onComplete} />
-      </StrictMode>,
-    );
-    expect(FakeIntersectionObserver.live()).toHaveLength(1);
-    act(() => FakeIntersectionObserver.live()[0]?.fire(true));
-    advance(TOTAL + 1000);
-    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2]);
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Replay" }));
-    advance(startOf(1) + 50);
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
-    const paused = region().textContent;
-    advance(5000);
-    expect(region().textContent).toBe(paused);
-    fireEvent.click(screen.getByRole("button", { name: "Play" }));
-    advance(TOTAL);
-    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 0, 1, 2]);
-    expect(onComplete).toHaveBeenCalledTimes(2);
-  });
-});

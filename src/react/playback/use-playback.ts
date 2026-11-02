@@ -1,14 +1,6 @@
-import {
-  type RefCallback,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type RefCallback, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   type BoundGate,
-  checkSpeed,
   createBoundGate,
   type GateState,
   type PlaybackGate,
@@ -95,61 +87,42 @@ export function playbackRef<T extends Element>(
 }
 
 /**
- * The gate behind `usePlayback` and `useCountUp`: one `BoundGate` per mount, created in an
- * effect and read through a store. The gate itself follows the element and the options.
+ * The gate behind `usePlayback` and `useCountUp`: one `BoundGate` for the hook's life, created
+ * during render (it reads nothing from the browser until connected), connected in an effect and
+ * read through a store. The gate itself follows the element, the options and the rate.
  */
 export function useGate<T extends Element>(
   options: PlaybackGateOptions,
 ): {
   readonly ref: PlaybackRef<T>;
+  /** The gate while connected, else null. */
   readonly gate: PlaybackGate | null;
   readonly state: GateState;
-  /** Checks the rate and applies it to the gate, or to the gate to come when none exists yet. */
+  /** Checks the rate and applies it, connected or not. */
   readonly setSpeed: (speed: number) => void;
 } {
+  const [bound] = useState(() => createBoundGate(options));
   const [gate, setGate] = useState<BoundGate | null>(null);
-  const live = useRef<BoundGate | null>(null);
-  // The last rate set with `setSpeed`, applied to each gate a mount creates.
-  const pending = useRef<number | undefined>(undefined);
-  // The `speed` option last seen, to tell when it changes.
-  const option = useRef(options.speed);
-  const [ref] = useState(() => playbackRef<T>((node) => live.current?.attach(node)));
-  const latest = useRef(options);
-  latest.current = options;
+  const [ref] = useState(() => playbackRef<T>(bound.attach));
 
   useEffect(() => {
-    const next = createBoundGate(latest.current);
-    if (pending.current !== undefined) next.setSpeed(pending.current);
-    next.attach(ref.current);
-    live.current = next;
-    setGate(next);
+    bound.connect();
+    setGate(bound);
     return () => {
-      next.destroy();
-      live.current = null;
+      bound.disconnect();
       setGate(null);
     };
-  }, [ref]);
+  }, [bound]);
 
   // Every commit: the gate compares the options itself, restarting only for a real change.
   useEffect(() => {
-    // A changed `speed` option replaces a `setSpeed` rate, here and in gates later mounts create.
-    if (options.speed !== undefined && !Object.is(options.speed, option.current)) {
-      pending.current = undefined;
-    }
-    option.current = options.speed;
-    live.current?.configure(options);
+    bound.configure(options);
   });
-
-  const setSpeed = useCallback((next: number) => {
-    if (live.current) live.current.setSpeed(next);
-    else checkSpeed(next);
-    pending.current = next;
-  }, []);
 
   const subscribe = useCallback((cb: () => void) => gate?.subscribe(cb) ?? noop, [gate]);
   const snapshot = useCallback(() => gate?.getState() ?? IDLE, [gate]);
   const state = useSyncExternalStore(subscribe, snapshot, idle);
-  return { ref, gate, state, setSpeed };
+  return { ref, gate, state, setSpeed: bound.setSpeed };
 }
 
 /**

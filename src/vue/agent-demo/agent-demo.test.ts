@@ -383,6 +383,14 @@ describe("time mode", () => {
     expect(card.style.getPropertyValue("--sf-tool-accent")).toBe("red");
     expect(w.find('[data-part="tool-icon"]').text()).toBe("Q");
   });
+
+  test("a script and scriptKey changing in one props update recompile together", async () => {
+    const other: DemoScript = { steps: [{ kind: "agent-text", text: "Something else entirely." }] };
+    const w = await mountDemo({ script: terminalScript, scriptKey: "a" });
+    await w.setProps({ script: other, scriptKey: "b" });
+    await advance(20_000);
+    expect(region(w)).toContain("Something else entirely.");
+  });
 });
 
 describe("reduced motion", () => {
@@ -587,6 +595,26 @@ describe("click mode (mcp-bet-demo beats)", () => {
     await nextTick();
     expect(w.find("[data-sf-agent-demo]").element).not.toBe(first);
     expect(region(w)).toContain("How many years");
+  });
+
+  test("the view follows a click position synchronously, in step with clickMode", async () => {
+    const position = ref<{ click: number } | undefined>({ click: 1 });
+    let demo: UseAgentDemoResult<TalksBody> | undefined;
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(mcpBet, { position });
+      demo = result;
+      return () => h("div", { ref: result.el });
+    });
+    mount(Probe);
+    await nextTick();
+    position.value = { click: 3 };
+    expect(demo?.view.value.entries).toHaveLength(
+      stateAt(compile(mcpBet), { click: 3 }).entries.length,
+    );
+    position.value = undefined;
+    // Back on the clock, which starts over at 0 in the same tick.
+    expect(demo?.clickMode.value).toBe(false);
+    expect(demo?.view.value.elapsed).toBe(0);
   });
 });
 
@@ -998,35 +1026,5 @@ describe("useAgentDemo element rules", () => {
     hook().controls.play();
     await advance(200);
     expect(hook().playing.value).toBe(true);
-  });
-});
-
-describe("review regressions", () => {
-  test("the view follows a click position synchronously, in step with clickMode", async () => {
-    const position = ref<{ click: number } | undefined>({ click: 1 });
-    let demo: UseAgentDemoResult<TalksBody> | undefined;
-    const Probe = defineComponent(() => {
-      const result = useAgentDemo(mcpBet, { position });
-      demo = result;
-      return () => h("div", { ref: result.el });
-    });
-    mount(Probe);
-    await nextTick();
-    position.value = { click: 3 };
-    expect(demo?.view.value.entries).toHaveLength(
-      stateAt(compile(mcpBet), { click: 3 }).entries.length,
-    );
-    position.value = undefined;
-    // Back on the clock, which starts over at 0 in the same tick.
-    expect(demo?.clickMode.value).toBe(false);
-    expect(demo?.view.value.elapsed).toBe(0);
-  });
-
-  test("a script and scriptKey changing in one props update recompile together", async () => {
-    const other: DemoScript = { steps: [{ kind: "agent-text", text: "Something else entirely." }] };
-    const w = await mountDemo({ script: terminalScript, scriptKey: "a" });
-    await w.setProps({ script: other, scriptKey: "b" });
-    await advance(20_000);
-    expect(region(w)).toContain("Something else entirely.");
   });
 });

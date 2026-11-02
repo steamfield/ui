@@ -178,7 +178,7 @@ The headless hook: compiles the script, gates playback and returns the view to r
 | `seed` | `string` | the script's `id`, then `""` | Seeds the timing jitter |
 | `composer` | `boolean` | `false` in the hook; `AgentDemo` uses `true` for `layout="chat"` | Whether user steps type into the composer instead of the transcript (a step's own `composer` overrides it) |
 | `tools` | `ToolRegistry` | none | Only `hidden` is read: a hidden tool's calls take no time, so leaving them out leaves no silent gap. `AgentDemo` passes its `tools` prop. A change to the hidden set recompiles and restarts playback |
-| `finalPolicy` | `"all" \| "last" \| (steps) => number[]` | `"all"` | What the server, the pre-hydration render and reduced motion show |
+| `finalPolicy` | `"all" \| "last" \| (steps) => number[]` | `"all"` | What the server, the pre-hydration render and reduced motion show. A function compares by its source text, like `timing`, so an inline one doesn't count as new every render; a function whose captured variables change is not seen as new (pass a different function, or hoist it). Bound and native functions compare by identity |
 | `position` | `{ ms } \| { click }` | none | Pin the view to a position, such as `{ click }` from a Slidev deck. No clock runs and no controls show |
 | `autoStart` | `boolean` | `true` | Start when in view. When false the final transcript shows until `play()` |
 | `threshold` | `number` | `0.15` | In-view threshold |
@@ -195,7 +195,7 @@ Result:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `view` | `DemoView` | What to render now |
-| `controls` | `AgentDemoControls` | `play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`. `cancel` stops and shows the finished transcript. `setSpeed` throws `invalid_option` on `speed` unless the rate is finite and greater than 0 |
+| `controls` | `AgentDemoControls` | `play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`. `cancel` stops and shows the finished transcript. `setSpeed` throws `invalid_option` on `speed` unless the rate is finite and greater than 0, and holds until the `speed` option changes, including across a remount |
 | `ref` | `PlaybackRef<HTMLDivElement>` | Attach to the element whose visibility gates playback. A callback ref that also has `current`, so it can attach to an element that mounts later or changes (see `usePlayback`) |
 | `ready` | `boolean` | False on the server and first client render |
 | `started` | `boolean` | `autoStart`, or `play`, `toggle` or `replay` was called. A `seek` or `cancel` before play leaves it false. Label a play button from `!started \|\| paused` |
@@ -437,7 +437,7 @@ import { usePlayback, useCountUp } from "@steamfield/ui/react/playback";
 
 React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts over at 0 and keeps the current rate; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
 
-Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a restart. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
+Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a restart or a remount. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
 
 `ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another:
 

@@ -78,13 +78,13 @@ export interface DemoController<TData = unknown> {
   readonly attach: (element: Element | null) => void;
   /** New props. Recompiles only for a new script (by key or content), which starts over. */
   readonly update: (script: DemoScript<TData>, options: DemoControllerOptions<TData>) => void;
-  /** Creates the gate: `ready` turns true. Call it in the browser (an effect or `onMounted`). */
+  /** Connects the gate: `ready` turns true. Call it in the browser (an effect or `onMounted`). */
   readonly mount: () => void;
   /** Back to 0 and unpaused, started only if `autoStart`, such as on a slide re-entry. */
   readonly reset: () => void;
   /**
-   * Destroys the gate and goes back to the pre-mount state. The controller keeps its script,
-   * options, element and rate, so a later `mount()` starts again (React StrictMode does this).
+   * Disconnects the gate and goes back to the pre-mount view. The gate keeps its progress,
+   * element and rate, so a later `mount()` resumes (React StrictMode and `<Activity>` do this).
    */
   readonly destroy: () => void;
 }
@@ -100,6 +100,17 @@ const IDLE: GateState = {
   playing: false,
   elapsed: 0,
   speed: 1,
+};
+
+/**
+ * A `finalPolicy` as a comparable value. A function compares by its source text, like `timing`,
+ * so an inline one is not new on every render; a bound or native function, whose text is only
+ * `[native code]`, compares by identity.
+ */
+const policyKey = (policy: FinalPolicy | undefined): unknown => {
+  if (typeof policy !== "function") return policy;
+  const source = String(policy);
+  return source.includes("[native code]") ? policy : source;
 };
 
 /** A position as a comparable value, so an inline `{ click: n }` doesn't count as a change. */
@@ -146,10 +157,10 @@ export function createDemoController<TData = unknown>(
   let compiled = false;
   // The content signature is recomputed only when an input is a new object, not every update.
   let content: { inputs: readonly unknown[]; key: unknown } | null = null;
+  // One gate for the controller's life, which holds the element and the rate. It reads no
+  // browser state until connected; `gate` is it while mounted, else null.
+  let bound: BoundGate;
   let gate: BoundGate | null = null;
-  let element: Element | null = null;
-  // The last rate set with `setSpeed`, applied to each gate `mount()` creates.
-  let pending: number | undefined;
   const listeners = new Set<() => void>();
 
   // `onStepStart` bookkeeping: the last step fired, and where the clock was last seen.
@@ -158,6 +169,8 @@ export function createDemoController<TData = unknown>(
   // End detection: whether the end was reached, where the last move started, and whether the
   // clock was playing when last seen.
   let ended = false;
+  // Callbacks due, in order: step indexes for `onStepStart`, "end" for `onComplete`.
+  let due: Array<number | "end"> = [];
   let from = 0;
   let wasPlaying = false;
 
@@ -215,7 +228,7 @@ export function createDemoController<TData = unknown>(
       gate !== null,
       positionKey(position),
       // By source text, like `timing`: an inline function is new on every render.
-      typeof finalPolicy === "function" ? String(finalPolicy) : finalPolicy,
+      policyKey(finalPolicy),
       reducedPolicy,
       speed,
       ended,
@@ -262,7 +275,11 @@ export function createDemoController<TData = unknown>(
   const passedSteps = (gs: GateState, live: boolean): number[] => {
     const steps = timeline.steps;
     const t = gs.elapsed;
-    if (t < lastElapsed) firedUpTo = steps.filter((s) => s.start < t).length - 1;
+    if (t < lastElapsed) {
+      firedUpTo = steps.filter((s) => s.start < t).length - 1;
+      // A rewind (a callback calling `replay()`, say) cancels the calls still due past it.
+      due = due.filter((item) => item !== "end" && item <= firedUpTo);
+    }
     lastElapsed = t;
     const passed: number[] = [];
     if (!live || (!gs.playing && t === 0)) return passed;
@@ -287,24 +304,46 @@ export function createDemoController<TData = unknown>(
     return reached;
   };
 
-  // Gate notifications and updates inside `batch` settle once, at the end. Settling runs in four
-  // steps: compute the bookkeeping, commit the new state, notify subscribers, and only then call
-  // the user's callbacks. So a callback that throws can't leave the state half-written, and one
-  // that calls a control (`replay()` from `onComplete`) settles again from a consistent state.
+  // Gate notifications and updates inside `batch` settle once, at the end. Settling computes the
+  // bookkeeping, commits the new state, notifies subscribers, and only then calls the user's
+  // callbacks, so a callback never sees a half-written state. The calls go through one queue:
+  // a callback that moves the clock settles again inside it, and that settle drops calls a rewind
+  // made stale and adds its own after the ones still due, so each step still fires once per run,
+  // in order. Each call is isolated: a throwing callback doesn't skip the rest, and the first
+  // error is rethrown once the queue is empty.
   let depth = 0;
+  let draining = false;
   const settle = (): void => {
     if (depth > 0) return;
     const gs = gate?.getState() ?? IDLE;
     const { live } = clockMode(gs, gate !== null, options.position !== undefined, undefined);
+    // Computed first: a rewind replaces `due`.
     const passed = passedSteps(gs, live);
-    const completed = reachedEnd(gs, live);
+    due.push(...passed);
+    if (reachedEnd(gs, live)) due.push("end");
     if (commit()) for (const listener of [...listeners]) listener();
-    const { onStepStart, onComplete } = options;
-    for (const index of passed) {
-      const step = timeline.script.steps[index];
-      if (step) onStepStart?.(index, step);
+    if (!draining) drain();
+  };
+  const drain = (): void => {
+    draining = true;
+    let failure: { error: unknown } | undefined;
+    for (let item = due.shift(); item !== undefined; item = due.shift()) {
+      try {
+        call(item);
+      } catch (error) {
+        failure ??= { error };
+      }
     }
-    if (completed) onComplete?.();
+    draining = false;
+    if (failure) throw failure.error;
+  };
+  const call = (item: number | "end"): void => {
+    if (item === "end") {
+      options.onComplete?.();
+      return;
+    }
+    const step = timeline.script.steps[item];
+    if (step) options.onStepStart?.(item, step);
   };
   /** Derives a new state when an input changed; returns whether it did. */
   const commit = (): boolean => {
@@ -341,13 +380,13 @@ export function createDemoController<TData = unknown>(
     seek,
     cancel: () => seek(timeline.duration),
     setSpeed(next) {
-      if (gate) gate.setSpeed(next);
-      else checkSpeed(next);
-      pending = next;
+      bound.setSpeed(next);
     },
   };
 
   compileFor(initialScript);
+  bound = createBoundGate(gateOptions());
+  bound.subscribe(settle);
   state = derive();
   inputs = inputsNow();
 
@@ -360,33 +399,31 @@ export function createDemoController<TData = unknown>(
       };
     },
     attach(next) {
-      element = next;
-      gate?.attach(next);
+      bound.attach(next);
     },
     update(script, next) {
       batch(() => {
         // A changed `speed` option replaces a `setSpeed` rate, here and on later mounts.
-        if (next.speed !== undefined && !Object.is(next.speed, options.speed)) pending = undefined;
+        // Checked before anything changes, so a bad rate leaves the controller as it was.
+        if (next.speed !== undefined) checkSpeed(next.speed);
         options = next;
         const restart = compileFor(script);
-        gate?.configure(gateOptions());
+        bound.configure(gateOptions());
         // A new script (by key) starts over.
-        if (restart) gate?.reset();
+        if (restart) bound.reset();
       });
     },
     mount() {
       if (gate) return;
       batch(() => {
-        gate = createBoundGate(gateOptions());
-        if (pending !== undefined) gate.setSpeed(pending);
-        gate.attach(element);
-        gate.subscribe(settle);
+        bound.connect();
+        gate = bound;
       });
     },
-    reset: () => gate?.reset(),
+    reset: () => bound.reset(),
     destroy() {
       if (!gate) return;
-      gate.destroy();
+      bound.disconnect();
       gate = null;
       settle();
     },

@@ -396,6 +396,7 @@ describe("bound gate (the bindings' element and option rules)", () => {
   const makeBound = (options: PlaybackGateOptions = {}): BoundGate => {
     bound = createBoundGate({ duration: 10_000, ...options });
     onTestFinished(() => bound?.destroy());
+    bound.connect();
     return bound;
   };
   const targets = (): Element[] => [...observer().targets];
@@ -572,6 +573,67 @@ describe("bound gate (the bindings' element and option rules)", () => {
     g.attach(el);
     advance(200);
     expect(g.getState()).toMatchObject({ inView: true, playing: true });
+  });
+
+  test("created disconnected, it reads no browser state and runs no clock", () => {
+    vi.stubGlobal("matchMedia", () => {
+      throw new Error("matchMedia before connect");
+    });
+    const g = createBoundGate({ duration: 1000, autoStart: false });
+    onTestFinished(() => g.destroy());
+    g.attach(el);
+    g.setSpeed(2);
+    g.play();
+    advance(500);
+    expect(g.getState()).toMatchObject({ started: true, elapsed: 0, speed: 2 });
+    expect(FakeIntersectionObserver.instances).toHaveLength(0);
+  });
+
+  test("disconnect stops observing and the clock; connect resumes with everything kept", () => {
+    const g = makeBound();
+    g.attach(el);
+    observer().fire(true);
+    advance(500);
+    g.setSpeed(3);
+    g.disconnect();
+    g.disconnect();
+    expect(FakeIntersectionObserver.live()).toHaveLength(0);
+    const at = g.getState().elapsed;
+    advance(500);
+    expect(g.getState().elapsed).toBe(at);
+    g.connect();
+    g.connect();
+    expect(FakeIntersectionObserver.live()).toHaveLength(1);
+    expect(targets()).toEqual([el]);
+    observer().fire(true);
+    advance(100);
+    expect(g.getState()).toMatchObject({ speed: 3, started: true });
+    expect(g.getState().elapsed).toBeGreaterThan(at + 200);
+  });
+
+  test("a setSpeed rate holds until the speed option changes, even while disconnected", () => {
+    const g = makeBound({ speed: 1 });
+    g.setSpeed(3);
+    g.disconnect();
+    g.configure({ duration: 10_000, speed: 1 });
+    g.connect();
+    expect(g.getState().speed).toBe(3);
+    g.disconnect();
+    g.configure({ duration: 10_000, speed: 5 });
+    g.connect();
+    expect(g.getState().speed).toBe(5);
+    expect(() => g.configure({ duration: 10_000, speed: 0 })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "speed" }),
+    );
+    expect(g.getState().speed).toBe(5);
+  });
+
+  test("destroy while disconnected leaves nothing to resume", () => {
+    const g = makeBound();
+    g.disconnect();
+    g.destroy();
+    g.connect();
+    expect(FakeIntersectionObserver.live()).toHaveLength(0);
   });
 });
 
