@@ -19,7 +19,8 @@ overrides library borders and margins (stacks-api hit this).
 
 ## stacks-api (apps/web)
 
-Branch `feat/steamfield-ui`: `3038c39` (characterization tests), `d0ca34d` (migration).
+Branch `feat/steamfield-ui`: `3038c39` (characterization tests), `d0ca34d` (migration),
+`56564fc` (adopts the library gap fixes).
 
 | Was | Now |
 | --- | --- |
@@ -27,14 +28,16 @@ Branch `feat/steamfield-ui`: `3038c39` (characterization tests), `d0ca34d` (migr
 | `islands/home-cli-script.ts` | keeps the script content, adds the `DemoScript` and timing |
 | `components/home/TerminalWindow.tsx` | wrapper over `react/window` `DemoWindow` |
 | `components/CopyCommand.tsx` (`CopyCommand`, `CopyButton`) | wrappers over `react/copy`; `emphasis` maps to a class |
-| `layouts/BaseLayout.astro` inline reveal + copy enhancers | `initReveal` (per-path options, `stacks:reveal-ready`, island `deferred`) and `enhanceCopyButtons` in `layouts/PageEnhancements.astro` + `lib/enhance.ts`; a 3-line inline head script sets the gate before paint |
+| `layouts/BaseLayout.astro` inline reveal + copy enhancers | `revealGateScript` inline in `<head>`; `initReveal` (per-path options, `stacks:reveal-ready`, island `deferred`) and `enhanceCopyButtons` in `layouts/PageEnhancements.astro` + `lib/enhance.ts` |
 | `styles/motion.css` | `reveal/styles.css` plus site timing in `sf-theme.css`; deleted |
-| `lib/markdown/{callouts,code-blocks,code-meta,heading-anchors}.ts` | `@steamfield/ui/markdown`; `lib/markdown/index.ts` re-exports so `astro.config.mjs` is unchanged |
+| `lib/markdown/{callouts,code-blocks,code-meta,heading-anchors,tables,hast}.ts` | `@steamfield/ui/markdown`; `lib/markdown/index.ts` re-exports so `astro.config.mjs` is unchanged |
 | `lib/docs.ts`, `lib/docs-enhance.ts` | wrappers over `createDocs` and `spyToc` |
 
-Theme: `src/styles/sf-theme.css` maps `--sf-*` on `:root, .dark, .brand-surface, .paper-surface`.
-Kept local: `lib/markdown/tables.ts` (library labels collided, see gaps), the `data-chart-reveal`
-mapping, AgentPrompt's radio rewiring, the docs React components.
+Theme: `src/styles/sf-theme.css` maps `--sf-*` on `:root, .dark, .brand-surface, .paper-surface`;
+copy parts are styled through `CopyCommand`'s `buttonClassName`/`promptClassName`/`commandClassName`.
+Kept local: the `data-chart-reveal` mapping, AgentPrompt's radio rewiring, the docs React
+components, and a one-sentence llms.txt append (`DocsConfig.intro` writes a separate paragraph,
+which would change the published file).
 
 Result: 68 of 68 screenshots pixel-identical, including mid-playback frames; `llms.txt`,
 `llms-full.txt` and `.md` exports byte-identical. Web Vitest 472 → 483, Playwright 137 → 141,
@@ -43,11 +46,13 @@ Result: 68 of 68 screenshots pixel-identical, including mid-playback frames; `ll
 Accepted differences: reduced motion no longer announces "Demo complete"; the "Copied" label
 resets after 2s; turns keyed by index; the demo clock is rAF with a 100ms cap instead of a 40ms
 interval; when the Clipboard API is missing, the `execCommand` fallback now copies instead of
-showing "Copy failed"; four scripts per page instead of three.
+showing "Copy failed"; four scripts per page instead of three; docs table regions are labelled
+from their heading ("Uninstall table") instead of all "Scrollable table".
 
 ## kelvo (docs-site)
 
-Branch `feat/steamfield-ui`: `938ea5c` (characterization tests), `cba5659`, `5c353bf` (migration).
+Branch `feat/steamfield-ui`: `938ea5c` (characterization tests), `cba5659`, `5c353bf` (migration),
+`26419fb` (reveal gate script, callback playback ref, blur token).
 
 | Was | Now |
 | --- | --- |
@@ -55,21 +60,24 @@ Branch `feat/steamfield-ui`: `938ea5c` (characterization tests), `cba5659`, `5c3
 | `src/lib/docs.ts` | wrapper over `createDocs` (trailingSlash "never", exampleId "install"), export names kept |
 | `src/lib/docs-enhance.ts` | `spyToc` from `@steamfield/ui/docs`; deleted |
 | `src/components/CopyButton.tsx`, `src/lib/copy-buttons.ts` | wrapper over `react/copy` `CopyButton`; `enhanceCopyButtons` with kelvo's failure wording; `copy-buttons.ts` deleted |
-| inline reveal script in `BaseLayout.astro`, `src/styles/motion.css` | `initReveal()` + `reveal/styles.css`; kelvo timings as `--sf-reveal-*` in `sf-theme.css`; `--motion-delay` call sites renamed `--sf-reveal-delay` |
-| `src/lib/use-demo-frame.ts` | `usePlayback({ leaveGraceMs: 5000, motion: "full" })`; postMessage glue kept |
-| `src/lib/use-on-screen-interval.ts` | `usePlayback({ reducedPolicy: "hold" })` plus a local interval |
+| inline reveal script in `BaseLayout.astro`, `src/styles/motion.css` | `revealGateScript` in `<head>`, `initReveal()` + `reveal/styles.css`; kelvo timings and blur as `--sf-reveal-*` in `sf-theme.css`; `--motion-delay` call sites renamed `--sf-reveal-delay` |
+| `src/lib/use-demo-frame.ts` | `usePlayback({ leaveGraceMs: 5000, motion: "full" })` with its callback ref; postMessage glue kept |
+| `src/lib/use-on-screen-interval.ts` | `usePlayback({ reducedPolicy: "hold" })` plus a local interval; the hooks now return their ref |
 
 Result: docs pages pixel-identical in all 36 shots, home at 390px and no-JS identical; home at
 1280px differs only inside the live dashboard iframe. `llms.txt`, `llms-full.txt` and all 9 `.md`
-exports byte-identical. Vitest 78 → 101, astro check clean.
+exports byte-identical. Vitest 78 → 101, astro check clean. The reveal gate lands at about 6ms
+against a 24ms first paint, as before the migration.
 
 Accepted differences: visible copy failure message with "Cmd+C or Ctrl+C"; race guard; re-click
 label fix; no `title` tooltip on copy; `cursor: pointer`; reveals on keyboard focus; a demo frame
-that's never seen hides after the 5s grace instead of immediately.
+that's never seen hides after the 5s grace instead of immediately; the metrics table's scroll box
+is now a labelled region.
 
 ## steamfield
 
-Branch `feat/steamfield-ui`: `2a65527` (characterization tests), `d22747e` (migration).
+Branch `feat/steamfield-ui`: `2a65527` (characterization tests), `d22747e` (migration),
+`e3f4970` (layer order).
 
 | Was | Now |
 | --- | --- |
@@ -90,7 +98,8 @@ Accepted differences: copy button accessible name "Copy command"; the button now
 
 ## openchart (examples)
 
-Branch `feat/steamfield-ui`: `4e3570d4` (characterization tests), `783ac8d3` (migration).
+Branch `feat/steamfield-ui`: `4e3570d4` (characterization tests), `783ac8d3` (migration),
+`a2ef972b` (library update).
 
 `examples/src/gallery/agents/replay.ts` now builds a `DemoScript` and compiles it with the
 library's `compile`; `deriveView` is a wrapper over `stateAt`. `AgentReplay.tsx` runs on the
@@ -108,23 +117,52 @@ only runs while the player is in view.
 
 ## decks
 
-Branch `feat/steamfield-ui`: `b579124` (characterization tests), `b5034ea` (migration).
+Branch `feat/steamfield-ui`: `b579124` (characterization tests), `b5034ea` (migration),
+`e268690` (server/name header spans).
 
 `examples/agent-experience/components/ToolCallCard.vue` is a thin wrapper over the Vue
 `StaticTranscript` (terminal layout, one tool-call step, the spec in the `toolBody` slot), with
 `styles/sf-theme.css` mapping `--od-*` onto `--sf-*`. `useScriptedDemo` and its callers stay:
 they aren't transcripts.
 
-Result: card size and body identical; the header differs because the library rendered
-`server name` as one span, losing the dimmed "opendata ·" prefix. Fixed in the library (separate
-`tool-server` span and `glyphs.serverSeparator`); decks adopts it on the next tarball.
+Result: slide 9 is pixel-identical (0 px) in all 12 captures, using
+`glyphs.serverSeparator: " · "` and a dimmed `tool-label` with a bright `tool-name`.
 
 ## opendata
 
-In progress: phase A done (baselines for `/`, enterprise, `/docs/mcp`, a dataset page and four
-blog posts; characterization tests for mcp-chat-demo, copy, code-window, reveal hooks and
-use-near-viewport), phase B running. `talks/` is out of scope by decision; the scripted deck demos
-live in `decks` going forward.
+Not committed: the repo's `tmr-confidentiality-staged` pre-commit hook fails closed in a worktree
+(the gitignored client data exists only in the main checkout), and the `SKIP` commit was blocked
+by the session's permission classifier. Everything is staged or modified on `feat/steamfield-ui`
+in `~/Projects/.sfui-worktrees/opendata` for the maintainer to commit, ideally as two commits:
+the five characterization tests (already staged), then the migration.
+
+| Was | Now |
+| --- | --- |
+| `shared/components/mcp-chat-demo/` sequencer and parts (`use-chat-sequencer`, `user-message`, `assistant-text`, `chat-input`, `content-transition`, `invocation-bar`) | thin wrapper over `react/agent-demo` (chat layout) with `adapter.ts` mapping `Turn` to `DemoScript`; public props and types unchanged; the search, info and chart cards render as `renderToolBody` content; deleted parts removed |
+| `shared/components/copy-button.tsx`, copy in `code-block.tsx`, `frontend/app/hooks/use-copy-to-clipboard.ts` | `useCopy` |
+| `frontend/app/components/marketing/tabs.tsx`, `code-window.tsx` chrome | wrapper over `react/tabs` (manual activation kept); `DemoWindow` |
+| `frontend/app/components/marketing/use-count-up.ts` | wrapper over `useCountUp` |
+| `shared/hooks/use-in-view`, `use-prefers-reduced-motion`, `use-near-viewport`, `use-section-reveal` | rebuilt on `createPlaybackGate`; `useSectionReveal` keeps its signature, drops the `motion` import, and stamps `data-reveal` so the library CSS applies |
+| global `[data-motion]{opacity:0}`, `marketing.css` start states, most of `motion.css` | `revealGateScript` in the frontend `root.tsx` and blog layout heads, `initReveal()` on the client (skipping hook-owned sections), `reveal/styles.css`; 132 `--motion-delay` call sites renamed `--sf-reveal-delay`; drug-prices timings as `--sf-reveal-*` tokens |
+
+Kept local: the start states for the `motion`-animated heroes and pre-hydration section content
+(gated on `html[data-motion-ready]`), the pointer-events rule during entrances, the hero
+`will-change`, the `motion`-based animation hooks, and `use-typewriter.ts` (no callers; flagged as
+dead code rather than deleted). `talks/` is out of scope by decision; the scripted deck demos live
+in `decks` going forward.
+
+Result: frontend vitest 4619 → 4663, typecheck and lint pass, astro check and build pass, 48 e2e
+tests pass (landing-mobile, dataset-detail, dataset-detail-mobile, docs-journey, accessibility,
+drug-prices-journey). Every code-window shot and every motion-mode full page matches the baseline.
+Pre-existing failures, unchanged: two `format:check` files and one blog chart-data test.
+
+Accepted differences: the chat demo's text and chart card sit 1-2px off their old position;
+reduced motion shows the last tool call then the last text in script order (before, the text sat
+above the chart); `autostart="off"` shows the end state instead of an empty body; no-JS pages now
+show their content (home, enterprise, the blog newsletter rail, the `/docs/mcp` demo end state)
+instead of hiding it; `autostart="manual"` waits until the demo is on screen; the info card uses
+the library skeleton; count-ups render their end value on the server; code-window tabs show no
+selected tab before hydration.
 
 ## rr site
 
@@ -136,7 +174,7 @@ helpers → `@steamfield/ui/docs` (its GitHub link rewriting via `rewriteLink`, 
 strip as a local step). `TerminalPlayer.test.tsx`, `CommandTabs.test.tsx` and `e2e/site.spec.ts`
 are the gate.
 
-## Library gaps found by migrations (fixed on `fix/consumer-gaps`)
+## Library gaps found by migrations (all fixed on main)
 
 | Gap | Found by |
 | --- | --- |
