@@ -5,8 +5,46 @@ import { expect, test } from "vitest";
 
 const api: Record<string, string[]> = {
   "copy/index.ts": ["copyText", "enhanceCopyButtons"],
+  "docs/index.ts": [
+    "absoluteLinks",
+    "createDocs",
+    "docPath",
+    "docsNav",
+    "featuredDocs",
+    "llmsFull",
+    "llmsIndex",
+    "markdownPath",
+    "pageLinks",
+    "pageMarkdown",
+    "spyToc",
+  ],
+  "markdown/index.ts": [
+    "callouts",
+    "codeBlocks",
+    "codeGroups",
+    "codeMeta",
+    "createHastPlugins",
+    "createShikiConfig",
+    "headingAnchors",
+    "parseFenceMeta",
+    "tables",
+  ],
+  "playback/index.ts": ["createPlaybackGate"],
   "react/copy/index.ts": ["CopyButton", "CopyCommand", "useCopy"],
-  "script/index.ts": ["LibraryError", "isLibraryError"],
+  "react/playback/index.ts": ["useCountUp", "usePlayback"],
+  "reveal/index.ts": ["initReveal", "motionTokens"],
+  "react/install-tabs/index.ts": ["InstallTabs"],
+  "react/tabs/index.ts": ["Tab", "TabList", "TabPanel", "Tabs"],
+  "tabs/index.ts": ["createTabs"],
+  "script/index.ts": ["LibraryError", "isLibraryError", "validateScript"],
+  "sequencer/index.ts": [
+    "clickCount",
+    "compile",
+    "finalState",
+    "presets",
+    "stateAt",
+    "transcriptText",
+  ],
 };
 
 test.each(Object.entries(api))(

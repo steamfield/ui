@@ -64,6 +64,16 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["tests/hooks/**", "src/**", "tests/*.test.ts"],
+      "linter": {
+        "rules": {
+          "correctness": { "usePlaywrightValidDescribeCallback": "off" }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

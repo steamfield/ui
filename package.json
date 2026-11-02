@@ -9,19 +9,59 @@
     "**/*.css"
   ],
   "exports": {
-    "./script": {
-      "types": "./dist/script/index.d.ts",
-      "import": "./dist/script/index.js"
-    },
     "./copy": {
       "types": "./dist/copy/index.d.ts",
       "import": "./dist/copy/index.js"
     },
     "./copy/styles.css": "./dist/copy/styles.css",
+    "./docs": {
+      "types": "./dist/docs/index.d.ts",
+      "import": "./dist/docs/index.js"
+    },
+    "./markdown": {
+      "types": "./dist/markdown/index.d.ts",
+      "import": "./dist/markdown/index.js"
+    },
+    "./markdown/styles.css": "./dist/markdown/styles.css",
+    "./playback": {
+      "types": "./dist/playback/index.d.ts",
+      "import": "./dist/playback/index.js"
+    },
     "./react/copy": {
       "types": "./dist/react/copy/index.d.ts",
       "import": "./dist/react/copy/index.js"
     },
+    "./react/install-tabs": {
+      "types": "./dist/react/install-tabs/index.d.ts",
+      "import": "./dist/react/install-tabs/index.js"
+    },
+    "./react/install-tabs/styles.css": "./dist/react/install-tabs/styles.css",
+    "./react/playback": {
+      "types": "./dist/react/playback/index.d.ts",
+      "import": "./dist/react/playback/index.js"
+    },
+    "./react/tabs": {
+      "types": "./dist/react/tabs/index.d.ts",
+      "import": "./dist/react/tabs/index.js"
+    },
+    "./reveal": {
+      "types": "./dist/reveal/index.d.ts",
+      "import": "./dist/reveal/index.js"
+    },
+    "./reveal/styles.css": "./dist/reveal/styles.css",
+    "./script": {
+      "types": "./dist/script/index.d.ts",
+      "import": "./dist/script/index.js"
+    },
+    "./sequencer": {
+      "types": "./dist/sequencer/index.d.ts",
+      "import": "./dist/sequencer/index.js"
+    },
+    "./tabs": {
+      "types": "./dist/tabs/index.d.ts",
+      "import": "./dist/tabs/index.js"
+    },
+    "./tabs/styles.css": "./dist/tabs/styles.css",
     "./package.json": "./package.json"
   },
   "files": [
@@ -53,18 +93,30 @@
   },
   "peerDependencies": {
     "@types/react": "^19.2",
+    "github-slugger": "^2.0.0",
     "react": "^19.2",
     "react-dom": "^19.2",
+    "satteri": "^0.10.5",
+    "shiki": "^4.5.0",
     "vue": "^3.5"
   },
   "peerDependenciesMeta": {
     "@types/react": {
       "optional": true
     },
+    "github-slugger": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },
     "react-dom": {
+      "optional": true
+    },
+    "satteri": {
+      "optional": true
+    },
+    "shiki": {
       "optional": true
     },
     "vue": {

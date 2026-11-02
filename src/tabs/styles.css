@@ -1,0 +1,54 @@
+/* @steamfield/ui/tabs/styles.css: the no-JS fallback for anchor tabs, plus minimal structure.
+   Before hydration every panel is in the HTML and the tabs are links to them. CSS shows the first
+   panel, or the one the URL fragment targets, so each panel is reachable by deep link. Once a
+   controller marks the root `data-live` it sets `hidden` on panels, and the fallback is off.
+   Layered and zero-specificity, so any consumer class wins. That includes a `display` utility on
+   a panel, so put display styles on an element inside the panel. */
+@layer sf {
+  /* Without JS, hide every panel after the first unless the URL targets it... */
+  :where(
+    [data-part="tabs"]:not([data-live])
+      [data-part="tab-panel"]
+      ~ [data-part="tab-panel"]:not(:target)
+  ) {
+    display: none;
+  }
+
+  /* ...and hide the first one too while another panel is targeted. */
+  :where(
+    [data-part="tabs"]:not([data-live]):has([data-part="tab-panel"]:target)
+      [data-part="tab-panel"]:not(:target)
+  ) {
+    display: none;
+  }
+
+  :where([data-part="tab-list"]) {
+    display: flex;
+    gap: 0.25em;
+  }
+
+  :where([data-part="tab-list"][aria-orientation="vertical"]) {
+    flex-direction: column;
+  }
+
+  :where([data-part="tab"]) {
+    font: inherit;
+    color: var(--sf-muted, inherit);
+    text-decoration: none;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 0.5em 1em;
+  }
+
+  :where([data-part="tab"][aria-selected="true"]) {
+    color: var(--sf-fg, inherit);
+    border-bottom-color: var(--sf-accent, currentColor);
+  }
+
+  :where([data-part="tab"][aria-disabled="true"], [data-part="tab"]:disabled) {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}

@@ -1,0 +1,12 @@
+export type { CalloutKind, CalloutsOptions } from "./callouts.ts";
+export { callouts } from "./callouts.ts";
+export type { CodeBlocksOptions } from "./code-blocks.ts";
+export { codeBlocks, codeGroups } from "./code-blocks.ts";
+export type { FenceMeta } from "./code-meta.ts";
+export { codeMeta, parseFenceMeta } from "./code-meta.ts";
+export type { HeadingAnchorsOptions } from "./heading-anchors.ts";
+export { headingAnchors } from "./heading-anchors.ts";
+export type { MarkdownOptions, ShikiOptions } from "./plugins.ts";
+export { createHastPlugins, createShikiConfig } from "./plugins.ts";
+export type { TablesOptions } from "./tables.ts";
+export { tables } from "./tables.ts";

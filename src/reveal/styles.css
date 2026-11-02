@@ -1,0 +1,425 @@
+/* @steamfield/ui/reveal/styles.css: one-shot scroll entrances, driven by initReveal().
+
+   Markup:
+     [data-reveal]                 a container; initReveal() sets data-revealed on it once
+     [data-motion="<role>"]        an element inside it (or the container itself) that enters
+     [data-motion-part]            rows that follow each other in, one --sf-reveal-step apart
+     [data-reveal="quiet"]         a container whose children use the quiet entrance
+     [data-reveal-defer]           wraps late-hydrating content; it stays visible until a
+                                   [data-reveal-hydrated] element appears inside it
+
+   Static HTML is always visible. Start states apply only under html[data-motion-ready] (set by
+   initReveal() when motion is allowed) and inside prefers-reduced-motion: no-preference.
+   data-revealed is matched by presence, so "true" and "" both work. [data-motion] is only ever
+   matched below or on a [data-reveal] container, never on <html>, so a site-wide
+   html[data-motion] toggle is safe. [data-sf-motion="reduce"] on any ancestor turns it off.
+
+   Tokens (unset by default, so each role keeps its own timing; set one on an element or an
+   ancestor to override every role below it):
+     --sf-reveal-duration  --sf-reveal-ease  --sf-reveal-delay  --sf-reveal-step
+     --sf-reveal-lift      (distance the entrance travels)
+     --sf-reveal-scale     (start scale, for roles that scale)
+
+   Roles: (default) quiet card drop popover wipe
+          lift-xs lift-sm lift-md lift-lg lift-xl lift-card blur-in-soft scale-in-media
+          slide-in-chip, and the older fade-up blur-in bounce-in slide-left slide-right */
+@layer sf {
+  @media (prefers-reduced-motion: no-preference) {
+    /* ---- Timing, in every state ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] :is([data-motion], [data-motion-part]),
+        html[data-motion-ready] [data-reveal][data-motion]
+      ) {
+      transition-property: opacity, transform, filter;
+      transition-duration: var(--sf-reveal-duration, 480ms);
+      transition-timing-function: var(--sf-reveal-ease, cubic-bezier(0.45, 0.05, 0.25, 1));
+      transition-delay: var(--sf-reveal-delay, 0ms);
+    }
+
+    /* ---- Default start state ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion],
+        html[data-motion-ready] [data-reveal][data-motion]:not([data-revealed])
+      ) {
+      opacity: 0;
+      transform: translateY(var(--sf-reveal-lift, 12px)) scale(var(--sf-reveal-scale, 1));
+      filter: blur(2px);
+      will-change: opacity, transform;
+    }
+
+    /* ---- Staggered parts: capped at six steps ---- */
+
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]) {
+      transition-duration: var(--sf-reveal-duration, 360ms);
+    }
+
+    :where(html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion-part]) {
+      opacity: 0;
+      transform: translateY(var(--sf-reveal-lift, 8px));
+      will-change: opacity, transform;
+    }
+
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(2)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 1 + var(--sf-reveal-delay, 0ms));
+    }
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(3)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 2 + var(--sf-reveal-delay, 0ms));
+    }
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(4)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 3 + var(--sf-reveal-delay, 0ms));
+    }
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(5)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 4 + var(--sf-reveal-delay, 0ms));
+    }
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(6)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 5 + var(--sf-reveal-delay, 0ms));
+    }
+    :where(html[data-motion-ready] [data-reveal] [data-motion-part]:nth-child(n + 7)) {
+      transition-delay: calc(var(--sf-reveal-step, 70ms) * 6 + var(--sf-reveal-delay, 0ms));
+    }
+
+    /* ---- quiet: a short lift without blur, for dense pages ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal="quiet"] [data-motion],
+        html[data-motion-ready] [data-reveal="quiet"][data-motion],
+        html[data-motion-ready] [data-reveal] [data-motion="quiet"],
+        html[data-motion-ready] [data-reveal][data-motion="quiet"]
+      ) {
+      transition-duration: var(--sf-reveal-duration, 320ms);
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal="quiet"]:not([data-revealed]) [data-motion],
+        html[data-motion-ready] [data-reveal="quiet"][data-motion]:not([data-revealed]),
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="quiet"],
+        html[data-motion-ready] [data-reveal][data-motion="quiet"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 6px));
+      filter: none;
+    }
+
+    /* ---- card: a larger lift with a slight scale, for demos and tables ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="card"],
+        html[data-motion-ready] [data-reveal][data-motion="card"]
+      ) {
+      transform-origin: center 20%;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="card"],
+        html[data-motion-ready] [data-reveal][data-motion="card"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 20px)) scale(var(--sf-reveal-scale, 0.985));
+      filter: none;
+    }
+
+    /* ---- drop: down from above, for a menu bar item ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="drop"],
+        html[data-motion-ready] [data-reveal][data-motion="drop"]:not([data-revealed])
+      ) {
+      transform: translateY(calc(-1 * var(--sf-reveal-lift, 10px)));
+      filter: none;
+    }
+
+    /* ---- popover: opens from its top edge ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="popover"],
+        html[data-motion-ready] [data-reveal][data-motion="popover"]
+      ) {
+      transform-origin: 50% 0;
+      transition-duration: var(--sf-reveal-duration, 520ms);
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="popover"],
+        html[data-motion-ready] [data-reveal][data-motion="popover"]:not([data-revealed])
+      ) {
+      transform: translateY(calc(-1 * var(--sf-reveal-lift, 6px)))
+        scale(var(--sf-reveal-scale, 0.94));
+      filter: none;
+    }
+
+    /* ---- wipe: uncovered left to right; the element keeps its own transform ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="wipe"],
+        html[data-motion-ready] [data-reveal][data-motion="wipe"]
+      ) {
+      transition-property: clip-path;
+      transition-duration: var(--sf-reveal-duration, 1200ms);
+      /* An even pace, so the eye can follow each bar to where it stops. */
+      transition-timing-function: var(--sf-reveal-ease, cubic-bezier(0.65, 0, 0.35, 1));
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="wipe"],
+        html[data-motion-ready] [data-reveal][data-motion="wipe"]:not([data-revealed])
+      ) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      clip-path: inset(0 100% 0 0);
+      will-change: clip-path;
+    }
+
+    /* inset() only interpolates with inset(), never with none. */
+    :where(
+        html[data-motion-ready] [data-reveal][data-revealed] [data-motion="wipe"],
+        html[data-motion-ready] [data-reveal][data-motion="wipe"][data-revealed]
+      ) {
+      clip-path: inset(0 0 0 0);
+    }
+
+    /* ---- lift-xs, slide-in-chip: 340ms, organic mid ---- */
+
+    :where(
+        html[data-motion-ready]
+          [data-reveal]
+          :is([data-motion="lift-xs"], [data-motion="slide-in-chip"]),
+        html[data-motion-ready]
+          [data-reveal]:is([data-motion="lift-xs"], [data-motion="slide-in-chip"])
+      ) {
+      transition-duration: var(--sf-reveal-duration, 340ms);
+      transition-timing-function: var(--sf-reveal-ease, cubic-bezier(0.4, 0.05, 0.2, 1));
+    }
+
+    /* ---- lift-sm: 360ms, organic mid ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="lift-sm"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-sm"]
+      ) {
+      transition-duration: var(--sf-reveal-duration, 360ms);
+      transition-timing-function: var(--sf-reveal-ease, cubic-bezier(0.4, 0.05, 0.2, 1));
+    }
+
+    /* ---- lift-md: 420ms ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="lift-md"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-md"]
+      ) {
+      transition-duration: var(--sf-reveal-duration, 420ms);
+    }
+
+    /* ---- lift-lg, lift-card: 520ms ---- */
+
+    :where(
+        html[data-motion-ready]
+          [data-reveal]
+          :is([data-motion="lift-lg"], [data-motion="lift-card"]),
+        html[data-motion-ready] [data-reveal]:is([data-motion="lift-lg"], [data-motion="lift-card"])
+      ) {
+      transition-duration: var(--sf-reveal-duration, 520ms);
+    }
+
+    /* ---- lift-xl, blur-in-soft: 620ms ---- */
+
+    :where(
+        html[data-motion-ready]
+          [data-reveal]
+          :is([data-motion="lift-xl"], [data-motion="blur-in-soft"]),
+        html[data-motion-ready]
+          [data-reveal]:is([data-motion="lift-xl"], [data-motion="blur-in-soft"])
+      ) {
+      transition-duration: var(--sf-reveal-duration, 620ms);
+    }
+
+    /* ---- scale-in-media: 640ms ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal] [data-motion="scale-in-media"],
+        html[data-motion-ready] [data-reveal][data-motion="scale-in-media"]
+      ) {
+      transition-duration: var(--sf-reveal-duration, 640ms);
+    }
+
+    /* ---- Lift and slide start states ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-xs"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-xs"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 6px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-sm"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-sm"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 8px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-md"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-md"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 10px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-lg"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-lg"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 12px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-xl"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-xl"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 18px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="lift-card"],
+        html[data-motion-ready] [data-reveal][data-motion="lift-card"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 16px));
+      filter: none;
+    }
+
+    /* Reserved for page bookends: the hero and closing headlines. */
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="blur-in-soft"],
+        html[data-motion-ready] [data-reveal][data-motion="blur-in-soft"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 12px));
+      filter: blur(6px);
+    }
+
+    /* Wide media: a 0.5% scale; the lift does the real work. */
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="scale-in-media"],
+        html[data-motion-ready] [data-reveal][data-motion="scale-in-media"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 10px)) scale(var(--sf-reveal-scale, 0.995));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="slide-in-chip"],
+        html[data-motion-ready] [data-reveal][data-motion="slide-in-chip"]:not([data-revealed])
+      ) {
+      transform: translateX(calc(-1 * var(--sf-reveal-lift, 12px)));
+      filter: none;
+    }
+
+    /* ---- Older entrances, kept for existing markup: 480ms ---- */
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="fade-up"],
+        html[data-motion-ready] [data-reveal][data-motion="fade-up"]:not([data-revealed])
+      ) {
+      transform: translateY(var(--sf-reveal-lift, 30px));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="blur-in"],
+        html[data-motion-ready] [data-reveal][data-motion="blur-in"]:not([data-revealed])
+      ) {
+      transform: scale(var(--sf-reveal-scale, 0.95));
+      filter: blur(10px);
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="bounce-in"],
+        html[data-motion-ready] [data-reveal][data-motion="bounce-in"]:not([data-revealed])
+      ) {
+      transform: scale(var(--sf-reveal-scale, 0.8));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="slide-left"],
+        html[data-motion-ready] [data-reveal][data-motion="slide-left"]:not([data-revealed])
+      ) {
+      transform: translateX(calc(-1 * var(--sf-reveal-lift, 40px)));
+      filter: none;
+    }
+
+    :where(
+        html[data-motion-ready] [data-reveal]:not([data-revealed]) [data-motion="slide-right"],
+        html[data-motion-ready] [data-reveal][data-motion="slide-right"]:not([data-revealed])
+      ) {
+      transform: translateX(var(--sf-reveal-lift, 40px));
+      filter: none;
+    }
+
+    /* ---- Keyboard focus is never hidden behind an entrance ---- */
+
+    :where(
+        html[data-motion-ready]
+          [data-reveal]:has(:focus-visible)
+          :is([data-motion], [data-motion-part]),
+        html[data-motion-ready] [data-reveal][data-motion]:has(:focus-visible)
+      ) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      clip-path: none;
+      transition: none;
+      will-change: auto;
+    }
+
+    /* ---- Late-hydrating content stays readable until it hydrates ---- */
+
+    :where(
+        html[data-motion-ready]
+          [data-reveal-defer]:not(:has([data-reveal-hydrated]))
+          [data-reveal]
+          :is([data-motion], [data-motion-part]),
+        html[data-motion-ready]
+          [data-reveal-defer]:not(:has([data-reveal-hydrated]))
+          [data-reveal][data-motion]
+      ) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      clip-path: none;
+      transition: none;
+      will-change: auto;
+    }
+  }
+
+  /* ---- Backstops: reduced motion, and a [data-sf-motion="reduce"] ancestor ---- */
+
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-reveal] :is([data-motion], [data-motion-part]), [data-reveal][data-motion]) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      clip-path: none;
+      transition: none;
+      animation: none;
+      will-change: auto;
+    }
+  }
+
+  :where(
+    [data-sf-motion="reduce"] [data-reveal] :is([data-motion], [data-motion-part]),
+    [data-sf-motion="reduce"] [data-reveal][data-motion]
+  ) {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    clip-path: none;
+    transition: none;
+    animation: none;
+    will-change: auto;
+  }
+}
