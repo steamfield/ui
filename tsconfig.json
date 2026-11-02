@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
@@ -16,8 +16,15 @@
     "declaration": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["tests/consumer/**", "tests/hooks/**", "tests/helpers/hooks.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"],
+  "exclude": [
+    "tests/consumer/**",
+    "tests/hooks/**",
+    "tests/helpers/hooks.ts",
+    "fixtures/**",
+    "playground/**"
+  ]
 }

@@ -33,6 +33,9 @@ test.each([
   ["src/x.ts", 'import { readFileSync } from "node:fs";', "platform neutral"],
   ["src/x.ts", 'export const load = () => import("bun");', "platform neutral"],
   ["src/index.ts", 'export { words } from "./internal/words.ts";', "src/internal/ is private"],
+  ["src/copy/index.ts", 'export { ids } from "../internal/ids.ts";', "src/internal/ is private"],
+  ["src/react/x/index.tsx", 'export { ids } from "../../internal/ids.ts";', "src/internal/"],
+  ["src/x.tsx", 'console.warn("deprecated");', "never writes to the console"],
   ["src/x.ts", "export const debug = process.env.DEBUG;", "never reads the process"],
   ["src/x.ts", 'console.warn("deprecated");', "never writes to the console"],
   ["src/x.ts", 'throw new TypeError("bad input");', "LibraryError"],
@@ -50,6 +53,8 @@ test.each([
   ["src/slugify.ts", 'import { words } from "./internal/words.ts";'],
   ["src/x.ts", 'throw new LibraryError("invalid_input");'],
   ["src/x.test.ts", 'console.log("debugging a test");'],
+  ["src/x.test.tsx", 'console.log("debugging a test");'],
+  ["src/copy/enhance.ts", 'import { ids } from "../internal/ids.ts";'],
   ["scripts/x.ts", 'import { join } from "node:path";\nconsole.log(process.cwd(), join("a"));'],
   ["tests/x.test.ts", 'throw new Error("fixture");'],
 ])("%s: %s is allowed", (path, source) => {

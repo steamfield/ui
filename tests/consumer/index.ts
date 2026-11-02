@@ -1,32 +1,30 @@
 // A TypeScript user of the published package. scripts/consumer.ts installs the packed tarball
-// next to this file, typechecks it under strict NodeNext resolution, then runs it with Node.
-// Keep it importing by package name, and add each new export here.
-import {
-  isLibraryError,
-  LibraryError,
-  type LibraryErrorCode,
-  type Result,
-  type SlugifyOptions,
-  safeSlugify,
-  slugify,
-} from "@steamfield/ui";
+// (plus the peers listed in CONSUMER_PEERS) next to this file, typechecks it under strict NodeNext
+// resolution, then runs it with Node. Keep it importing by package name, one block per subpath,
+// and add each new subpath here.
+import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
+import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
+import { isLibraryError, LibraryError, type LibraryErrorCode } from "@steamfield/ui/script";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 function check(condition: boolean, message: string): void {
   if (!condition) throw new Error(`consumer (ts): ${message}`);
 }
 
-const options: SlugifyOptions = { separator: "_", maxLength: 40 };
-const slug: string = slugify("Hello, World!", options);
-check(slug === "hello_world", `slugify gave ${slug}`);
+// script
+const code: LibraryErrorCode = "invalid_script";
+const error = new LibraryError(code, { field: "steps[0]" });
+check(isLibraryError(error) && error.field === "steps[0]", "LibraryError carries its field");
 
-const failed: Result<string> = safeSlugify("!!!");
-check(!failed.ok && failed.error.code === "empty_result", "safeSlugify reports empty_result");
+// copy: framework-free and safe to import where there is no DOM.
+const detail: CopyEventDetail = { id: "x", label: "Copy", ok: true };
+check(typeof copyText === "function" && typeof enhanceCopyButtons === "function", "copy exports");
+check(detail.ok, "CopyEventDetail type");
+check((await copyText("x")) === false, "copyText reports false without a clipboard or DOM");
 
-const expected: LibraryErrorCode = "invalid_option";
-try {
-  slugify("text", { maxLength: 0 });
-  check(false, "maxLength 0 should throw");
-} catch (error) {
-  check(error instanceof LibraryError, "the thrown error is a LibraryError");
-  check(isLibraryError(error) && error.code === expected, "the error carries its code");
-}
+// react/copy: renders on the server with the button hidden until enhanced.
+const props: CopyCommandProps = { id: "cmd", command: "bun add @steamfield/ui" };
+const html = renderToStaticMarkup(createElement(CopyCommand, props));
+check(html.includes("bun add @steamfield/ui") && /<button[^>]*hidden/.test(html), "CopyCommand");
+check(typeof useCopy === "function", "useCopy export");

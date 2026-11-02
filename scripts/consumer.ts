@@ -9,7 +9,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const { name } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name: string };
+const { name, devDependencies } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+  name: string;
+  devDependencies: Record<string, string>;
+};
+// Optional peers the fixture exercises, installed at the versions this repo develops against.
+const CONSUMER_PEERS = ["react", "react-dom", "@types/react", "@types/react-dom"];
+const peers = Object.fromEntries(
+  CONSUMER_PEERS.map((peer) => [peer, devDependencies[peer] ?? "latest"]),
+);
 
 function run(command: string, args: string[], cwd: string): void {
   console.log(`$ ${[command, ...args].join(" ")}`);
@@ -32,7 +40,7 @@ try {
     name: "consumer",
     private: true,
     type: "module",
-    dependencies: { [name]: `file:${join(work, tarball)}` },
+    dependencies: { [name]: `file:${join(work, tarball)}`, ...peers },
   };
   writeFileSync(join(app, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 

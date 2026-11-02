@@ -3,23 +3,38 @@
   "version": "0.0.0",
   "private": true,
   "description": "Tree-shakeable demo, copy, tabs and reveal components shared across the Steamfield landing and docs sites.",
+  "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "./script": {
+      "types": "./dist/script/index.d.ts",
+      "import": "./dist/script/index.js"
+    },
+    "./copy": {
+      "types": "./dist/copy/index.d.ts",
+      "import": "./dist/copy/index.js"
+    },
+    "./copy/styles.css": "./dist/copy/styles.css",
+    "./react/copy": {
+      "types": "./dist/react/copy/index.d.ts",
+      "import": "./dist/react/copy/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tools.json",
     "lint": "biome check .",
-    "lint:package": "publint --strict && attw --pack . --profile esm-only",
+    "lint:package": "bun scripts/lint-package.ts",
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -30,15 +45,46 @@
     "prepack": "bun run build",
     "prepare": "bun scripts/prepare.ts"
   },
+  "peerDependencies": {
+    "@types/react": "^19.2",
+    "react": "^19.2",
+    "react-dom": "^19.2",
+    "vue": "^3.5"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.6.4",
+    "@changesets/cli": "^3.0.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^5.1.0",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.4",
     "publint": "^0.3.25",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tsdown": "^0.23.4",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "vue": "^3.5.44"
   },
   "packageManager": "bun@1.4.2"
 }

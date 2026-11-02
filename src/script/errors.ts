@@ -2,16 +2,16 @@
  * Why a call failed. Each code is public API: callers branch on it, so renaming or removing one
  * is a breaking change, and adding one is a minor release.
  */
-export type LibraryErrorCode = "invalid_input" | "invalid_option" | "empty_result";
+export type LibraryErrorCode = "invalid_script" | "unsupported_step" | "invalid_option";
 
 const messages: Record<LibraryErrorCode, string> = {
-  invalid_input: "Expected a string to slugify.",
+  invalid_script: "The demo script is malformed.",
+  unsupported_step: "The demo script has a step kind this renderer does not support.",
   invalid_option: "An option has an invalid value.",
-  empty_result: "The input has no letters or digits to build a slug from.",
 };
 
 export interface LibraryErrorOptions {
-  /** Which argument or option was wrong, such as "maxLength". Never the value itself. */
+  /** Which argument or option was wrong, such as "steps[3].text". Never the value itself. */
   readonly field?: string;
   readonly cause?: unknown;
 }
