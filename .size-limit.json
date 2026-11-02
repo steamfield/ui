@@ -81,5 +81,26 @@
     "import": "{ InstallTabs }",
     "ignore": ["react", "react-dom"],
     "limit": "2.8 kB"
+  },
+  {
+    "name": "react/agent-demo",
+    "path": "dist/react/agent-demo/index.js",
+    "import": "{ AgentDemo }",
+    "ignore": ["react", "react-dom"],
+    "limit": "10.5 kB"
+  },
+  {
+    "name": "react/agent-demo (headless)",
+    "path": "dist/react/agent-demo/index.js",
+    "import": "{ useAgentDemo }",
+    "ignore": ["react", "react-dom"],
+    "limit": "7 kB"
+  },
+  {
+    "name": "react/window",
+    "path": "dist/react/window/index.js",
+    "import": "{ DemoWindow }",
+    "ignore": ["react", "react-dom"],
+    "limit": "250 B"
   }
 ]

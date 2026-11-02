@@ -1,0 +1,67 @@
+// The agent demo in a real browser: autoplay in view, pause, replay focus, reduced motion and
+// phone width. Accessibility in every theme is covered by a11y.spec.ts through pages.ts.
+import { expect, test } from "@playwright/test";
+
+const section = '[aria-labelledby="ad-terminal"]';
+const FINAL = "Both upload tests pass now.";
+
+test("autoplay starts once the demo is in view", async ({ page }) => {
+  await page.goto("/#/agent-demo");
+  const demo = page.locator(section);
+  const transcript = demo.getByRole("region", { name: "Terminal transcript" });
+  await expect(demo.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(demo.locator("[data-sf-animating]")).toHaveCount(1);
+  await expect(transcript).toContainText("The upload tests are failing");
+  await expect(transcript).not.toContainText(FINAL);
+});
+
+test("pause freezes the text", async ({ page }) => {
+  await page.goto("/#/agent-demo");
+  const demo = page.locator(section);
+  const transcript = demo.getByRole("region", { name: "Terminal transcript" });
+  await expect(transcript).toContainText("The upload");
+  await demo.getByRole("button", { name: "Pause" }).click();
+  await expect(demo.getByRole("button", { name: "Play" })).toBeVisible();
+  const held = await transcript.textContent();
+  await page.waitForTimeout(1200);
+  expect(await transcript.textContent()).toBe(held);
+});
+
+test("replay restarts without moving focus", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/#/agent-demo");
+  const demo = page.locator(section);
+  await expect(demo.getByRole("button", { name: "Pause" })).toBeVisible();
+  await page.clock.runFor(30_000);
+  const replay = demo.getByRole("button", { name: "Replay" });
+  await expect(replay).toBeVisible();
+  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(FINAL);
+  await replay.focus();
+  await replay.press("Enter");
+  const pause = demo.getByRole("button", { name: "Pause" });
+  await expect(pause).toBeFocused();
+  await expect(demo.getByRole("region", { name: "Terminal transcript" })).not.toContainText(FINAL);
+});
+
+test("reduced motion shows the final transcript with no Pause button", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#/agent-demo");
+  const demo = page.locator(section);
+  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(FINAL);
+  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(
+    "… +12 lines",
+  );
+  await expect(page.getByRole("button", { name: "Pause" })).toHaveCount(0);
+  await expect(page.locator("[data-sf-animating]")).toHaveCount(0);
+});
+
+test("no horizontal overflow at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/agent-demo");
+  await page.locator("main h1").waitFor();
+  await page.waitForTimeout(500);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});

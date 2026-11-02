@@ -1,0 +1,78 @@
+/* @steamfield/ui/react/window/styles.css: optional chrome for DemoWindow.
+   Layered and zero-specificity, so any consumer class or utility wins. Tokens: the shared --sf-*
+   set, plus --sf-window-dot (one color for all three dots; set --sf-window-dot-1/2/3 for
+   traffic lights). */
+@layer sf {
+  :where([data-part="window"]) {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--sf-fg, inherit);
+    background: var(--sf-bg, transparent);
+    border: 1px solid var(--sf-border, color-mix(in srgb, currentColor 15%, transparent));
+    border-radius: var(--sf-radius, 0.75rem);
+  }
+
+  :where([data-part="window-bar"]) {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--sf-muted, inherit);
+    background: var(--sf-surface, transparent);
+    border-bottom: 1px solid var(--sf-border, color-mix(in srgb, currentColor 15%, transparent));
+  }
+
+  :where([data-part="window-dots"]) {
+    display: inline-flex;
+    flex: none;
+    gap: 0.375rem;
+  }
+
+  :where([data-part="window-dot"]) {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--sf-window-dot, var(--sf-faint, currentColor));
+  }
+
+  :where([data-part="window-dot"]:nth-child(1)) {
+    background: var(--sf-window-dot-1, var(--sf-window-dot, var(--sf-faint, currentColor)));
+  }
+
+  :where([data-part="window-dot"]:nth-child(2)) {
+    background: var(--sf-window-dot-2, var(--sf-window-dot, var(--sf-faint, currentColor)));
+  }
+
+  :where([data-part="window-dot"]:nth-child(3)) {
+    background: var(--sf-window-dot-3, var(--sf-window-dot, var(--sf-faint, currentColor)));
+  }
+
+  :where([data-part="window-title"]) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--sf-font, ui-monospace, monospace);
+  }
+
+  :where([data-part="window-controls"]) {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.25rem;
+    margin-inline-start: auto;
+  }
+
+  :where([data-part="window-body"]) {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+}

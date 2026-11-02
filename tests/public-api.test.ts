@@ -30,11 +30,13 @@ const api: Record<string, string[]> = {
     "tables",
   ],
   "playback/index.ts": ["createPlaybackGate"],
+  "react/agent-demo/index.ts": ["AgentDemo", "StaticTranscript", "useAgentDemo"],
   "react/copy/index.ts": ["CopyButton", "CopyCommand", "useCopy"],
   "react/playback/index.ts": ["useCountUp", "usePlayback"],
   "reveal/index.ts": ["initReveal", "motionTokens"],
   "react/install-tabs/index.ts": ["InstallTabs"],
   "react/tabs/index.ts": ["Tab", "TabList", "TabPanel", "Tabs"],
+  "react/window/index.ts": ["DemoWindow"],
   "tabs/index.ts": ["createTabs"],
   "script/index.ts": ["LibraryError", "isLibraryError", "validateScript"],
   "sequencer/index.ts": [

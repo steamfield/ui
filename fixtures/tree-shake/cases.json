@@ -5,6 +5,11 @@
     "absent": ["sf-agent-demo", "tab-panel", "data-motion-ready", "sf:reveal-ready"]
   },
   {
+    "entry": "agent-demo-only.tsx",
+    "present": ["data-sf-agent-demo"],
+    "absent": ["data-copy-command", "tab-panel", "sf:reveal-ready"]
+  },
+  {
     "entry": "tabs-only.tsx",
     "present": ["tab-panel"],
     "absent": ["sf-agent-demo", "data-copy-command", "sf:reveal-ready"]

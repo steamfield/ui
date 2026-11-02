@@ -9,6 +9,7 @@
     "**/*.css"
   ],
   "exports": {
+    "./agent-demo/styles.css": "./dist/agent-demo/styles.css",
     "./copy": {
       "types": "./dist/copy/index.d.ts",
       "import": "./dist/copy/index.js"
@@ -27,6 +28,10 @@
       "types": "./dist/playback/index.d.ts",
       "import": "./dist/playback/index.js"
     },
+    "./react/agent-demo": {
+      "types": "./dist/react/agent-demo/index.d.ts",
+      "import": "./dist/react/agent-demo/index.js"
+    },
     "./react/copy": {
       "types": "./dist/react/copy/index.d.ts",
       "import": "./dist/react/copy/index.js"
@@ -44,6 +49,11 @@
       "types": "./dist/react/tabs/index.d.ts",
       "import": "./dist/react/tabs/index.js"
     },
+    "./react/window": {
+      "types": "./dist/react/window/index.d.ts",
+      "import": "./dist/react/window/index.js"
+    },
+    "./react/window/styles.css": "./dist/react/window/styles.css",
     "./reveal": {
       "types": "./dist/reveal/index.d.ts",
       "import": "./dist/reveal/index.js"

@@ -1,0 +1,688 @@
+/* @steamfield/ui/agent-demo/styles.css: the agent demo's data-part contract, shared by every
+   framework renderer. Layered and zero-specificity, so any consumer class or utility wins.
+
+   Base tokens (shared with every other stylesheet): --sf-bg, --sf-surface, --sf-fg, --sf-muted,
+   --sf-faint, --sf-accent, --sf-border, --sf-radius, --sf-font, --sf-font-size, --sf-ok,
+   --sf-fail, --sf-warn, --sf-info, --sf-demo-height (the transcript's height).
+
+   Component tokens, for the chat look:
+   --sf-demo-prose-font    chat message font (default: inherit)
+   --sf-demo-subtle-bg     header strip and code/composer wells
+   --sf-demo-hover         chips and pips on the surface
+   --sf-demo-border-subtle hairlines inside cards
+   --sf-demo-bubble-bg     user bubble
+   --sf-demo-caret         typing and streaming caret
+   --sf-demo-accent-strong submit button while it flashes
+   --sf-demo-accent-fg     text on the accent (submit arrow)
+   --sf-demo-shimmer       skeleton base, --sf-demo-shimmer-hi its highlight
+   --sf-demo-shadow        the demo's box shadow
+   --sf-tool-accent        per tool, set from the tool registry's `accent`
+
+   There is no built-in dark mode: map these tokens in your own theme. Entrance, typing and
+   loading animation only run under [data-sf-animating], with motion allowed by both the media
+   query and any [data-sf-motion="reduce"] ancestor. */
+@layer sf {
+  :where([data-part="agent-demo"]) {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+    font-size: var(--sf-font-size, 0.875rem);
+    color: var(--sf-fg, inherit);
+    background: var(--sf-bg, transparent);
+    border: 1px solid var(--sf-border, color-mix(in srgb, currentColor 15%, transparent));
+    border-radius: var(--sf-radius, 0.75rem);
+    box-shadow: var(--sf-demo-shadow, none);
+    overflow: hidden;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"]) {
+    font-family: var(--sf-font, ui-monospace, monospace);
+    line-height: 1.55;
+  }
+
+  :where([data-part="agent-demo"][data-layout="chat"]) {
+    font-family: var(--sf-demo-prose-font, inherit);
+    line-height: 1.5;
+  }
+
+  /* With window chrome, the window draws the border. */
+  :where([data-part="agent-demo"]:has(> [data-part="window"])) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  /* Header and controls */
+  :where([data-part="agent-demo"] [data-part="header"]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--sf-demo-border-subtle, var(--sf-border, transparent));
+    background: var(--sf-demo-subtle-bg, transparent);
+    font-size: 0.75rem;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="controls"]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-inline-start: auto;
+  }
+
+  :where([data-part="agent-demo"] [data-part="turn-jumps"]) {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  :where([data-part="agent-demo"] [data-part="control"]) {
+    min-width: 2rem;
+    min-height: 1.5rem;
+    padding: 0.125rem 0.5rem;
+    font: inherit;
+    font-size: 0.75rem;
+    color: var(--sf-muted, inherit);
+    background: transparent;
+    border: 1px solid var(--sf-border, currentColor);
+    border-radius: calc(var(--sf-radius, 0.75rem) / 2);
+    cursor: pointer;
+  }
+
+  :where([data-part="agent-demo"] [data-part="control"]:hover) {
+    color: var(--sf-fg, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="control"][aria-current="step"]) {
+    color: var(--sf-bg, Canvas);
+    background: var(--sf-fg, CanvasText);
+    border-color: var(--sf-fg, CanvasText);
+  }
+
+  :where([data-part="agent-demo"] [data-part="control"]:disabled) {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Transcript: outer column-reverse scroller, inner column, so the newest line stays in view
+     without JS and DOM order equals visual order. */
+  :where([data-part="agent-demo"] [data-part="transcript"]) {
+    display: flex;
+    flex-direction: column-reverse;
+    height: var(--sf-demo-height, 20rem);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  :where([data-part="agent-demo"][data-static] [data-part="transcript"]) {
+    height: auto;
+    max-height: var(--sf-demo-height, none);
+  }
+
+  :where([data-part="agent-demo"] [data-part="transcript"]:focus-visible) {
+    outline: 2px solid var(--sf-accent, Highlight);
+    outline-offset: -2px;
+  }
+
+  :where([data-part="agent-demo"] [data-part="turns"]) {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="turns"]) {
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  :where([data-part="agent-demo"] [data-part="turns"] > *) {
+    flex: none;
+    min-width: 0;
+  }
+
+  :where([data-part="agent-demo"] [data-part="glyph"]) {
+    flex: none;
+    user-select: none;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="text"]) {
+    min-width: 0;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Messages */
+  :where([data-part="agent-demo"] [data-part="message"]) {
+    display: flex;
+    gap: 1ch;
+  }
+
+  :where([data-part="agent-demo"][data-layout="chat"] [data-part="message"][data-from="user"]) {
+    justify-content: flex-end;
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="chat"]
+      [data-part="message"][data-from="user"]
+      [data-part="text"]
+  ) {
+    max-width: min(78%, 36rem);
+    padding: 0.75rem 0.875rem;
+    background: var(--sf-demo-bubble-bg, var(--sf-surface, transparent));
+    border: 1px solid var(--sf-demo-border-subtle, var(--sf-border, transparent));
+    border-radius: var(--sf-radius, 0.75rem);
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="message"][data-from="user"]) {
+    margin-block: 0.25rem;
+    margin-inline: -0.25rem;
+    padding-inline: 0.25rem;
+    background: var(--sf-surface, transparent);
+    border-radius: calc(var(--sf-radius, 0.75rem) / 3);
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-from="agent"] [data-part="glyph"]) {
+    color: var(--sf-fg, inherit);
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-from="user"] [data-part="glyph"]),
+  :where([data-part="agent-demo"] [data-part="command"] [data-part="glyph"]) {
+    color: var(--sf-accent, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="command"]) {
+    display: flex;
+    gap: 1ch;
+  }
+
+  /* Output lines and tones */
+  :where([data-part="agent-demo"] [data-part="output"]) {
+    min-width: 0;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="line"]) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  :where([data-part="agent-demo"] [data-tone="ok"]) {
+    color: var(--sf-ok, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-tone="fail"]) {
+    color: var(--sf-fail, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-tone="warn"]) {
+    color: var(--sf-warn, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-tone="muted"]),
+  :where([data-part="agent-demo"] [data-part="more"]) {
+    color: var(--sf-muted, inherit);
+  }
+
+  /* Tool calls: one header (status, icon tile, label, args, meta) over a body. */
+  :where([data-part="agent-demo"] [data-part="tool-header"]) {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-label"]) {
+    flex: none;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-args"]) {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-meta"]) {
+    flex: none;
+    margin-inline-start: auto;
+    font-family: var(--sf-font, ui-monospace, monospace);
+    font-size: 0.75rem;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-status"]) {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="tool-call"]) {
+    margin-block: 0.25rem;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="tool-args"]) {
+    flex: 0 1 auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="tool-header"]) {
+    gap: 0;
+    align-items: baseline;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="tool-status"]) {
+    width: 2ch;
+    justify-content: flex-start;
+    color: var(--sf-ok, inherit);
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="terminal"]
+      [data-status="running"]
+      [data-part="tool-status"]
+  ) {
+    color: var(--sf-warn, inherit);
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="terminal"] [data-status="error"] [data-part="tool-status"]
+  ) {
+    color: var(--sf-fail, inherit);
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="tool-body"]) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1ch;
+    padding-inline-start: 1ch;
+  }
+
+  /* Chat cards */
+  :where([data-part="agent-demo"][data-layout="chat"] [data-part="tool-call"]) {
+    overflow: hidden;
+    background: var(--sf-surface, transparent);
+    border: 1px solid var(--sf-border, currentColor);
+    border-radius: calc(var(--sf-radius, 0.75rem) * 0.75);
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="chat"] [data-part="tool-call"][data-status="running"]
+  ) {
+    border-color: color-mix(
+      in srgb,
+      var(--sf-tool-accent, var(--sf-accent, currentColor)) 35%,
+      transparent
+    );
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="chat"] [data-part="tool-call"][data-status="error"]
+  ) {
+    border-color: color-mix(in srgb, var(--sf-fail, currentColor) 35%, transparent);
+  }
+
+  :where([data-part="agent-demo"][data-layout="chat"] [data-part="tool-header"]) {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  :where([data-part="agent-demo"][data-layout="chat"] [data-part="tool-status"]) {
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 50%;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--sf-ok, inherit);
+    background: color-mix(in srgb, var(--sf-ok, currentColor) 15%, transparent);
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="chat"] [data-status="error"] [data-part="tool-status"]
+  ) {
+    color: var(--sf-fail, inherit);
+    background: color-mix(in srgb, var(--sf-fail, currentColor) 15%, transparent);
+  }
+
+  :where(
+    [data-part="agent-demo"][data-layout="chat"] [data-status="running"] [data-part="tool-status"]
+  ) {
+    box-sizing: border-box;
+    background: transparent;
+    border: 2px solid
+      color-mix(in srgb, var(--sf-tool-accent, var(--sf-accent, currentColor)) 30%, transparent);
+    border-top-color: var(--sf-tool-accent, var(--sf-accent, currentColor));
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-icon"]) {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 0.375rem;
+    color: var(--sf-tool-accent, var(--sf-accent, inherit));
+    background: color-mix(
+      in srgb,
+      var(--sf-tool-accent, var(--sf-accent, currentColor)) 15%,
+      transparent
+    );
+  }
+
+  :where([data-part="agent-demo"][data-layout="chat"] [data-part="tool-body"]) {
+    position: relative;
+    padding: 0.75rem 0.875rem;
+    border-top: 1px solid var(--sf-demo-border-subtle, var(--sf-border, transparent));
+    font-family: var(--sf-font, ui-monospace, monospace);
+    font-size: 0.75rem;
+  }
+
+  :where([data-part="agent-demo"] [data-part="tool-body"][data-loading]) {
+    min-height: 4.5rem;
+  }
+
+  :where([data-part="agent-demo"] [data-part="skeleton"]) {
+    position: absolute;
+    inset: 0.75rem 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: opacity 300ms ease-out;
+  }
+
+  :where([data-part="agent-demo"] [data-part="skeleton"][data-state="leaving"]) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :where([data-part="agent-demo"] [data-part="skeleton-bar"]) {
+    display: block;
+    height: 0.875rem;
+    border-radius: 0.25rem;
+    background: var(--sf-demo-shimmer, color-mix(in srgb, currentColor 8%, transparent));
+  }
+
+  :where([data-part="agent-demo"] [data-part="skeleton-bar"]:nth-child(2)) {
+    width: 80%;
+  }
+
+  :where([data-part="agent-demo"] [data-part="skeleton-bar"]:nth-child(3)) {
+    width: 60%;
+  }
+
+  /* Generic bodies */
+  :where([data-part="agent-demo"] [data-part="code"]) {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    overflow-x: auto;
+    font-family: var(--sf-font, ui-monospace, monospace);
+    background: var(--sf-demo-subtle-bg, transparent);
+    border-radius: calc(var(--sf-radius, 0.75rem) / 2);
+  }
+
+  :where([data-part="agent-demo"] [data-part="code-collapse"] > summary) {
+    cursor: pointer;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="steps"]) {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+  }
+
+  :where([data-part="agent-demo"] [data-part="error"]) {
+    margin: 0;
+    color: var(--sf-fail, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="output"] + [data-part]) {
+    margin-top: 0.5rem;
+  }
+
+  /* Thinking */
+  :where([data-part="agent-demo"] [data-part="thinking"]) {
+    display: flex;
+    gap: 0.375rem;
+    padding-block: 0.25rem;
+  }
+
+  :where([data-part="agent-demo"] [data-part="thinking-dot"]) {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: var(--sf-muted, currentColor);
+    opacity: 0.6;
+  }
+
+  /* Caret: shown solid without JS-driven motion, blinking while animating. */
+  :where([data-part="agent-demo"] [data-part="caret"]) {
+    display: inline-block;
+    width: 1.5px;
+    height: 1em;
+    margin-inline-start: 1px;
+    vertical-align: text-bottom;
+    background: var(--sf-demo-caret, var(--sf-accent, currentColor));
+  }
+
+  /* Composer */
+  :where([data-part="agent-demo"] [data-part="composer"]) {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    margin: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    background: var(--sf-demo-subtle-bg, var(--sf-surface, transparent));
+    border: 1px solid var(--sf-border, currentColor);
+    border-radius: var(--sf-radius, 0.75rem);
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="composer"]) {
+    margin: 0 0.75rem 0.75rem;
+    padding: 0.75rem 0.25rem;
+    background: transparent;
+    border-inline: 0;
+    border-radius: 0;
+  }
+
+  :where([data-part="agent-demo"] [data-part="composer-text"]) {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+
+  :where([data-part="agent-demo"] [data-part="placeholder"]) {
+    color: var(--sf-muted, inherit);
+  }
+
+  :where([data-part="agent-demo"] [data-part="submit"]) {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.5rem;
+    color: var(--sf-demo-accent-fg, var(--sf-bg, Canvas));
+    background: var(--sf-accent, CanvasText);
+    transition:
+      transform 200ms,
+      background-color 200ms,
+      opacity 200ms;
+  }
+
+  :where([data-part="agent-demo"][data-layout="terminal"] [data-part="submit"]) {
+    width: auto;
+    height: auto;
+    color: var(--sf-muted, inherit);
+    background: transparent;
+    opacity: 0.4;
+  }
+
+  :where([data-part="agent-demo"] [data-part="submit"][data-flash]) {
+    transform: scale(0.9);
+    background: var(--sf-demo-accent-strong, var(--sf-accent, CanvasText));
+    opacity: 1;
+  }
+
+  :where([data-part="agent-demo"] [data-part="stage"]) {
+    min-width: 0;
+  }
+
+  /* Motion: only once hydrated and playing, and only when motion is allowed. */
+  @media (prefers-reduced-motion: no-preference) {
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="turns"]
+          > :is(
+            [data-part="message"],
+            [data-part="command"],
+            [data-part="output"],
+            [data-part="thinking"]
+          )
+      ) {
+      animation: sf-agent-demo-enter 450ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
+      --sf-demo-enter-y: 12px;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="turns"]
+          > [data-part="tool-call"]
+      ) {
+      animation: sf-agent-demo-enter 600ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
+      --sf-demo-enter-y: 18px;
+    }
+
+    /* The terminal reveals by typing and line by line (rr's player), with no entrance fade. */
+    :where([data-sf-animating][data-layout="terminal"] [data-part="turns"] > *) {
+      animation: none;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="caret"]
+      ) {
+      animation: sf-agent-demo-blink 1s steps(1, end) infinite;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="thinking-dot"]
+      ) {
+      animation: sf-agent-demo-pulse 1.2s ease-in-out infinite;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="thinking-dot"]:nth-child(2)
+      ) {
+      animation-delay: 150ms;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="thinking-dot"]:nth-child(3)
+      ) {
+      animation-delay: 300ms;
+    }
+
+    :where(
+        [data-sf-animating][data-layout="chat"]:not(
+            [data-sf-motion="reduce"],
+            [data-sf-motion="reduce"] *
+          )
+          [data-status="running"]
+          [data-part="tool-status"]
+      ) {
+      animation: sf-agent-demo-spin 900ms linear infinite;
+    }
+
+    :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="skeleton-bar"]
+      ) {
+      background: linear-gradient(
+        90deg,
+        var(--sf-demo-shimmer, color-mix(in srgb, currentColor 8%, transparent)),
+        var(--sf-demo-shimmer-hi, color-mix(in srgb, currentColor 16%, transparent)),
+        var(--sf-demo-shimmer, color-mix(in srgb, currentColor 8%, transparent))
+      );
+      background-size: 200% 100%;
+      animation: sf-agent-demo-shimmer 1.4s linear infinite;
+    }
+  }
+
+  :where([data-sf-animating][data-paused], [data-sf-animating][data-paused] *) {
+    animation-play-state: paused;
+  }
+
+  @keyframes sf-agent-demo-enter {
+    from {
+      opacity: 0;
+      transform: translateY(var(--sf-demo-enter-y, 12px));
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes sf-agent-demo-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sf-agent-demo-pulse {
+    0%,
+    100% {
+      opacity: 0.25;
+    }
+    50% {
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes sf-agent-demo-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes sf-agent-demo-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}

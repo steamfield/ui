@@ -6,10 +6,17 @@ import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
 import { createHastPlugins, createShikiConfig } from "@steamfield/ui/markdown";
 import { createPlaybackGate, type GateState } from "@steamfield/ui/playback";
+import {
+  AgentDemo,
+  type AgentDemoProps,
+  StaticTranscript,
+  useAgentDemo,
+} from "@steamfield/ui/react/agent-demo";
 import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
 import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-tabs";
 import { useCountUp, usePlayback } from "@steamfield/ui/react/playback";
 import { Tab, TabList, TabPanel, Tabs } from "@steamfield/ui/react/tabs";
+import { DemoWindow, type DemoWindowProps } from "@steamfield/ui/react/window";
 import { initReveal, motionTokens } from "@steamfield/ui/reveal";
 import {
   type DemoScript,
@@ -71,6 +78,26 @@ const mid: DemoView = stateAt(timeline, { ms: timeline.duration / 2 });
 const end: DemoView = finalState(timeline);
 check(!mid.complete && end.complete && end.entries.length === 2, "stateAt / finalState");
 check(clickCount(script) >= 0 && transcriptText(script).includes("Hello there."), "transcript");
+
+// react/agent-demo: the server render is the final transcript, with no controls.
+const demoProps: AgentDemoProps = { script, layout: "terminal", timing: presets.terminal };
+const demoHtml = renderToStaticMarkup(createElement(AgentDemo, demoProps));
+check(
+  demoHtml.includes("data-sf-agent-demo") &&
+    demoHtml.includes("Hello there.") &&
+    !demoHtml.includes("<button"),
+  "AgentDemo SSR is the final transcript",
+);
+check(
+  renderToStaticMarkup(createElement(StaticTranscript, { script })).includes("hi"),
+  "StaticTranscript",
+);
+check(typeof useAgentDemo === "function", "useAgentDemo export");
+const windowProps: DemoWindowProps = { title: "session", label: "Example" };
+check(
+  renderToStaticMarkup(createElement(DemoWindow, windowProps)).includes("session"),
+  "DemoWindow",
+);
 
 // playback: a gate without an element counts as in view.
 const gate = createPlaybackGate(null, { duration: 1000, motion: "full", autoStart: false });

@@ -1,6 +1,8 @@
 @layer sf, playground;
 
 @import "@steamfield/ui/copy/styles.css";
+@import "@steamfield/ui/agent-demo/styles.css";
+@import "@steamfield/ui/react/window/styles.css";
 
 @layer playground {
   :root {
@@ -70,6 +72,35 @@
 
   .pg-section {
     margin-block: 2rem;
+  }
+
+  .pg-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .pg-bars {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pg-bars li {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 4rem;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .pg-bar {
+    height: 0.625rem;
+    border-radius: 0.25rem;
+    background: var(--sf-accent);
   }
 
   @media (max-width: 40rem) {

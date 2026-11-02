@@ -1,5 +1,6 @@
 import { type ReactElement, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { AgentDemoPage } from "./pages/agent-demo.tsx";
 import { CopyPage } from "./pages/copy.tsx";
 
 // One page per component. Each page renders sample scripts and content for manual QA; the
@@ -7,6 +8,7 @@ import { CopyPage } from "./pages/copy.tsx";
 // The page is picked from the hash (#/copy), so the static build needs no server routing.
 const pages: Record<string, () => ReactElement> = {
   copy: CopyPage,
+  "agent-demo": AgentDemoPage,
 };
 
 function current(): string {
