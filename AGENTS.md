@@ -132,7 +132,7 @@ lefthook (`lefthook.yml`): pre-commit runs Biome with fixes on staged files; pre
 
 ## Pending user actions
 
-- Create the GitHub repository and add it as `origin`; then require the `ci-ok` check in the branch ruleset.
+- Require the `ci-ok` check in a branch ruleset for `main` on https://github.com/steamfield/ui.
 - npm: confirm access to the `@steamfield` scope, remove `"private": true`, and publish (`changeset version`, then `npm publish --provenance` from CI or your machine).
 
 ## Deeper context
