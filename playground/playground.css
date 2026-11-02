@@ -3,6 +3,9 @@
 @import "@steamfield/ui/copy/styles.css";
 @import "@steamfield/ui/agent-demo/styles.css";
 @import "@steamfield/ui/react/window/styles.css";
+@import "@steamfield/ui/tabs/styles.css";
+@import "@steamfield/ui/react/install-tabs/styles.css";
+@import "@steamfield/ui/reveal/styles.css";
 
 @layer playground {
   :root {
@@ -101,6 +104,64 @@
     height: 0.625rem;
     border-radius: 0.25rem;
     background: var(--sf-accent);
+  }
+
+  .pg-vertical {
+    display: grid;
+    grid-template-columns: 10rem 1fr;
+    gap: 1rem;
+  }
+
+  .pg-reveal {
+    overflow-x: clip;
+  }
+
+  .pg-reveal-intro {
+    min-height: 100vh;
+  }
+
+  .pg-reveal-section {
+    min-height: 45vh;
+    margin-block: 1rem;
+  }
+
+  .pg-reveal-card {
+    padding: 1rem;
+    border: 1px solid var(--sf-border);
+    border-radius: var(--sf-radius);
+    background: var(--sf-surface);
+  }
+
+  .pg-reveal-card a {
+    color: var(--sf-fg);
+  }
+
+  .pg-reveal-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pg-reveal-list li {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--sf-border);
+    border-radius: var(--sf-radius);
+  }
+
+  .pg-stat {
+    display: grid;
+    min-width: 8rem;
+  }
+
+  .pg-stat strong {
+    font-size: 1.75rem;
+  }
+
+  .pg-progress {
+    width: 100%;
+    margin-bottom: 0.75rem;
   }
 
   @media (max-width: 40rem) {

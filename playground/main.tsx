@@ -2,6 +2,10 @@ import { type ReactElement, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AgentDemoPage } from "./pages/agent-demo.tsx";
 import { CopyPage } from "./pages/copy.tsx";
+import { InstallTabsPage } from "./pages/install-tabs.tsx";
+import { PlaybackPage } from "./pages/playback.tsx";
+import { RevealPage } from "./pages/reveal.tsx";
+import { TabsPage } from "./pages/tabs.tsx";
 
 // One page per component. Each page renders sample scripts and content for manual QA; the
 // Playwright suite in tests/browser/ loads every route in light, dark and reduced-motion modes.
@@ -9,6 +13,10 @@ import { CopyPage } from "./pages/copy.tsx";
 const pages: Record<string, () => ReactElement> = {
   copy: CopyPage,
   "agent-demo": AgentDemoPage,
+  tabs: TabsPage,
+  "install-tabs": InstallTabsPage,
+  reveal: RevealPage,
+  playback: PlaybackPage,
 };
 
 function current(): string {

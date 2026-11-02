@@ -20,7 +20,11 @@ Project instructions live in `AGENTS.md` at the repo root, which every coding ag
 | `_destructive-patterns.sh` | (sourced) | The pattern list behind `block-destructive.sh`. Reuse it from any hook that approves or rewrites Bash commands. |
 | `smoke.sh` | (not wired) | The `hooks-smoke` verify step: feeds each guard a deny and a near miss, and checks every hook config present parses and wires its guard. Add a case here when you add a guard. |
 | `_lib.sh` | (sourced) | Shared helpers: the payload reader, the deny and context responses, project root, `find_up`, a portable `with_timeout`, the per-session file list. |
-| <!-- stacks:fill One row per other file in hooks/ (harness, stack, and app hooks such as TypeScript guards): name, event and matcher from settings.json, what it does. Delete this row if there are none. --> | | |
+| `guard-commands.ts` | (called by `block-destructive.sh`) | The TypeScript command guard: parses the shell command and denies deletions outside the project, hard resets, history rewrites, branch-deleting pushes, and a package manager other than bun touching the lockfile. With Bun present `block-destructive.sh` hands it the payload, and it denies if it can't run. |
+| `guard-typescript-library-commands.ts` | PreToolUse `Bash` | Denies `bun test` and `--bun` (tests run on Node through Vitest) and publishing, `npm version`, tags and dist-tags, which are the maintainer's steps. |
+| `guard-generated.ts` | PreToolUse `Edit\|Write` | Denies hand edits to tool-owned output (`dist/`, lockfiles, coverage) and names the command that regenerates it. |
+| `typecheck-on-write.ts` | PostToolUse `Edit\|Write` | Runs `tsc` after each `.ts`/`.tsx` write and returns errors in the edited file and its callers. |
+| `_lib.ts`, `_shell.ts`, `_git.ts`, `_destructive.ts` | (imported) | Shared TypeScript helpers for the hooks: payload I/O and timeouts, a shell parser, git state, the destructive-command rules. |
 
 How they behave:
 
