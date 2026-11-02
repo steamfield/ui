@@ -3,7 +3,13 @@ import { StrictMode, useEffect } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { MotionSource } from "../../playback/motion.ts";
-import { type UsePlaybackOptions, useCountUp, usePlayback } from "./index.ts";
+import { useAgentDemo } from "../agent-demo/index.ts";
+import {
+  type UsePlaybackOptions,
+  type UsePlaybackResult,
+  useCountUp,
+  usePlayback,
+} from "./index.ts";
 
 class FakeObserver {
   static instances: FakeObserver[] = [];
@@ -143,6 +149,63 @@ function Manual() {
         playback.ref.current = node;
       }}
     />
+  );
+}
+
+let latest: UsePlaybackResult<HTMLElement> | undefined;
+const hook = (): UsePlaybackResult<HTMLElement> => {
+  if (!latest) throw new Error("no hook result");
+  return latest;
+};
+
+/** One gated element, swapped by `which`, plus an option to change in the same commit. */
+function Carry({
+  which,
+  show = true,
+  ...options
+}: { which: "a" | "b"; show?: boolean } & UsePlaybackOptions) {
+  const playback = usePlayback<HTMLElement>({ duration: DURATION, ...options });
+  latest = playback;
+  if (!show) return null;
+  return which === "a" ? (
+    <section key="a" data-testid="a" ref={playback.ref} />
+  ) : (
+    <section key="b" data-testid="b" ref={playback.ref} />
+  );
+}
+
+/** `Late`, with callbacks, through the agent demo hook. */
+function LateAgentDemo({
+  show,
+  onStepStart,
+}: {
+  show: boolean;
+  onStepStart: (index: number) => void;
+}) {
+  const demo = useAgentDemo(
+    { steps: [{ kind: "agent-text", text: "Hello there, reader." }] },
+    { onStepStart },
+  );
+  return (
+    <>
+      <output data-testid="text">{demo.view.entries.length}</output>
+      {show && <div data-testid="late-demo" ref={demo.ref} />}
+    </>
+  );
+}
+
+/** `Late` through the count-up hook. */
+function LateCount({ show }: { show: boolean }) {
+  const { ref, value } = useCountUp<HTMLSpanElement>(100, {
+    duration: 500,
+    motion: "full",
+    easing: (t) => t,
+  });
+  return (
+    <>
+      <output data-testid="count">{value}</output>
+      {show && <span data-testid="late-count" ref={ref} />}
+    </>
   );
 }
 
@@ -342,6 +405,9 @@ describe("usePlayback", () => {
 
   test("attaches to an element that mounts after the first render", () => {
     const { rerender } = render(<Late show={false} />);
+    // No element yet: autoStart waits for one instead of playing where nobody can see it.
+    advance(500);
+    expect(elapsed()).toBe(0);
     rerender(<Late show />);
     const frame = screen.getByTitle("late");
     expect(live()).toHaveLength(1);
@@ -372,6 +438,90 @@ describe("usePlayback", () => {
     rerender(<Manual />);
     rerender(<Manual />);
     expect(FakeObserver.instances).toHaveLength(1);
+  });
+
+  test("an element swap carries elapsed, started, paused and the rate into the new gate", () => {
+    const { rerender } = render(<Carry which="a" />);
+    scroll(true);
+    advance(1000);
+    act(() => hook().setSpeed(2));
+    advance(500);
+    act(() => hook().pause());
+    const at = hook().elapsed;
+    expect(at).toBeGreaterThan(1900);
+    rerender(<Carry which="b" />);
+    expect(live()).toHaveLength(1);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("b")]);
+    expect(hook()).toMatchObject({ elapsed: at, started: true, paused: true, speed: 2 });
+    scroll(true);
+    act(() => hook().play());
+    advance(500);
+    expect(hook().elapsed).toBeGreaterThan(at + 900);
+  });
+
+  test("an unstarted gate stays unstarted across a swap", () => {
+    const { rerender } = render(<Carry which="a" autoStart={false} />);
+    scroll(true);
+    rerender(<Carry which="b" autoStart={false} />);
+    expect(hook()).toMatchObject({ elapsed: 0, started: false, paused: false });
+  });
+
+  test("an option change still starts over at 0, and one landing with a swap builds once", () => {
+    const { rerender } = render(<Carry which="a" />);
+    scroll(true);
+    advance(1000);
+    const before = FakeObserver.instances.length;
+    rerender(<Carry which="b" threshold={0.5} />);
+    expect(FakeObserver.instances.length).toBe(before + 1);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("b")]);
+    expect(hook()).toMatchObject({ elapsed: 0, started: true, paused: false });
+  });
+
+  test("detaching with no reattach keeps the gate, which reads as out of view", () => {
+    const { rerender } = render(<Carry which="a" />);
+    scroll(true);
+    advance(500);
+    const gates = FakeObserver.instances.length;
+    rerender(<Carry which="a" show={false} />);
+    // A browser reports a removed target as no longer intersecting.
+    scroll(false);
+    advance(500);
+    expect(FakeObserver.instances.length).toBe(gates);
+    expect(hook().playing).toBe(false);
+  });
+
+  test("a ref attached late starts fresh: nothing carried from the element-less gate", () => {
+    const { rerender } = render(<Carry which="a" show={false} />);
+    act(() => hook().play());
+    advance(500);
+    // Explicitly played with no element: in view, so it ran.
+    expect(hook().elapsed).toBeGreaterThan(400);
+    rerender(<Carry which="a" />);
+    expect(hook()).toMatchObject({ elapsed: 0, started: true, paused: false });
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("a")]);
+  });
+
+  test("a ref that is never attached counts as in view once played", () => {
+    render(<Carry which="a" show={false} autoStart={false} />);
+    expect(hook().started).toBe(false);
+    act(() => hook().play());
+    advance(500);
+    expect(hook().playing).toBe(true);
+  });
+
+  test("useAgentDemo waits for a late element before playing or firing callbacks", () => {
+    const onStepStart = vi.fn();
+    const { rerender } = render(<LateAgentDemo show={false} onStepStart={onStepStart} />);
+    advance(5000);
+    expect(onStepStart).not.toHaveBeenCalled();
+    rerender(<LateAgentDemo show onStepStart={onStepStart} />);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("late-demo")]);
+    advance(5000);
+    expect(onStepStart).not.toHaveBeenCalled();
+    scroll(true);
+    advance(5000);
+    expect(onStepStart).toHaveBeenCalledTimes(1);
+    expect(onStepStart).toHaveBeenCalledWith(0, expect.objectContaining({ kind: "agent-text" }));
   });
 
   test("controls work through the hook and are no-ops before ready", () => {
@@ -489,6 +639,17 @@ describe("useCountUp", () => {
     });
     advance(2000);
     expect(result.current.value).toBe(300);
+  });
+
+  test("counts for an element that mounts after the first render, once it is in view", () => {
+    const { rerender } = render(<LateCount show={false} />);
+    rerender(<LateCount show />);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("late-count")]);
+    advance(1000);
+    expect(screen.getByTestId("count").textContent).toBe("0");
+    scroll(true);
+    advance(1000);
+    expect(screen.getByTestId("count").textContent).toBe("100");
   });
 
   test("counts only while the attached element is in view", () => {

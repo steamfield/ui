@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { carryOver, sameInputs } from "../../internal/gate-rebuild.ts";
 import { defined } from "../../internal/options.ts";
 import {
   checkSpeed,
@@ -23,16 +24,17 @@ import {
 export type UsePlaybackOptions = PlaybackGateOptions;
 
 /**
- * The element ref `usePlayback` and `useCountUp` return: a callback ref, so an element that
- * mounts late or is swapped for another gets a fresh gate, that also reads and writes like a
- * `RefObject` through `current`.
+ * The element ref `usePlayback` and `useCountUp` return: a callback ref that also reads and
+ * writes like a `RefObject` through `current`, so the gated element may mount late or change.
  */
 export type PlaybackRef<T extends Element> = RefCallback<T> & { current: T | null };
 
 export interface UsePlaybackResult<T extends Element> {
   /**
-   * Attach to the element whose visibility gates playback. It may mount after the first render
-   * or change; a new element starts a fresh gate at 0 that keeps the current rate.
+   * Attach to the element whose visibility gates playback. Until one attaches, `autoStart` waits
+   * (`play()` still runs the clock, counted as in view). An element that mounts after the first
+   * render gets a fresh gate. Swapping one element for another keeps `elapsed`, `started`,
+   * `paused` and the rate; detaching keeps the gate, which then reads as out of view.
    */
   readonly ref: PlaybackRef<T>;
   readonly elapsed: number;
@@ -90,9 +92,10 @@ export function useGate<T extends Element>(
 } {
   const [gate, setGate] = useState<PlaybackGate | null>(null);
   const live = useRef<PlaybackGate | null>(null);
-  // The element the live gate observes. A different one attached after the gate exists bumps
-  // `element` to rebuild the gate; one attached before the first gate is simply picked up.
+  // The element the live gate observes, and the options it was built with. A different element
+  // attached after the gate exists bumps `element` so the gate effect runs again.
   const observed = useRef<Element | null>(null);
+  const built = useRef<readonly unknown[] | null>(null);
   const [element, setElement] = useState(0);
   const [ref] = useState(() => {
     let current: T | null = null;
@@ -118,21 +121,34 @@ export function useGate<T extends Element>(
   const { autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy, duration } =
     options;
 
+  // Builds the gate, and rebuilds it for a new element or new options. It has no cleanup: it
+  // replaces the gate itself, so it can keep the gate when the only change is an element bump
+  // the run before already picked up (an option change and a swap in one commit build once).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `element` changing means a new node is attached to `ref`, which the effect reads.
   useEffect(() => {
-    observed.current = ref.current;
-    const next = createPlaybackGate(ref.current, {
-      ...defined({ autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy }),
+    const node = ref.current;
+    const settings = [autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy];
+    const inputs = [...settings, duration, hasOnFrame];
+    const prev = live.current;
+    const sameOptions = prev !== null && sameInputs(built.current, inputs);
+    if (sameOptions && observed.current === node) return;
+    // Only an element-to-element swap carries progress. A gate that never had an element starts
+    // nothing over: the element it waited for gets a fresh gate.
+    const carry = sameOptions && observed.current !== null ? prev?.getState() : undefined;
+    prev?.destroy();
+    const next = createPlaybackGate(node, {
+      ...defined({ threshold, rootMargin, leaveGraceMs, motion, reducedPolicy }),
+      // With no element yet, autoStart waits for one rather than playing where nobody sees it.
+      // `play()` still runs it, so a clock that never attaches a ref counts as in view.
+      ...defined({ autoStart: node === null ? false : autoStart }),
       ...defined({ duration, speed: rate.current }),
       ...(hasOnFrame ? { onFrame: (elapsed: number) => onFrame.current?.(elapsed) } : {}),
     });
+    if (carry) carryOver(next, carry);
     live.current = next;
+    observed.current = node;
+    built.current = inputs;
     setGate(next);
-    return () => {
-      next.destroy();
-      live.current = null;
-      setGate(null);
-    };
   }, [
     ref,
     element,
@@ -145,6 +161,17 @@ export function useGate<T extends Element>(
     duration,
     hasOnFrame,
   ]);
+
+  useEffect(
+    () => () => {
+      live.current?.destroy();
+      live.current = null;
+      observed.current = null;
+      built.current = null;
+      setGate(null);
+    },
+    [],
+  );
 
   // Declared after the gate effect, so a speed change in the same commit as a rebuild reaches the
   // new gate.

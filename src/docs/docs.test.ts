@@ -295,6 +295,14 @@ describe("llmsIndex", () => {
     );
   });
 
+  it("drops empty and whitespace-only intro entries", () => {
+    const blank = llmsIndex({ ...config, intro: ["", "  ", "Kept."] }, entries, site);
+    expect(blank.split("\n\n").slice(1, 3)).toEqual(["> Acme does things.", "Kept."]);
+    expect(llmsIndex({ ...config, intro: " \n " }, entries, site)).toBe(
+      llmsIndex(config, entries, site),
+    );
+  });
+
   it("points at llms-full.txt", () => {
     expect(llmsIndex(config, entries, site)).toContain("https://example.com/llms-full.txt has");
   });

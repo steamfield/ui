@@ -260,6 +260,24 @@ describe("tables", () => {
     ]);
   });
 
+  it("never reuses a label, even when a caption already took the numbered one", async () => {
+    const raw = await createSatteriMarkdownProcessor({
+      hastPlugins: createHastPlugins(),
+      features: { smartPunctuation: false, rawHtml: true },
+    });
+    const html = "<table><caption>Ports table 2</caption><tr><td>80</td></tr></table>";
+    const { root } = await render(`## Ports\n\n${html}\n\n${table}\n\n${table}`, raw);
+    expect(labels(root)).toEqual(["Ports table 2", "Ports table", "Ports table 3"]);
+  });
+
+  it("falls back to the default label when a function returns blank text, and trims", async () => {
+    const custom = await processorFor({
+      tables: { regionLabel: (_, index) => (index === 0 ? "   " : "  Spaced  ") },
+    });
+    const { root } = await render(`## Flags\n\n${table}\n\n${table}`, custom);
+    expect(labels(root)).toEqual(["Flags table", "Spaced"]);
+  });
+
   it("takes a label function with the table, its index and its context", async () => {
     const custom = await processorFor({
       tables: {

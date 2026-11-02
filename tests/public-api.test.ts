@@ -33,7 +33,7 @@ const api: Record<string, string[]> = {
   "react/agent-demo/index.ts": ["AgentDemo", "StaticTranscript", "useAgentDemo"],
   "react/copy/index.ts": ["CopyButton", "CopyCommand", "useCopy"],
   "react/playback/index.ts": ["useCountUp", "usePlayback"],
-  "reveal/index.ts": ["initReveal", "motionTokens", "revealGateScript"],
+  "reveal/index.ts": ["initReveal", "motionTokens", "revealGateHash", "revealGateScript"],
   "react/install-tabs/index.ts": ["InstallTabs"],
   "react/tabs/index.ts": ["Tab", "TabList", "TabPanel", "Tabs"],
   "react/window/index.ts": ["DemoWindow"],

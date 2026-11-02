@@ -877,3 +877,168 @@ describe("terminal tool header", () => {
     w.unmount();
   });
 });
+
+// Parity with react/playback's element rules: the same cases as the React playback suite.
+describe("useAgentDemo element rules", () => {
+  class FakeObserver {
+    static instances: FakeObserver[] = [];
+    readonly targets = new Set<Element>();
+    disconnected = false;
+    readonly callback: IntersectionObserverCallback;
+    constructor(callback: IntersectionObserverCallback) {
+      this.callback = callback;
+      FakeObserver.instances.push(this);
+    }
+    observe(target: Element): void {
+      this.targets.add(target);
+    }
+    unobserve(target: Element): void {
+      this.targets.delete(target);
+    }
+    disconnect(): void {
+      this.disconnected = true;
+    }
+  }
+  const live = (): FakeObserver[] => FakeObserver.instances.filter((o) => !o.disconnected);
+  const targets = (): Element[] => [...(live()[0]?.targets ?? [])];
+  const scroll = async (isIntersecting: boolean): Promise<void> => {
+    for (const observer of live()) {
+      const entries = [...observer.targets].map((target) => ({ target, isIntersecting }));
+      observer.callback(entries as unknown as IntersectionObserverEntry[], observer as never);
+    }
+    await nextTick();
+  };
+
+  const show = ref(true);
+  const which = ref<"a" | "b">("a");
+  const threshold = ref<number | undefined>(undefined);
+  let demo: UseAgentDemoResult | undefined;
+  const hook = (): UseAgentDemoResult => {
+    if (!demo) throw new Error("no demo");
+    return demo;
+  };
+  const onStepStart = vi.fn();
+
+  /** One gated element, swapped by `which`, hidden by `show`. */
+  async function mountProbe(options: { autoStart?: boolean } = {}): Promise<VueWrapper> {
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(terminalScript, () => ({
+        timing: presets.terminal,
+        threshold: threshold.value,
+        onStepStart,
+        ...options,
+      }));
+      demo = result;
+      return () =>
+        show.value
+          ? h("section", { key: which.value, "data-testid": which.value, ref: result.el })
+          : h("p", "no element");
+    });
+    const w = mount(Probe, { attachTo: document.body });
+    wrappers.push(w);
+    await nextTick();
+    return w;
+  }
+
+  beforeEach(() => {
+    FakeObserver.instances = [];
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    show.value = true;
+    which.value = "a";
+    threshold.value = undefined;
+    onStepStart.mockReset();
+  });
+
+  test("autoStart waits for a late element and fires no callbacks before it", async () => {
+    show.value = false;
+    await mountProbe();
+    await advance(5000);
+    expect(hook().started.value).toBe(false);
+    expect(onStepStart).not.toHaveBeenCalled();
+    show.value = true;
+    await nextTick();
+    await nextTick();
+    expect(targets()).toEqual([document.querySelector('[data-testid="a"]')]);
+    await advance(500);
+    expect(onStepStart).not.toHaveBeenCalled();
+    await scroll(true);
+    await advance(500);
+    expect(hook().playing.value).toBe(true);
+    expect(onStepStart).toHaveBeenCalledWith(0, expect.objectContaining({ kind: "user" }));
+  });
+
+  test("an element bound late starts fresh: nothing carried from the element-less gate", async () => {
+    show.value = false;
+    await mountProbe();
+    hook().controls.play();
+    await advance(500);
+    // Explicitly played with no element: in view, so it ran.
+    expect(hook().view.value.elapsed).toBeGreaterThan(400);
+    show.value = true;
+    await nextTick();
+    await nextTick();
+    expect(hook().view.value.elapsed).toBe(0);
+    expect(hook().started.value).toBe(true);
+    expect(targets()).toEqual([document.querySelector('[data-testid="a"]')]);
+  });
+
+  test("an element swap carries elapsed, started, paused and the rate", async () => {
+    await mountProbe();
+    await scroll(true);
+    await advance(400);
+    hook().controls.setSpeed(2);
+    await advance(400);
+    hook().controls.pause();
+    await nextTick();
+    const at = hook().view.value.elapsed;
+    expect(at).toBeGreaterThan(1000);
+    which.value = "b";
+    await nextTick();
+    await nextTick();
+    expect(live()).toHaveLength(1);
+    expect(targets()).toEqual([document.querySelector('[data-testid="b"]')]);
+    expect(hook().view.value.elapsed).toBe(at);
+    expect(hook().paused.value).toBe(true);
+    expect(hook().speed.value).toBe(2);
+    await scroll(true);
+    hook().controls.play();
+    await advance(200);
+    expect(hook().view.value.elapsed).toBeGreaterThan(at + 300);
+  });
+
+  test("an option change still starts over at 0, building one gate with a swap", async () => {
+    await mountProbe();
+    await scroll(true);
+    await advance(800);
+    const before = FakeObserver.instances.length;
+    which.value = "b";
+    threshold.value = 0.5;
+    await nextTick();
+    await nextTick();
+    expect(FakeObserver.instances.length).toBe(before + 1);
+    expect(targets()).toEqual([document.querySelector('[data-testid="b"]')]);
+    expect(hook().started.value).toBe(true);
+    expect(hook().view.value.elapsed).toBe(0);
+  });
+
+  test("detaching with no new element keeps the gate, which reads as out of view", async () => {
+    await mountProbe();
+    await scroll(true);
+    await advance(400);
+    const gates = FakeObserver.instances.length;
+    show.value = false;
+    await nextTick();
+    await scroll(false);
+    await advance(400);
+    expect(FakeObserver.instances.length).toBe(gates);
+    expect(hook().playing.value).toBe(false);
+  });
+
+  test("an element that is never bound counts as in view once played", async () => {
+    show.value = false;
+    await mountProbe({ autoStart: false });
+    hook().controls.play();
+    await advance(200);
+    expect(hook().playing.value).toBe(true);
+  });
+});

@@ -47,6 +47,7 @@ afterEach(() => {
   dispose();
   dispose = () => {};
   delete root.dataset.motionReady;
+  delete root.dataset.revealLive;
   root.removeAttribute("data-sf-motion");
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
@@ -89,11 +90,50 @@ describe("revealGateScript", () => {
     expect(root.dataset.motionReady).toBe("true");
   });
 
+  test("does nothing without a window, without leaning on its catch", () => {
+    // Shadowing parameters: the snippet sees no `window`, and a `document` that records reads.
+    // Guarded, it never reaches `document`; relying on the catch it would read it first.
+    const reads: PropertyKey[] = [];
+    const doc = new Proxy({}, { get: (_, key) => reads.push(key) && undefined });
+    expect(() =>
+      new Function("window", "document", revealGateScript)(undefined, doc),
+    ).not.toThrow();
+    expect(reads).toEqual([]);
+  });
+
   test("never throws", () => {
     vi.stubGlobal("matchMedia", () => {
       throw new Error("boom");
     });
     expect(runGate).not.toThrow();
+  });
+});
+
+describe("the gate's fallback", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("removes the gate after 3s when initReveal never runs", () => {
+    runGate();
+    vi.advanceTimersByTime(2999);
+    expect(root.dataset.motionReady).toBe("true");
+    vi.advanceTimersByTime(1);
+    expect(root.hasAttribute("data-motion-ready")).toBe(false);
+  });
+
+  test("keeps the gate once initReveal has taken over", () => {
+    runGate();
+    dispose = initReveal();
+    expect(root.dataset.revealLive).toBe("true");
+    vi.advanceTimersByTime(5000);
+    expect(root.dataset.motionReady).toBe("true");
+    dispose();
+    expect(root.hasAttribute("data-reveal-live")).toBe(false);
+    expect(root.hasAttribute("data-motion-ready")).toBe(false);
   });
 });
 

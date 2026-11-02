@@ -60,11 +60,11 @@ export interface CopyCommandProps {
   /** On the wrapper. */
   readonly className?: string;
   /** On the copy button. */
-  readonly buttonClassName?: string;
+  readonly buttonClassName?: string | undefined;
   /** On the prompt glyph. */
-  readonly promptClassName?: string;
+  readonly promptClassName?: string | undefined;
   /** On the command text. */
-  readonly commandClassName?: string;
+  readonly commandClassName?: string | undefined;
   readonly icon?: ReactNode;
 }
 

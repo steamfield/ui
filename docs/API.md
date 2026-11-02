@@ -11,7 +11,7 @@ Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `
 | `playback` | `createPlaybackGate` | none |
 | `copy` | `copyText`, `enhanceCopyButtons`, `copy/styles.css` | none |
 | `tabs` | `createTabs` (DOM controller), `tabs/styles.css` (`:target` fallback) | none |
-| `reveal` | `initReveal`, `revealGateScript`, `motionTokens`, `reveal/styles.css` | none |
+| `reveal` | `initReveal`, `revealGateScript`, `revealGateHash`, `motionTokens`, `reveal/styles.css` | none |
 | `markdown` | Sätteri hast plugin factories, `createShikiConfig`, `markdown/styles.css` | optional peers `satteri`, `github-slugger` (and `shiki` for types) |
 | `docs` | `createDocs(config)`, the unbound helpers, `spyToc` | none |
 | `react/playback` | `usePlayback`, `useCountUp` | `playback` |
@@ -143,7 +143,7 @@ createPlaybackGate(el: Element | null, {
 
 `usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts a fresh gate. `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
 
-**Deviation:** `ref` is a `PlaybackRef<T>`, a callback ref that also has a read/write `current`, not a `RefObject`. Each new element attached to it starts a fresh gate, so an element that mounts after the first render (an iframe behind a state flip) or is swapped still gates playback; detaching doesn't rebuild. `ref={ref}` and `ref.current` keep working. `useCountUp` and `useAgentDemo` return the same type.
+**Deviation:** `ref` is a `PlaybackRef<T>`, a callback ref that also has a read/write `current`, not a `RefObject`. An element that mounts after the first render (an iframe behind a state flip) gets a fresh gate; before any element attaches, `autoStart` waits (explicit `play()` still runs, counted as in view). An element-to-element swap carries `elapsed`, `started`, `paused` and the rate; option changes still start at 0, and an option change plus a swap in one commit builds once. Detaching doesn't rebuild. `ref={ref}` and `ref.current` keep working. `useCountUp` and `useAgentDemo` return the same type.
 
 **Deviation:** `usePlayback` returns `speed` and `setSpeed`; the option is applied to the gate in place, and a gate rebuilt for a new `duration` or `motion` starts at the current rate. `useAgentDemo` drives its `speed` and `controls.setSpeed` through the same gate, so an invalid rate throws at the call.
 
@@ -218,7 +218,7 @@ useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<Us
 <StaticTranscript :script layout finalPolicy labels glyphs tools privacyClassName>  slots: toolCall, toolBody
 ```
 
-**Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).
+**Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. `el` follows React's element rules (autoStart waits for an element, a late element gets a fresh gate, a swap keeps progress, option changes reset), and a `playCount` bump on slide re-entry also resets. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).
 
 ## react/window
 
@@ -270,6 +270,7 @@ initReveal({ rootMargin?, threshold?, immediate?: (el) => boolean,
              motion?: "auto" | "reduce" | "full" | MotionSource, deferred?: (el) => boolean,
              readyEvent?: string }): () => void
 revealGateScript: string   // inline in <head>: sets html[data-motion-ready] before first paint
+revealGateHash: string     // "sha256-<base64>" of the snippet, for script-src
 motionTokens: { easings, durations, springs, animationTypes, motionRoles }
 ```
 
@@ -277,7 +278,7 @@ Markup contract: `[data-reveal]` containers (`"quiet"` for the quiet entrance), 
 
 Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-reveal-lift`, `--sf-reveal-scale`, `--sf-reveal-delay`, `--sf-reveal-blur` (start blur; `2px` default role, `6px` `blur-in-soft`, `10px` `blur-in`, `0px` otherwise).
 
-**Deviation:** `revealGateScript` was added because `initReveal()` runs from deferred module scripts, so the gate could land after first paint and above-the-fold content flashed. The snippet applies the same checks as `initReveal` (IntersectionObserver, `prefers-reduced-motion`, `html[data-sf-motion="reduce"]`); `initReveal` adopts a gate it finds and removes it when its own `motion` option vetoes setup.
+**Deviation:** `revealGateScript` was added because `initReveal()` runs from deferred module scripts, so the gate could land after first paint and above-the-fold content flashed. The snippet applies the same checks as `initReveal` (IntersectionObserver, `prefers-reduced-motion`, `html[data-sf-motion="reduce"]`); `initReveal` adopts a gate it finds (setting `html[data-reveal-live]`) and removes it when its own `motion` option vetoes setup. The snippet fails open: without `data-reveal-live` 3 seconds later it removes the gate, so a module that never runs can't leave content hidden. `revealGateHash` serves a `script-src` CSP.
 
 **Deviation:** the proposal's `readyEvent` became the way late-hydrating islands opt in, and `deferred` was added to define which containers wait for it. The default `deferred` matches `[data-reveal-defer]` that does not yet contain `[data-reveal-hydrated]`, the same rule the CSS uses to keep such content visible if hydration never happens. `readyEvent` defaults to `"sf:reveal-ready"`.
 
@@ -289,7 +290,7 @@ Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-re
 
 ## markdown
 
-`createHastPlugins(options?)` returns the factories for `codeBlocks`, `codeGroups`, `callouts`, `headingAnchors` and `tables`; each is also exported alone. `createShikiConfig()` returns `{ theme: "css-variables", transformers: [codeMeta()] }`. Options: `codeBlocks: { copyLabel, copyText, idPrefix }`, `callouts: { titles }`, `headingAnchors: { label }`, `tables: { regionLabel }`, where `regionLabel` is a string, `false` (no `role="region"`, still focusable) or `(table, index, { caption, heading }) => string`. The default is the caption, else `"<heading> table"`, else `"Scrollable table"`, and a repeated name gets ` 2`, ` 3` so regions stay unique for axe `landmark-unique`. `parseFenceMeta` and `codeMeta` read `title="…"` and `group="…"` from the fence.
+`createHastPlugins(options?)` returns the factories for `codeBlocks`, `codeGroups`, `callouts`, `headingAnchors` and `tables`; each is also exported alone. `createShikiConfig()` returns `{ theme: "css-variables", transformers: [codeMeta()] }`. Options: `codeBlocks: { copyLabel, copyText, idPrefix }`, `callouts: { titles }`, `headingAnchors: { label }`, `tables: { regionLabel }`, where `regionLabel` is a string, `false` (no `role="region"`, still focusable) or `(table, index, { caption, heading }) => string`. The default is the caption, else `"<heading> table"`, else `"Scrollable table"`, labels are trimmed (blank falls back to the default), and a repeated name gets the first free ` 2`, ` 3`, so regions stay unique within the document for axe `landmark-unique`. A page rendering several documents needs a function that prefixes labels per entry. `parseFenceMeta` and `codeMeta` read `title="…"` and `group="…"` from the fence.
 
 **Deviation:** the proposal said only "Sätteri hast plugin factories". The built set also carries a Shiki config because Sätteri swaps the fence for Shiki's output before any hast plugin runs, so fence meta has to be carried on the `<pre>` by a Shiki transformer. The code-block plugin recognises Astro's `astro-code` class, so the plugins target Astro's pipeline.
 

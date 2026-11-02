@@ -8,8 +8,9 @@
      [data-reveal-defer]           wraps late-hydrating content; it stays visible until a
                                    [data-reveal-hydrated] element appears inside it
 
-   Static HTML is always visible. Start states apply only under html[data-motion-ready] (set by
-   initReveal() when motion is allowed) and inside prefers-reduced-motion: no-preference.
+   Static HTML is always visible. Start states apply only under html[data-motion-ready] (set
+   before first paint by the inline revealGateScript, or by initReveal(), when motion is allowed)
+   and inside prefers-reduced-motion: no-preference.
    data-revealed is matched by presence, so "true" and "" both work. [data-motion] is only ever
    matched below or on a [data-reveal] container, never on <html>, so a site-wide
    html[data-motion] toggle is safe. [data-sf-motion="reduce"] on any ancestor turns it off.

@@ -1,4 +1,9 @@
-import { defineHastPlugin, type HastNode, type HastPluginDefinition } from "satteri";
+import {
+  defineHastPlugin,
+  type HastNode,
+  type HastPluginDefinition,
+  type HastVisitorContext,
+} from "satteri";
 import { element } from "./hast.ts";
 
 /** What the default label is built from, passed to a `regionLabel` function. */
@@ -13,9 +18,12 @@ export interface TablesOptions {
   /**
    * The accessible name of the scroll region around each table: a string, or a function of the
    * table, its 0-based index in the document and its caption and preceding heading. Default: the
-   * caption, else "<heading> table", else "Scrollable table". A label already used on the page
-   * gets " 2", " 3" appended, so every region stays unique. `false` drops `role="region"` and the
-   * label, keeping a plain focusable scroll box.
+   * caption, else "<heading> table", else "Scrollable table". A label is trimmed, and a blank
+   * one falls back to the default. A label already used in the document gets " 2", " 3" (the
+   * first number not yet taken) appended, so every region in it stays unique. That covers one
+   * document: a page that renders several (a docs index, say) needs a function that prefixes
+   * each document's labels, such as its title. `false` drops `role="region"` and the label,
+   * keeping a plain focusable scroll box.
    */
   readonly regionLabel?:
     | string
@@ -32,6 +40,14 @@ const HEADINGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
 const defaultLabel = (_: Readonly<TableElement>, __: number, context: TableLabelContext): string =>
   context.caption ?? (context.heading ? `${context.heading} table` : "Scrollable table");
 
+/** The trimmed text of a table's `<caption>`, or "" without one. */
+function captionOf(node: Readonly<TableElement>, ctx: HastVisitorContext): string {
+  const caption = node.children.find(
+    (child): child is TableElement => child.type === "element" && child.tagName === "caption",
+  );
+  return caption ? ctx.textContent(caption).trim() : "";
+}
+
 /**
  * Wraps tables in a focusable scroll region, so a wide table scrolls by itself on a phone and a
  * keyboard user can scroll it, and marks header cells as column headers.
@@ -44,11 +60,14 @@ export function tables(options: TablesOptions = {}): () => HastPluginDefinition 
   return () => {
     let heading: string | undefined;
     let index = 0;
-    const used = new Map<string, number>();
+    // Every label emitted in this document, so a suffixed name can't collide with one a caption
+    // or heading already produced.
+    const used = new Set<string>();
     const unique = (name: string): string => {
-      const count = (used.get(name) ?? 0) + 1;
-      used.set(name, count);
-      return count === 1 ? name : `${name} ${count}`;
+      let candidate = name;
+      for (let n = 2; used.has(candidate); n++) candidate = `${name} ${n}`;
+      used.add(candidate);
+      return candidate;
     };
     return defineHastPlugin({
       name: "sf-tables",
@@ -62,16 +81,17 @@ export function tables(options: TablesOptions = {}): () => HastPluginDefinition 
         {
           filter: ["table"],
           visit(node, ctx) {
-            const caption = node.children.find(
-              (child): child is TableElement =>
-                child.type === "element" && child.tagName === "caption",
-            );
-            const captionText = caption ? ctx.textContent(caption).trim() : "";
+            const caption = captionOf(node, ctx);
             const context: TableLabelContext = {
-              ...(captionText ? { caption: captionText } : {}),
+              ...(caption ? { caption } : {}),
               ...(heading ? { heading } : {}),
             };
-            const name = option === false ? undefined : unique(labelFor(node, index, context));
+            const name =
+              option === false
+                ? undefined
+                : unique(
+                    labelFor(node, index, context).trim() || defaultLabel(node, index, context),
+                  );
             index += 1;
             ctx.wrapNode(
               node,

@@ -22,6 +22,7 @@ import {
   type MotionPreference,
   type MotionSource,
   motionTokens,
+  revealGateHash,
   revealGateScript,
 } from "@steamfield/ui/reveal";
 import {
@@ -78,6 +79,14 @@ const props: CopyCommandProps = {
 const html = renderToStaticMarkup(createElement(CopyCommand, props));
 check(html.includes("bun add @steamfield/ui") && /<button[^>]*hidden/.test(html), "CopyCommand");
 check(html.includes('class="btn"') && html.includes('class="cmd"'), "CopyCommand part classes");
+// A wrapper forwarding its own optional props passes undefined straight through.
+function forward(buttonClassName?: string): CopyCommandProps {
+  return { id: "fwd", command: "ls", buttonClassName, promptClassName: undefined };
+}
+check(
+  !renderToStaticMarkup(createElement(CopyCommand, forward())).includes("class="),
+  "CopyCommand with undefined part classes",
+);
 check(typeof useCopy === "function", "useCopy export");
 
 // script + sequencer: pure, so they run on the server.
@@ -171,6 +180,8 @@ check(
   "gate",
 );
 new Function(revealGateScript)();
+const csp = `script-src 'self' '${revealGateHash}'`;
+check(/'sha256-[A-Za-z0-9+/]+=*'/.test(csp), "revealGateHash is a CSP source");
 const revealMotion: MotionPreference | MotionSource = {
   get: () => true,
   subscribe: () => () => {},

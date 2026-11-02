@@ -439,7 +439,12 @@ React state over the gate. Options are `PlaybackGateOptions`. Changing `duration
 
 Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a rebuilt gate. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
 
-`ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another; each new element starts a fresh gate at 0 that keeps the current rate. Until an element attaches, the gate counts the demo as in view. Detaching an element doesn't rebuild the gate, so an inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, is fine.
+`ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another:
+
+- Before any element attaches, `autoStart` waits for one, so nothing plays (and no `onStepStart` or `onComplete` fires) where nobody can see it. `play()`, `replay()` and `toggle()` still run the clock, and a gate with no element counts as in view, so a demo that never attaches a ref and starts from a button works as before.
+- An element that attaches later gets a fresh gate: elapsed 0, `started` from `autoStart`, nothing carried from the element-less gate, even if `play()` ran it.
+- Swapping one element for another keeps `elapsed`, `started`, `paused` and the rate; only option changes (`duration`, `motion`, observer options) start over at 0. An option change and a swap in the same render build one gate, at 0.
+- Detaching an element (with no new one) keeps the gate, which reads as out of view once the browser reports the removed element as no longer intersecting. An inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, doesn't rebuild.
 
 ### `useCountUp(end, options?)`
 
@@ -693,14 +698,14 @@ Every command is in the HTML and reachable through the tab links. Copy buttons r
 
 ```ts
 import "@steamfield/ui/reveal/styles.css";
-import { initReveal, motionTokens, revealGateScript } from "@steamfield/ui/reveal";
+import { initReveal, motionTokens, revealGateHash, revealGateScript } from "@steamfield/ui/reveal";
 ```
 
 One-shot scroll entrances. `initReveal(options?)` sets `data-motion-ready="true"` on `<html>` (the CSS gate) and flips `data-revealed="true"` on each `[data-reveal]` container the first time it enters the viewport or takes keyboard focus. It returns a disposer that disconnects everything and removes the gate, which leaves all content visible. Call it from a script in `<head>` (it waits for the DOM) or after the DOM is parsed.
 
 #### Recommended setup: gate before first paint
 
-Module scripts are deferred, so `initReveal()` can set the gate after the first paint, and above-the-fold `[data-reveal]` content then paints visible and jumps back to its start state. `revealGateScript` is a minified classic script (a string, under 300 bytes) that sets `data-motion-ready` synchronously. Inline it in `<head>`, then call `initReveal()` as usual:
+Module scripts are deferred, so `initReveal()` can set the gate after the first paint, and above-the-fold `[data-reveal]` content then paints visible and jumps back to its start state. `revealGateScript` is a minified classic script (a string, under 400 bytes) that sets `data-motion-ready` synchronously. Inline it in `<head>`, then call `initReveal()` as usual:
 
 ```astro
 ---
@@ -716,7 +721,14 @@ import { revealGateScript } from "@steamfield/ui/reveal";
 </script>
 ```
 
-The snippet sets the gate only when `initReveal()` would: `IntersectionObserver` exists, `prefers-reduced-motion: reduce` doesn't match, and `<html>` has no `data-sf-motion="reduce"` (set that attribute before the snippet runs if your toggle lives in storage). `initReveal()` takes over a gate that is already set, removes it when its `motion` option says no at setup, and still removes it when motion turns off later. With a `script-src` CSP, allow the snippet by hash or nonce.
+The snippet sets the gate only when `initReveal()` would: `IntersectionObserver` exists, `prefers-reduced-motion: reduce` doesn't match, and `<html>` has no `data-sf-motion="reduce"` (set that attribute before the snippet runs if your toggle lives in storage). `initReveal()` takes over a gate that is already set (marking `<html>` with `data-reveal-live`), removes it when its `motion` option says no at setup, and still removes it when motion turns off later. Without a `window` the snippet does nothing.
+
+The gate fails open. If `data-reveal-live` isn't set 3 seconds after the snippet runs, because the module 404'd, was blocked by an extension or a CSP, or an earlier import threw, the snippet removes `data-motion-ready` and everything shows. The tradeoffs:
+
+- On a connection slow enough that `initReveal()` arrives after those 3 seconds, content shows without its entrance, then `initReveal()` sets the gate again: sections below the fold still reveal on scroll, but an above-the-fold section can blink to its start state and back in. Below-the-fold content is unaffected either way.
+- Text under the gate is at `opacity: 0` until it reveals, and the browser doesn't count invisible text as a Largest Contentful Paint candidate. A hero headline behind `[data-reveal]` therefore can't be the LCP element until JavaScript runs (or the fallback fires), which can push LCP later. Leave the LCP element out of `[data-reveal]`, or reveal it with `immediate`, if that metric matters.
+
+CSP: the snippet's hash changes whenever the snippet does, so don't copy it. Read `revealGateHash` (`"sha256-<base64>"`, recomputed from the string by the test suite) when you build the header, as in `` script-src 'self' '${revealGateHash}' ``, or use a nonce. The string never contains `</script` or `<!--`, so it can't end or comment out the `<script>` element it is inlined into.
 
 ```html
 <section data-reveal>
@@ -777,7 +789,7 @@ const processor = await createSatteriMarkdownProcessor({
 | `codeBlocks.idPrefix` | `string` | `"code"` | Prefix for generated `<pre>` ids (`code-1`, `code-2`, …) |
 | `callouts.titles` | `Partial<Record<CalloutKind, string>>` | English: Note, Tip, Warning, Important, Caution | Visible titles by marker (`NOTE`, `TIP`, `WARNING`, `IMPORTANT`, `CAUTION`) |
 | `headingAnchors.label` | `(heading) => string` | `"Link to section: <text>"` | Accessible name of a heading's link |
-| `tables.regionLabel` | `string \| false \| (table, index, { caption, heading }) => string` | the caption, else `"<heading> table"`, else `"Scrollable table"` | Accessible name of the scroll region around each table. `index` is the table's 0-based position in the document, `heading` the nearest preceding heading's text (the third argument's type is exported as `TableLabelContext`). A name already used on the page gets ` 2`, ` 3` appended, so two regions never share a label (axe `landmark-unique`). `false` drops `role="region"` and the label but keeps the box focusable for keyboard scrolling |
+| `tables.regionLabel` | `string \| false \| (table, index, { caption, heading }) => string` | the caption, else `"<heading> table"`, else `"Scrollable table"` | Accessible name of the scroll region around each table. `index` is the table's 0-based position in the document, `heading` the nearest preceding heading's text (the third argument's type is exported as `TableLabelContext`). Labels are trimmed and a blank one falls back to the default. A name already used in the document gets the first free ` 2`, ` 3` appended, so two regions in one document never share a label (axe `landmark-unique`). Uniqueness is per document: a page that renders several documents (a docs index, say) needs a `regionLabel` function that prefixes each label per entry, such as with the entry's title. `false` drops `role="region"` and the label but keeps the box focusable for keyboard scrolling |
 
 What they emit:
 
@@ -820,7 +832,7 @@ new Response(docs.llmsIndex(await getCollection("docs"), String(site)));
 | --- | --- | --- | --- |
 | `name` | `string` | required | The product name; the `llms.txt` title |
 | `summary` | `string` | required | One-paragraph description under the title |
-| `intro` | `string \| string[]` | none | Extra `llms.txt` paragraphs right after the summary, one per array item |
+| `intro` | `string \| string[]` | none | Extra `llms.txt` paragraphs right after the summary, one per array item. Empty and whitespace-only entries are dropped |
 | `groups` | `string[]` | required | Group names in reading order. A page whose `group` is not listed is left out of the nav |
 | `trailingSlash` | `"always" \| "never"` | required | Must match the site's Astro `trailingSlash` setting |
 | `optionalLinks` | `{ label, href, description }[]` | required | Extra links for the "Optional" section; omitted from the file when empty |
@@ -866,7 +878,7 @@ The composable behind `AgentDemo`; call it in `setup`. `script` and `options` ma
 | `position` | `MaybeRefOrGetter<{ ms } \| { click } \| undefined>` | none | Click mode: the view follows this position, no clock runs and no controls show |
 | `active` | `MaybeRefOrGetter<boolean \| undefined>` | always active | Whether the slide is on screen. Each change from inactive to active bumps `playCount` |
 
-The result holds refs and computed values: `view`, `ready`, `started`, `playing`, `paused`, `reduced`, `complete`, `animating`, `mode` (`"static"` before mount, then `"live"`), `speed`, `turn`, `timeline`, `clickMode` (whether `position` is set) and `playCount`, plus `controls` (`play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`, as in React) and `el`, the template ref for the element whose visibility gates playback. A new element in `el` (a remount, a late `v-if`) gets a fresh gate. Bind `playCount` as `:key` on the demo root so entrances replay when the presenter returns to the slide; `AgentDemo` does this.
+The result holds refs and computed values: `view`, `ready`, `started`, `playing`, `paused`, `reduced`, `complete`, `animating`, `mode` (`"static"` before mount, then `"live"`), `speed`, `turn`, `timeline`, `clickMode` (whether `position` is set) and `playCount`, plus `controls` (`play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`, as in React) and `el`, the template ref for the element whose visibility gates playback. `el` follows the same rules as React's `ref` (see `usePlayback`): before an element is bound, autoStart waits and no callbacks fire (`play()` still runs, counted as in view); an element bound later gets a fresh gate; swapping one element for another keeps `elapsed`, `started`, `paused` and the speed; option changes start over at 0; unbinding keeps the gate, which reads as out of view. A slide re-entry (a `playCount` bump) also starts over, so the demo plays again when the presenter returns. Bind `playCount` as `:key` on the demo root so entrances replay when the presenter returns to the slide; `AgentDemo` does this.
 
 ```vue
 <script setup lang="ts">

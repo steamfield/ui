@@ -43,7 +43,8 @@ const defaultDeferred = (el: Element): boolean =>
  * enters the viewport or takes keyboard focus. Without IntersectionObserver, or when motion isn't
  * allowed, it does nothing (and removes a gate `revealGateScript` set) so every section stays
  * visible. If reduced motion turns on later, it removes the gate and stops observing. A gate that
- * `revealGateScript` already set is taken over as is.
+ * `revealGateScript` already set is taken over as is, and `data-reveal-live` on `<html>` marks the
+ * takeover so the snippet's fail-open timer leaves the gate alone.
  *
  * Call it from a script in `<head>` (it waits for the DOM) or after the DOM is parsed. Returns a
  * disposer that disconnects everything and removes the gate, which leaves all content visible.
@@ -61,6 +62,8 @@ export function initReveal(options: RevealOptions = {}): () => void {
   const readyEvent = options.readyEvent ?? "sf:reveal-ready";
   const released = new WeakSet<Element>();
   root.dataset.motionReady = "true";
+  // Tells `revealGateScript`'s fallback that the gate is in good hands.
+  root.dataset.revealLive = "true";
 
   const reveal = (el: Element): void => {
     el.setAttribute("data-revealed", "true");
@@ -141,6 +144,7 @@ export function initReveal(options: RevealOptions = {}): () => void {
     document.removeEventListener("focusin", onFocus);
     unsubscribeMotion();
     delete root.dataset.motionReady;
+    delete root.dataset.revealLive;
   }
   return dispose;
 }

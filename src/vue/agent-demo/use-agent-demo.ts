@@ -3,6 +3,7 @@ import {
   computed,
   type MaybeRefOrGetter,
   onMounted,
+  onScopeDispose,
   type Ref,
   ref,
   shallowRef,
@@ -16,6 +17,7 @@ import {
   signature,
   type ToolRegistry,
 } from "../../internal/agent-demo.ts";
+import { carryOver, sameInputs } from "../../internal/gate-rebuild.ts";
 import { defined } from "../../internal/options.ts";
 import {
   checkSpeed,
@@ -120,7 +122,10 @@ export interface UseAgentDemoResult<TData = unknown> {
   /** What to render now. */
   readonly view: ComputedRef<DemoView<TData>>;
   readonly controls: AgentDemoControls;
-  /** Bind as the template ref of the element whose visibility gates playback. */
+  /**
+   * Bind as the template ref of the element whose visibility gates playback. Until one is bound,
+   * autoStart waits; a late element gets a fresh gate and a swapped one keeps the progress.
+   */
   readonly el: Ref<Element | null>;
   /** False on the server and before mount. Show controls only once true. */
   readonly ready: ComputedRef<boolean>;
@@ -255,9 +260,16 @@ export function useAgentDemo<TData = unknown>(
     },
   );
 
-  // A new gate whenever the element (a remount on re-entry), the duration or an observer option
-  // changes. Created only after mount, so nothing reads the browser during SSR. Every source is a
-  // getter compared on its own: a shallowRef source would force the callback on any props update.
+  // The gate follows the element and the options. A swap from one element to another keeps the
+  // progress; new options, or a slide re-entry (`playCount`), start a fresh gate at 0. Before any
+  // element is bound, autoStart waits for one, so nothing plays or fires callbacks unseen; an
+  // explicit `play()` still runs it, counted as in view. An element bound later gets a fresh gate,
+  // and unbinding one keeps the gate, which then reads as out of view. Created only after mount,
+  // so nothing reads the browser during SSR. Every source is a getter compared on its own: a
+  // shallowRef source would force the callback on any props update.
+  let observed: Element | null = null;
+  let built: readonly unknown[] | null = null;
+  let unsubscribe = (): void => {};
   watch(
     [
       mounted,
@@ -269,43 +281,41 @@ export function useAgentDemo<TData = unknown>(
       () => opts.value.leaveGraceMs,
       () => opts.value.motion,
       reducedPolicy,
+      playCount,
     ] as const,
-    (
-      [
-        isMounted,
-        element,
-        duration,
-        gateAutoStart,
-        threshold,
-        rootMargin,
-        leaveGraceMs,
-        motion,
-        policy,
-      ],
-      _,
-      onCleanup,
-    ) => {
+    ([isMounted, element, ...inputs]) => {
       if (!isMounted) return;
+      const prev = gate.value;
+      const same = prev !== null && sameInputs(built, inputs);
+      // Unbinding (null) keeps the gate, like React's ref; so does an unchanged element.
+      if (same && (element === null || element === observed)) return;
+      const carry = same && observed !== null ? prev?.getState() : undefined;
+      const [duration, gateAutoStart, threshold, rootMargin, leaveGraceMs, motion, policy] = inputs;
+      unsubscribe();
+      prev?.destroy();
       const next = createPlaybackGate(element, {
         duration,
-        autoStart: gateAutoStart,
+        autoStart: element === null ? false : gateAutoStart,
         reducedPolicy: policy,
         ...defined({ speed: rate, threshold, rootMargin, leaveGraceMs, motion }),
       });
+      if (carry) carryOver(next, carry);
+      observed = element;
+      built = inputs;
       gate.value = next;
       state.value = next.getState();
-      const unsubscribe = next.subscribe(() => {
+      unsubscribe = next.subscribe(() => {
         state.value = next.getState();
-      });
-      onCleanup(() => {
-        unsubscribe();
-        next.destroy();
-        if (gate.value === next) gate.value = null;
-        state.value = IDLE;
       });
     },
     { immediate: true, flush: "post" },
   );
+  onScopeDispose(() => {
+    unsubscribe();
+    gate.value?.destroy();
+    gate.value = null;
+    state.value = IDLE;
+  });
 
   // A new script (by key) starts over.
   watch(key, () => {
