@@ -3,8 +3,31 @@
 // resolution, then runs it with Node. Keep it importing by package name, one block per subpath,
 // and add each new subpath here.
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
+import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
+import { createHastPlugins, createShikiConfig } from "@steamfield/ui/markdown";
+import { createPlaybackGate, type GateState } from "@steamfield/ui/playback";
 import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
-import { isLibraryError, LibraryError, type LibraryErrorCode } from "@steamfield/ui/script";
+import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-tabs";
+import { useCountUp, usePlayback } from "@steamfield/ui/react/playback";
+import { Tab, TabList, TabPanel, Tabs } from "@steamfield/ui/react/tabs";
+import { initReveal, motionTokens } from "@steamfield/ui/reveal";
+import {
+  type DemoScript,
+  isLibraryError,
+  LibraryError,
+  type LibraryErrorCode,
+  validateScript,
+} from "@steamfield/ui/script";
+import {
+  clickCount,
+  compile,
+  type DemoView,
+  finalState,
+  presets,
+  stateAt,
+  transcriptText,
+} from "@steamfield/ui/sequencer";
+import { type CreateTabsOptions, createTabs } from "@steamfield/ui/tabs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -28,3 +51,64 @@ const props: CopyCommandProps = { id: "cmd", command: "bun add @steamfield/ui" }
 const html = renderToStaticMarkup(createElement(CopyCommand, props));
 check(html.includes("bun add @steamfield/ui") && /<button[^>]*hidden/.test(html), "CopyCommand");
 check(typeof useCopy === "function", "useCopy export");
+
+// script + sequencer: pure, so they run on the server.
+const script: DemoScript = {
+  steps: [
+    { kind: "user", text: "hi" },
+    { kind: "agent-text", text: "Hello there." },
+  ],
+};
+validateScript(script);
+try {
+  validateScript({ steps: [{ kind: "nope" }] });
+  check(false, "an unknown step kind should throw");
+} catch (thrown) {
+  check(isLibraryError(thrown) && thrown.code === "unsupported_step", "unsupported_step");
+}
+const timeline = compile(script, { timing: presets.terminal, seed: "demo" });
+const mid: DemoView = stateAt(timeline, { ms: timeline.duration / 2 });
+const end: DemoView = finalState(timeline);
+check(!mid.complete && end.complete && end.entries.length === 2, "stateAt / finalState");
+check(clickCount(script) >= 0 && transcriptText(script).includes("Hello there."), "transcript");
+
+// playback: a gate without an element counts as in view.
+const gate = createPlaybackGate(null, { duration: 1000, motion: "full", autoStart: false });
+const state: GateState = gate.getState();
+check(typeof state.elapsed === "number", "gate state");
+gate.destroy();
+check(typeof usePlayback === "function" && typeof useCountUp === "function", "react/playback");
+
+// reveal: the motion tokens are plain data.
+check(typeof initReveal === "function" && typeof motionTokens === "object", "reveal");
+
+// tabs: the DOM controller exists; React tabs and install tabs render on the server.
+const tabOptions: CreateTabsOptions = { activation: "manual", hash: "replace" };
+check(typeof createTabs === "function" && tabOptions.activation === "manual", "tabs");
+const tabsHtml = renderToStaticMarkup(
+  createElement(
+    Tabs,
+    { id: "cmd" },
+    createElement(TabList, { "aria-label": "Commands" }, createElement(Tab, { value: "a" }, "A")),
+    createElement(TabPanel, { value: "a" }, "panel a"),
+  ),
+);
+check(tabsHtml.includes('href="#cmd-a"') && tabsHtml.includes("panel a"), "react/tabs SSR");
+const installOptions: InstallOption[] = [{ id: "npm", label: "npm", command: "npm i -g acme" }];
+const installHtml = renderToStaticMarkup(createElement(InstallTabs, { options: installOptions }));
+check(installHtml.includes("npm i -g acme"), "react/install-tabs SSR");
+
+// markdown + docs: plugin factories and pure docs helpers.
+const hastPlugins = createHastPlugins();
+check(Array.isArray(hastPlugins) || typeof hastPlugins === "object", "markdown plugins");
+check(typeof createShikiConfig().theme === "string", "shiki config");
+const docsConfig: DocsConfig = {
+  name: "Acme",
+  summary: "Docs for Acme.",
+  groups: ["Start"],
+  trailingSlash: "never",
+  optionalLinks: [],
+};
+const docs = createDocs(docsConfig);
+check(typeof docs.llmsFull([], "https://example.com") === "string", "docs llmsFull");
+check(docPath("intro", "always").endsWith("/"), "docPath trailing slash");

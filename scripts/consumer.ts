@@ -14,7 +14,15 @@ const { name, devDependencies } = JSON.parse(readFileSync(join(root, "package.js
   devDependencies: Record<string, string>;
 };
 // Optional peers the fixture exercises, installed at the versions this repo develops against.
-const CONSUMER_PEERS = ["react", "react-dom", "@types/react", "@types/react-dom"];
+const CONSUMER_PEERS = [
+  "react",
+  "react-dom",
+  "@types/react",
+  "@types/react-dom",
+  "satteri",
+  "github-slugger",
+  "shiki",
+];
 const peers = Object.fromEntries(
   CONSUMER_PEERS.map((peer) => [peer, devDependencies[peer] ?? "latest"]),
 );

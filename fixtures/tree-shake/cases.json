@@ -2,6 +2,11 @@
   {
     "entry": "copy-only.tsx",
     "present": ["data-copy-command"],
-    "absent": ["sf-agent-demo", "sf-tabs", "data-motion-ready"]
+    "absent": ["sf-agent-demo", "tab-panel", "data-motion-ready", "sf:reveal-ready"]
+  },
+  {
+    "entry": "tabs-only.tsx",
+    "present": ["tab-panel"],
+    "absent": ["sf-agent-demo", "data-copy-command", "sf:reveal-ready"]
   }
 ]
