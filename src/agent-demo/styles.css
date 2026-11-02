@@ -2,13 +2,12 @@
    framework renderer. Layered and zero-specificity, so any consumer class or utility wins.
 
    Base tokens (shared with every other stylesheet): --sf-bg, --sf-surface, --sf-fg, --sf-muted,
-   --sf-faint, --sf-accent, --sf-border, --sf-radius, --sf-font, --sf-font-size, --sf-ok,
-   --sf-fail, --sf-warn, --sf-info, --sf-demo-height (the transcript's height).
+   --sf-accent, --sf-border, --sf-radius, --sf-font, --sf-font-size, --sf-ok, --sf-fail,
+   --sf-warn, --sf-demo-height (the transcript's height).
 
    Component tokens, for the chat look:
    --sf-demo-prose-font    chat message font (default: inherit)
    --sf-demo-subtle-bg     header strip and code/composer wells
-   --sf-demo-hover         chips and pips on the surface
    --sf-demo-border-subtle hairlines inside cards
    --sf-demo-bubble-bg     user bubble
    --sf-demo-caret         typing and streaming caret
@@ -20,7 +19,8 @@
 
    There is no built-in dark mode: map these tokens in your own theme. Entrance, typing and
    loading animation only run under [data-sf-animating], with motion allowed by both the media
-   query and any [data-sf-motion="reduce"] ancestor. */
+   query and any [data-sf-motion="reduce"] ancestor. Typing and streaming come from the playback
+   clock, whose default "auto" motion source follows the same two signals. */
 @layer sf {
   :where([data-part="agent-demo"]) {
     display: flex;

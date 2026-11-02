@@ -43,6 +43,7 @@ const defaultFailed = (subject: string, { hidden }: { readonly hidden: boolean }
     : `Copy failed. The ${subject} is selected; press Cmd+C or Ctrl+C.`;
 
 const IDLE_LABEL = "sfCopyIdle";
+const READY = "data-copy-ready";
 
 /**
  * Activates every `[data-copy-command]` button under `root`. Each button names its source with
@@ -61,14 +62,21 @@ export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions
     failed: options.messages?.failed ?? defaultFailed,
     onCopy: options.onCopy,
     timers: new Map(),
+    disposed: false,
   };
   const cleanups: Array<() => void> = [];
+  const wired: HTMLButtonElement[] = [];
 
   for (const button of root.querySelectorAll<HTMLButtonElement>("[data-copy-command]")) {
-    if (!targetOf(button)) continue;
+    // A second call must not stack listeners; the marker is removed again on dispose.
+    if (!targetOf(button) || button.hasAttribute(READY)) continue;
     // Store the idle label once, so a second click while "Copied" shows can't capture it.
     button.dataset[IDLE_LABEL] ??= labelOf(button)?.textContent ?? "";
+    // A re-wire after a dispose mid-"Copied" starts from the idle label.
+    setLabel(button, button.dataset[IDLE_LABEL] ?? "");
     button.hidden = false;
+    button.setAttribute(READY, "");
+    wired.push(button);
     const listener = (): void => {
       void copyFrom(button, config);
     };
@@ -77,9 +85,15 @@ export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions
   }
 
   return () => {
+    config.disposed = true;
     for (const cleanup of cleanups) cleanup();
     for (const timer of config.timers.values()) clearTimeout(timer);
     config.timers.clear();
+    // With no listener the button would be dead, so put it back the way the server rendered it.
+    for (const button of wired) {
+      button.hidden = true;
+      button.removeAttribute(READY);
+    }
   };
 }
 
@@ -91,6 +105,7 @@ interface Config {
   readonly failed: NonNullable<CopyMessages["failed"]>;
   readonly onCopy: EnhanceCopyOptions["onCopy"];
   readonly timers: Map<HTMLElement, ReturnType<typeof setTimeout>>;
+  disposed: boolean;
 }
 
 async function copyFrom(button: HTMLElement, config: Config): Promise<void> {
@@ -101,7 +116,7 @@ async function copyFrom(button: HTMLElement, config: Config): Promise<void> {
   const ok = await copyText(target.textContent ?? "");
   // The target can be rewired while the copy is in flight (a prompt variant switch). Drop the
   // result rather than reporting it against the wrong text.
-  if (button.getAttribute("aria-controls") !== controls) return;
+  if (config.disposed || button.getAttribute("aria-controls") !== controls) return;
   const result = resultOf(button);
   clearTimeout(config.timers.get(button));
   if (ok) {
@@ -113,6 +128,7 @@ async function copyFrom(button: HTMLElement, config: Config): Promise<void> {
     };
     config.timers.set(button, setTimeout(reset, config.copiedMs));
   } else {
+    setLabel(button, button.dataset[IDLE_LABEL] ?? "");
     const hidden = isHidden(target);
     if (!hidden) selectText(target);
     show(button, result, "failed", config.failed(config.subjects[label] ?? "text", { hidden }));

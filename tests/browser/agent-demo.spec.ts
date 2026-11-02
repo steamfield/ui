@@ -8,7 +8,7 @@ const FINAL = "Both upload tests pass now.";
 test("autoplay starts once the demo is in view", async ({ page }) => {
   await page.goto("/#/agent-demo");
   const demo = page.locator(section);
-  const transcript = demo.getByRole("region", { name: "Terminal transcript" });
+  const transcript = demo.getByRole("group", { name: "Terminal transcript" });
   await expect(demo.getByRole("button", { name: "Pause" })).toBeVisible();
   await expect(demo.locator("[data-sf-animating]")).toHaveCount(1);
   await expect(transcript).toContainText("The upload tests are failing");
@@ -18,7 +18,7 @@ test("autoplay starts once the demo is in view", async ({ page }) => {
 test("pause freezes the text", async ({ page }) => {
   await page.goto("/#/agent-demo");
   const demo = page.locator(section);
-  const transcript = demo.getByRole("region", { name: "Terminal transcript" });
+  const transcript = demo.getByRole("group", { name: "Terminal transcript" });
   await expect(transcript).toContainText("The upload");
   await demo.getByRole("button", { name: "Pause" }).click();
   await expect(demo.getByRole("button", { name: "Play" })).toBeVisible();
@@ -35,20 +35,20 @@ test("replay restarts without moving focus", async ({ page }) => {
   await page.clock.runFor(30_000);
   const replay = demo.getByRole("button", { name: "Replay" });
   await expect(replay).toBeVisible();
-  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(FINAL);
+  await expect(demo.getByRole("group", { name: "Terminal transcript" })).toContainText(FINAL);
   await replay.focus();
   await replay.press("Enter");
   const pause = demo.getByRole("button", { name: "Pause" });
   await expect(pause).toBeFocused();
-  await expect(demo.getByRole("region", { name: "Terminal transcript" })).not.toContainText(FINAL);
+  await expect(demo.getByRole("group", { name: "Terminal transcript" })).not.toContainText(FINAL);
 });
 
 test("reduced motion shows the final transcript with no Pause button", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/#/agent-demo");
   const demo = page.locator(section);
-  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(FINAL);
-  await expect(demo.getByRole("region", { name: "Terminal transcript" })).toContainText(
+  await expect(demo.getByRole("group", { name: "Terminal transcript" })).toContainText(FINAL);
+  await expect(demo.getByRole("group", { name: "Terminal transcript" })).toContainText(
     "… +12 lines",
   );
   await expect(page.getByRole("button", { name: "Pause" })).toHaveCount(0);

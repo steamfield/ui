@@ -237,19 +237,19 @@ createTabs(root, { activation?: "auto" | "manual", orientation?, hash?: boolean 
                    onValueChange?(value), eventName?: string }): () => void
 ```
 
-React `Tabs` takes `value`/`defaultValue`/`onValueChange`, plus `activation`, `orientation`, `keepMounted` (default true), `asAnchors` (default true), `hash`, `eventName` and `id`. `<InstallTabs options={[{ id, label, command, note? }]} onCopy?(id, ok) labels? resetMs? defaultValue? onValueChange? activation? hash? eventName? id? className? />`.
+React `Tabs` takes `value`/`defaultValue`/`onValueChange`, plus `activation`, `orientation`, `keepMounted` (default true), `asAnchors` (default true), `hash`, `eventName` and `id`. `<InstallTabs options={[{ id, label, command, note? }]} onCopy?(id, ok) labels? resetMs? value? defaultValue? onValueChange? activation? orientation? keepMounted? asAnchors? hash? eventName? id? className? />`. The panel holding the initial selection carries `data-default`, which the no-JS CSS shows in place of the first panel.
 
 **Deviation:** `createTabs` calls its callback `onValueChange`, matching the React component, not the proposal's `onChange`. It receives the new value on a click, key or hash change.
 
 **Deviation:** `onCopy` on `InstallTabs` takes `(id, ok)` (the proposal gave `(id)`), so analytics can record failures.
 
-**Deviation:** `InstallTabs` is uncontrolled (`defaultValue`, no `value`) and does not forward `orientation`, `keepMounted` or `asAnchors`. It always uses the default of each; it has its own `labels.prompt`, `labels.copied`, `labels.copiedMessage` and `labels.failed`.
+**Deviation:** `InstallTabs` has its own `labels.prompt`, `labels.copied`, `labels.copiedMessage` and `labels.failed`. Keyboard moves under auto activation write the hash with `replaceState`; clicks and Enter/Space push.
 
 ## reveal
 
 ```ts
 initReveal({ rootMargin?, threshold?, immediate?: (el) => boolean,
-             motionAllowed?: () => boolean, deferred?: (el) => boolean,
+             motion?: "auto" | "reduce" | "full" | MotionSource, deferred?: (el) => boolean,
              readyEvent?: string }): () => void
 motionTokens: { easings, durations, springs, animationTypes, motionRoles }
 ```
@@ -303,6 +303,6 @@ Base tokens read by the stylesheets: `--sf-bg`, `--sf-surface`, `--sf-fg`, `--sf
 
 There's no built-in dark mode: each consumer maps its light/dark tokens in its own theme file. `[data-sf-motion="reduce"]` on any ancestor disables animation in `agent-demo/styles.css` and `reveal/styles.css`, alongside the media query.
 
-**Deviation:** `[data-sf-motion="reduce"]` is CSS only. The playback gate follows `prefers-reduced-motion` or a `motion` source you pass; it does not read the attribute.
+The playback gate's and `initReveal`'s default `"auto"` motion source also follow a `[data-sf-motion="reduce"]` ancestor, live, so one attribute stops both CSS and JS motion. Both accept the same `MotionSource` (`src/internal/motion.ts`, types re-exported from `playback`) for a site's saved toggle.
 
 `data-part` values and `--sf-*` names are snapshot-tested as public API. While on 0.x, a minor version is breaking and consumers pin `~0.x`.

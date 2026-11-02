@@ -19,7 +19,10 @@ export type Phase =
 
 /** One visible step. */
 export interface DemoEntry<TData = unknown> {
-  /** The step's `id` or index. Use it as the render key; never the text, which can repeat. */
+  /**
+   * `id:<id>` for a tool call with an `id`, else the step's index ("2"), so the two never collide.
+   * Use it as the render key; never the text, which can repeat.
+   */
   readonly key: string;
   readonly index: number;
   readonly step: Step<TData>;
@@ -56,7 +59,10 @@ export interface DemoView<TData = unknown> {
 /** A position: ms from the start, or a click index for click-paced playback. */
 export type Position = { readonly ms: number } | { readonly click: number };
 
-/** Which steps `finalState` keeps: every step, the last agent text and tool call, or a pick. */
+/**
+ * Which steps `finalState` keeps: every step, the last agent text and tool call (or, in a script
+ * with neither, the last command and output), or a pick.
+ */
 export type FinalPolicy = "all" | "last" | ((steps: readonly Step<unknown>[]) => number[]);
 
 export interface FinalStateOptions {
@@ -240,13 +246,16 @@ function clickView<TData>(timeline: Timeline<TData>, click: number): DemoView<TD
  * clamped to `[0, duration]`. `{ click }` shows every step whose `at` is at or below it.
  */
 export function stateAt<TData>(timeline: Timeline<TData>, position: Position): DemoView<TData> {
+  if (typeof position !== "object" || position === null) {
+    throw new LibraryError("invalid_option", { field: "position" });
+  }
   if ("ms" in position) {
     if (typeof position.ms !== "number" || Number.isNaN(position.ms)) {
       throw new LibraryError("invalid_option", { field: "position.ms" });
     }
     return timeView(timeline, position.ms);
   }
-  if (typeof position?.click !== "number" || Number.isNaN(position.click)) {
+  if (typeof position.click !== "number" || Number.isNaN(position.click)) {
     throw new LibraryError("invalid_option", { field: "position.click" });
   }
   return clickView(timeline, position.click);
@@ -255,7 +264,9 @@ export function stateAt<TData>(timeline: Timeline<TData>, position: Position): D
 function pick(policy: FinalPolicy, steps: readonly Step<unknown>[]): Set<number> {
   if (policy === "last") {
     const last = (kind: Step["kind"]): number => steps.findLastIndex((s) => s.kind === kind);
-    return new Set([last("agent-text"), last("tool-call")]);
+    const picked = [last("agent-text"), last("tool-call")];
+    if (picked.every((i) => i === -1)) return new Set([last("command"), last("output")]);
+    return new Set(picked);
   }
   if (typeof policy !== "function") throw new LibraryError("invalid_option", { field: "policy" });
   const picked = policy(steps);
@@ -268,7 +279,7 @@ function pick(policy: FinalPolicy, steps: readonly Step<unknown>[]): Set<number>
 /**
  * The finished view, for SSR, no-JS and reduced motion. "all" (the default) equals
  * `stateAt(timeline, { ms: duration })`. "last" keeps only the last agent-text and the last
- * tool-call, in script order. A function gets the steps and returns the indices to keep.
+ * tool-call, in script order; a script with neither keeps its last command and last output. A function gets the steps and returns the indices to keep.
  */
 export function finalState<TData>(
   timeline: Timeline<TData>,

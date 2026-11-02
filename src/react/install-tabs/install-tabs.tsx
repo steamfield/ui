@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useRef, useState } from "react";
-import type { TabsActivation, TabsHash } from "../../tabs/core.ts";
+import type { TabsActivation, TabsHash, TabsOrientation } from "../../tabs/core.ts";
 import { useCopy } from "../copy/use-copy.ts";
 import { Tab, TabList, TabPanel, Tabs } from "../tabs/tabs.tsx";
 
@@ -35,9 +35,17 @@ export interface InstallTabsProps {
   readonly labels?: InstallTabsLabels;
   /** How long the copied state lasts. Default 2000. */
   readonly resetMs?: number;
+  /** The selected option's id (controlled). */
+  readonly value?: string;
   readonly defaultValue?: string;
   readonly onValueChange?: (id: string) => void;
   readonly activation?: TabsActivation;
+  /** Default "horizontal". */
+  readonly orientation?: TabsOrientation;
+  /** Keep every panel rendered after hydration. Default true. See `Tabs`. */
+  readonly keepMounted?: boolean;
+  /** Render tabs as anchors. Default true. See `Tabs`. */
+  readonly asAnchors?: boolean;
   readonly hash?: TabsHash;
   readonly eventName?: string;
   /** The id prefix for tabs and panels; pass a stable one for deep links. */
@@ -54,6 +62,15 @@ const DEFAULT_LABELS: Required<InstallTabsLabels> = {
   failed: "Copy failed. Select the command and copy it manually.",
 };
 
+/** Drops undefined entries so optional props pass through under exactOptionalPropertyTypes. */
+function withoutUndefined<T extends object>(
+  props: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(props).filter(([, v]) => v !== undefined)) as {
+    [K in keyof T]?: Exclude<T[K], undefined>;
+  };
+}
+
 /**
  * Install commands in tabs, one per package manager or platform, each with a copy button.
  * Without JavaScript every command is in the HTML and reachable through the tab links; the copy
@@ -64,9 +81,13 @@ export function InstallTabs({
   onCopy,
   labels,
   resetMs,
+  value,
   defaultValue,
   onValueChange,
   activation,
+  orientation,
+  keepMounted,
+  asAnchors,
   hash,
   eventName,
   id,
@@ -74,7 +95,8 @@ export function InstallTabs({
 }: InstallTabsProps): ReactElement | null {
   const text = { ...DEFAULT_LABELS, ...labels };
   const { copied, failed, copy } = useCopy(resetMs === undefined ? {} : { resetMs });
-  const [active, setActive] = useState(defaultValue ?? options[0]?.id);
+  const [internal, setInternal] = useState(defaultValue ?? options[0]?.id);
+  const active = value ?? internal;
   // Which option the current copy result belongs to; cleared on a tab switch.
   const [resultFor, setResultFor] = useState<string | null>(null);
   const activeRef = useRef(active);
@@ -84,7 +106,7 @@ export function InstallTabs({
   if (options.length === 0) return null;
 
   const switchTo = (next: string): void => {
-    setActive(next);
+    if (value === undefined) setInternal(next);
     setResultFor(null);
     onValueChange?.(next);
   };
@@ -102,12 +124,15 @@ export function InstallTabs({
   const current = options.find((option) => option.id === active) ?? options[0];
   activeRef.current = current?.id;
   const result = current ? state(current) : undefined;
-  const optional = {
-    ...(activation === undefined ? {} : { activation }),
-    ...(hash === undefined ? {} : { hash }),
-    ...(eventName === undefined ? {} : { eventName }),
-    ...(id === undefined ? {} : { id }),
-  };
+  const optional = withoutUndefined({
+    activation,
+    orientation,
+    keepMounted,
+    asAnchors,
+    hash,
+    eventName,
+    id,
+  });
 
   return (
     <div className={className} data-part="install-tabs">

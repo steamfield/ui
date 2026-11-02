@@ -11,26 +11,27 @@ export interface CodeBlocksOptions {
   readonly idPrefix?: string;
 }
 
-const copyIcon = element(
-  "svg",
-  {
-    ariaHidden: "true",
-    width: "13",
-    height: "13",
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "2",
-  },
-  [
-    element("rect", { x: "8", y: "8", width: "13", height: "13", rx: "2" }),
-    element("path", { d: "M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" }),
-  ],
-);
+const copyIcon = (): Element =>
+  element(
+    "svg",
+    {
+      ariaHidden: "true",
+      width: "13",
+      height: "13",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+    },
+    [
+      element("rect", { x: "8", y: "8", width: "13", height: "13", rx: "2" }),
+      element("path", { d: "M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" }),
+    ],
+  );
 
 // The markup `enhanceCopyButtons` (@steamfield/ui/copy) activates: hidden until it runs, with the
 // live result region beside the button and `aria-controls` naming the code's `<pre>`.
-function copyControl(id: string, label: string, visible: string): Element {
+export function copyControl(id: string, label: string, visible: string): Element {
   return element("span", { dataCodeCopy: "" }, [
     element(
       "button",
@@ -41,7 +42,7 @@ function copyControl(id: string, label: string, visible: string): Element {
         ariaLabel: label,
         ariaControls: [id],
       },
-      [copyIcon, element("span", { dataCopyLabel: "" }, [text(visible)])],
+      [copyIcon(), element("span", { dataCopyLabel: "" }, [text(visible)])],
     ),
     element("span", {
       dataCopyResult: "",

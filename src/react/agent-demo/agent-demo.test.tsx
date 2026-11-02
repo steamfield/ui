@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
 import { compile } from "../../sequencer/compile.ts";
 import { presets } from "../../sequencer/timing.ts";
@@ -82,7 +83,7 @@ function Probe() {
   return <span>{`${demo.ready}:${demo.view.entries.length}:${demo.mode}`}</span>;
 }
 
-const region = () => screen.getByRole("region", { name: "Demo transcript" });
+const region = () => screen.getByRole("group", { name: "Demo transcript" });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -266,7 +267,7 @@ describe("playback (terminal)", () => {
     unmount();
     advance(TOTAL);
     expect(onComplete).not.toHaveBeenCalled();
-    expect(screen.queryByRole("region")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Demo transcript" })).toBeNull();
   });
 
   test("reduced motion shows everything, with no button and no 'complete' status", () => {
@@ -404,10 +405,10 @@ describe("render props", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Session" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Session" })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Sample run.");
     advance(TOTAL);
-    expect(screen.getByRole("region", { name: "Session" }).textContent).toContain("*");
+    expect(screen.getByRole("group", { name: "Session" }).textContent).toContain("*");
   });
 
   test("custom controls render from the hook result; none renders nothing", () => {
@@ -676,7 +677,8 @@ describe("every step kind", () => {
     expect(beats).toContain("a.txt ");
     expect(beats).toContain("(thinking)");
     expect(beats).toContain("Agent: Note: done");
-    expect(beats).toContain("Deploy: Failed");
+    // The terminal names the tool as its header does, server first, with no registry label.
+    expect(beats).toContain("ci deploy: Failed");
     expect(beats.at(-1)).toBe("You: ok");
     expect(region().textContent).toContain("ci deploy");
     expect(container.querySelector('[data-part="composer"] [data-part="glyph"]')?.textContent).toBe(
@@ -699,5 +701,113 @@ describe("every step kind", () => {
     expect(html).toContain('<span data-part="tool-args">query: rivers</span>');
     expect(html).toContain('aria-label="Failed">✕</span>');
     expect(html).toContain("Search");
+  });
+});
+
+/** A site motion toggle the test flips by hand. */
+function motionToggle(): MotionSource & { set(allowed: boolean): void } {
+  let allowed = true;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => allowed,
+    subscribe(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    set(next) {
+      allowed = next;
+      act(() => {
+        for (const cb of listeners) cb();
+      });
+    },
+  };
+}
+
+describe("completion, reduced motion and the play label", () => {
+  test("reducedPolicy hold freezes the frame playback reached and resumes from it", () => {
+    const motion = motionToggle();
+    render(<Terminal motion={motion} reducedPolicy="hold" />);
+    advance(startOf(1) + 50);
+    const frame = region().textContent;
+    expect(frame).not.toContain("All green.");
+    motion.set(false);
+    advance(5000);
+    expect(region().textContent).toBe(frame);
+    motion.set(true);
+    advance(TOTAL);
+    expect(region().textContent).toContain("All green.");
+  });
+
+  test("reduced motion on and off mid-play neither completes nor announces complete", () => {
+    const motion = motionToggle();
+    const onComplete = vi.fn();
+    render(<Terminal motion={motion} onComplete={onComplete} />);
+    advance(startOf(1));
+    motion.set(false);
+    motion.set(true);
+    advance(100);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toBe("Example agent session.");
+    fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+    advance(TOTAL + 100);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toBe("Demo complete.");
+  });
+
+  test("a seek or cancel before play keeps the Play label and fires no onComplete", () => {
+    const onComplete = vi.fn();
+    const { result } = renderHook(() =>
+      useAgentDemo(terminalScript, { timing: presets.terminal, autoStart: false, onComplete }),
+    );
+    act(() => result.current.controls.seek(startOf(2)));
+    expect(result.current).toMatchObject({ started: false, playing: false, animating: true });
+    expect(result.current.view.current).toBe(2);
+    act(() => result.current.controls.cancel());
+    expect(result.current).toMatchObject({ started: false, complete: true });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  test("custom controls see started stay false after a seek before play", () => {
+    render(
+      <Terminal
+        autoStart={false}
+        controls={(demo) => (
+          <button type="button" onClick={() => demo.controls.seek(startOf(2))}>
+            {`Seek ${demo.started ? "started" : "idle"}`}
+          </button>
+        )}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seek idle" }));
+    expect(screen.getByRole("button", { name: "Seek idle" })).toBeTruthy();
+    expect(region().textContent).toContain("Fix the failing test");
+  });
+
+  test("the content signature is computed once per input, not once per frame", () => {
+    let reads = 0;
+    const step = {
+      kind: "agent-text" as const,
+      get text() {
+        reads++;
+        return "Streaming a reply word by word.";
+      },
+    };
+    const script: DemoScript = { steps: [step] };
+    render(<AgentDemo script={script} layout="terminal" timing={presets.terminal} />);
+    const before = reads;
+    advance(2000);
+    expect(reads).toBe(before);
+  });
+
+  test("renderToolCall returning null keeps the default card; hidden in tools drops it", () => {
+    const html = renderToStaticMarkup(
+      <AgentDemo script={chatScript} renderToolCall={() => null} />,
+    );
+    expect(html).toContain('data-part="tool-call"');
+    const hidden = renderToStaticMarkup(
+      <AgentDemo script={chatScript} tools={{ query_sql: { hidden: true } }} />,
+    );
+    expect(hidden).not.toContain('data-part="tool-call"');
+    expect(hidden).toContain("There are 54 rows");
   });
 });

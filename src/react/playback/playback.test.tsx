@@ -299,6 +299,23 @@ describe("usePlayback", () => {
     act(() => result.current.reset());
     expect(result.current).toMatchObject({ elapsed: 0, paused: false, playing: false });
   });
+
+  test("exposes started, speed and setSpeed from the gate", () => {
+    const { result } = renderHook(() =>
+      usePlayback({ duration: 10_000, autoStart: false, speed: 2 }),
+    );
+    expect(result.current).toMatchObject({ started: false, speed: 2 });
+    act(() => result.current.seek(500));
+    expect(result.current.started).toBe(false);
+    act(() => result.current.play());
+    expect(result.current.started).toBe(true);
+    act(() => result.current.setSpeed(3));
+    expect(result.current.speed).toBe(3);
+    scroll(true);
+    const at = result.current.elapsed;
+    advance(1000);
+    expect(result.current.elapsed).toBeGreaterThan(at + 2500);
+  });
 });
 
 describe("useCountUp", () => {

@@ -23,6 +23,17 @@ for (const page of PAGES) {
       await tab.setViewportSize({ width: 390, height: 844 });
       await tab.goto(`/?theme=${mode.theme}#/${page}`);
       await tab.locator("main h1").waitFor();
+      // axe samples colors as they are painted; a reveal or entrance mid-transition reads as low
+      // contrast. Check the settled page; looping animations (carets, spinners) never settle.
+      await tab.waitForFunction(() =>
+        document
+          .getAnimations()
+          .every(
+            (animation) =>
+              animation.playState !== "running" ||
+              animation.effect?.getTiming().iterations === Number.POSITIVE_INFINITY,
+          ),
+      );
 
       const results = await new AxeBuilder({ page: tab })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])

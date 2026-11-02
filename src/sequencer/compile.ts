@@ -141,7 +141,8 @@ function typeDelay<TData>(b: Builder<TData>, step: Extract<Step, { kind: "user" 
 }
 
 function emptyTrack<TData>(step: Step<TData>, index: number, start: number): Draft<TData> {
-  const key = step.kind === "tool-call" && step.id !== undefined ? step.id : String(index);
+  // Prefixed so an id such as "2" can't collide with step 2's index key.
+  const key = step.kind === "tool-call" && step.id !== undefined ? `id:${step.id}` : String(index);
   return {
     key,
     index,

@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { defined } from "../../internal/agent-demo.ts";
 import {
   createPlaybackGate,
   type GateState,
@@ -24,10 +25,14 @@ export interface UsePlaybackResult<T extends Element> {
   /** Attach to the element whose visibility gates playback. */
   readonly ref: RefObject<T | null>;
   readonly elapsed: number;
+  /** `autoStart`, or `play()`/`replay()` has been called. */
+  readonly started: boolean;
   readonly playing: boolean;
   readonly paused: boolean;
   readonly reduced: boolean;
   readonly complete: boolean;
+  /** The clock rate: `options.speed` until changed with `setSpeed`. */
+  readonly speed: number;
   /**
    * False on the server and on the first client render, true once the gate exists. Render the
    * static or final frame while it's false, and show playback controls only once it's true.
@@ -39,6 +44,8 @@ export interface UsePlaybackResult<T extends Element> {
   readonly replay: () => void;
   readonly seek: (ms: number) => void;
   readonly reset: () => void;
+  /** Changes the clock rate, greater than 0, until `options.speed` changes. */
+  readonly setSpeed: (speed: number) => void;
 }
 
 /** Everything off: what the server and the first client render see. */
@@ -51,6 +58,7 @@ const IDLE: GateState = {
   complete: false,
   playing: false,
   elapsed: 0,
+  speed: 1,
 };
 
 const noop = (): void => {};
@@ -76,8 +84,8 @@ export function useGate<T extends Element>(
 
   useEffect(() => {
     const next = createPlaybackGate(ref.current, {
-      ...definedOnly({ autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy }),
-      ...definedOnly({ duration, speed: speed.current }),
+      ...defined({ autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy }),
+      ...defined({ duration, speed: speed.current }),
       ...(hasOnFrame ? { onFrame: (elapsed: number) => onFrame.current?.(elapsed) } : {}),
     });
     setGate(next);
@@ -112,13 +120,16 @@ export function usePlayback<T extends Element = HTMLDivElement>(
   const replay = useCallback(() => gate?.replay(), [gate]);
   const seek = useCallback((ms: number) => gate?.seek(ms), [gate]);
   const reset = useCallback(() => gate?.reset(), [gate]);
+  const setSpeed = useCallback((next: number) => gate?.setSpeed(next), [gate]);
   return {
     ref,
     elapsed: state.elapsed,
+    started: state.started,
     playing: state.playing,
     paused: state.paused,
     reduced: state.reduced,
     complete: state.complete,
+    speed: gate ? state.speed : (options.speed ?? 1),
     ready: gate !== null,
     play,
     pause,
@@ -126,12 +137,6 @@ export function usePlayback<T extends Element = HTMLDivElement>(
     replay,
     seek,
     reset,
-  };
-}
-
-/** Drops undefined values, which `exactOptionalPropertyTypes` won't pass as "absent". */
-function definedOnly<O extends object>(values: O): { [K in keyof O]?: Exclude<O[K], undefined> } {
-  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined)) as {
-    [K in keyof O]?: Exclude<O[K], undefined>;
+    setSpeed,
   };
 }

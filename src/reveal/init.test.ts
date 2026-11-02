@@ -150,9 +150,37 @@ describe("initReveal", () => {
     expect(FakeObserver.instances).toEqual([]);
   });
 
-  test("a motionAllowed predicate can veto setup", () => {
-    dispose = initReveal({ motionAllowed: () => false });
+  test('motion: "reduce" vetoes setup', () => {
+    dispose = initReveal({ motion: "reduce" });
     expect(root.dataset.motionReady).toBeUndefined();
+  });
+
+  test("a site motion store turning motion off tears reveals down", () => {
+    let allowed = true;
+    const listeners = new Set<() => void>();
+    const store = {
+      get: () => allowed,
+      subscribe(callback: () => void) {
+        listeners.add(callback);
+        return () => listeners.delete(callback);
+      },
+    };
+    dispose = initReveal({ motion: store });
+    expect(root.dataset.motionReady).toBe("true");
+    allowed = false;
+    for (const listener of listeners) listener();
+    expect(root.dataset.motionReady).toBeUndefined();
+    expect(listeners.size).toBe(0);
+  });
+
+  test('data-sf-motion="reduce" on <html> vetoes setup', () => {
+    root.setAttribute("data-sf-motion", "reduce");
+    try {
+      dispose = initReveal();
+      expect(root.dataset.motionReady).toBeUndefined();
+    } finally {
+      root.removeAttribute("data-sf-motion");
+    }
   });
 
   test("without IntersectionObserver nothing is hidden", () => {
@@ -230,5 +258,35 @@ describe("late hydration", () => {
     state.mockReturnValue("interactive");
     document.dispatchEvent(new Event("DOMContentLoaded"));
     expect(observer().targets.size).toBe(2);
+  });
+});
+
+describe("containers added after init", () => {
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  test("a container appended later is observed, and nested ones too", async () => {
+    dispose = initReveal();
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<div id="wrap"><section id="late" data-reveal></section></div><section id="top" data-reveal></section>',
+    );
+    await flush();
+    expect(observer().targets.has(byId("late"))).toBe(true);
+    expect(observer().targets.has(byId("top"))).toBe(true);
+  });
+
+  test("a late container inside a deferred island still waits for its ready event", async () => {
+    dispose = initReveal();
+    byId("island").insertAdjacentHTML("beforeend", '<section id="late" data-reveal></section>');
+    await flush();
+    expect(observer().targets.has(byId("late"))).toBe(false);
+  });
+
+  test("the disposer disconnects the mutation observer", async () => {
+    dispose = initReveal();
+    dispose();
+    document.body.insertAdjacentHTML("beforeend", '<section id="late" data-reveal></section>');
+    await flush();
+    expect(observer().targets.has(byId("late"))).toBe(false);
   });
 });

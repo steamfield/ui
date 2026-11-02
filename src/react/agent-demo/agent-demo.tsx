@@ -75,11 +75,13 @@ function PlaybackControls<TData>({
   readonly labels: AgentDemoLabels;
   readonly full: boolean;
 }): ReactElement {
-  const { controls, complete, paused, animating, timeline, speed, turn } = demo;
+  const { controls, complete, started, paused, animating, timeline, speed, turn } = demo;
   const elapsed = animating ? demo.view.elapsed : 0;
+  // At the end without having played there (motion came back after reduced motion) still replays.
+  const atEnd = complete || (animating && demo.view.complete);
   let label = labels.pause;
-  if (complete) label = labels.replay;
-  else if (paused || !animating) label = labels.play;
+  if (atEnd) label = labels.replay;
+  else if (!started || paused) label = labels.play;
   const { turnStarts, duration } = timeline;
   const turns = full && turnStarts.length > 1;
   const next = (): void => {
@@ -114,7 +116,7 @@ function PlaybackControls<TData>({
         type="button"
         data-part="control"
         data-control="play"
-        onClick={complete ? controls.replay : controls.toggle}
+        onClick={atEnd ? controls.replay : controls.toggle}
       >
         {label}
       </button>
@@ -123,7 +125,7 @@ function PlaybackControls<TData>({
           type="button"
           data-part="control"
           data-control="next"
-          disabled={complete}
+          disabled={atEnd}
           onClick={next}
         >
           {labels.next}

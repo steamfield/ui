@@ -91,6 +91,35 @@ test.describe("JavaScript disabled", () => {
         body: `<!doctype html><html><head><link rel="stylesheet" href="${css}"></head><body>${markup}</body></html>`,
       }),
     );
+    const withDefault = (keepMounted: boolean): string =>
+      renderToString(
+        createElement(
+          Tabs,
+          { id: keepMounted ? "dk" : "dn", defaultValue: "b", keepMounted },
+          createElement(
+            TabList,
+            { "aria-label": "Sections" },
+            ...["a", "b", "c"].map((n) => createElement(Tab, { key: n, value: n }, n)),
+          ),
+          ...["a", "b", "c"].map((n) => createElement(TabPanel, { key: n, value: n }, `Body ${n}`)),
+        ),
+      );
+    await page.route("**/static-default.html", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html><head><link rel="stylesheet" href="${css}"></head><body>${withDefault(true)}${withDefault(false)}</body></html>`,
+      }),
+    );
+    await page.goto("/static-default.html");
+    for (const prefix of ["dk", "dn"]) {
+      await expect(page.locator(`#${prefix}-b`)).toBeVisible();
+      await expect(page.locator(`#${prefix}-b`)).toHaveText("Body b");
+      await expect(page.locator(`#${prefix}-a`)).toBeHidden();
+      await expect(page.locator(`#${prefix}-c`)).toBeHidden();
+    }
+    await page.goto("/static-default.html#dk-c");
+    await expect(page.locator("#dk-c")).toBeVisible();
+    await expect(page.locator("#dk-b")).toBeHidden();
     await page.goto("/static-tabs.html");
     await expect(page.locator("#ssr-one")).toBeVisible();
     await expect(page.locator("#ssr-two")).toBeHidden();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { LibraryError } from "../script/errors.ts";
 import { createPlaybackGate, type MotionSource, type PlaybackGate } from "./index.ts";
 
 /** An IntersectionObserver the test drives by hand. */
@@ -286,6 +287,39 @@ describe("controls", () => {
   });
 });
 
+describe("validation", () => {
+  test.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "speed %s is invalid_option",
+    (speed) => {
+      expect(() => make({ speed })).toThrow(
+        expect.objectContaining({ code: "invalid_option", field: "speed" }),
+      );
+      const g = make();
+      expect(() => g.setSpeed(speed)).toThrow(LibraryError);
+      expect(() => g.setSpeed(speed)).toThrow(expect.objectContaining({ field: "speed" }));
+    },
+  );
+
+  test.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    "seek(%s) is invalid_option and keeps elapsed",
+    (ms) => {
+      const g = make();
+      g.seek(500);
+      expect(() => g.seek(ms)).toThrow(
+        expect.objectContaining({ code: "invalid_option", field: "ms" }),
+      );
+      expect(g.getState().elapsed).toBe(500);
+    },
+  );
+
+  test("setSpeed shows in state", () => {
+    const g = make({ speed: 2 });
+    expect(g.getState().speed).toBe(2);
+    g.setSpeed(0.5);
+    expect(g.getState().speed).toBe(0.5);
+  });
+});
+
 describe("leave grace period", () => {
   test("keeps playing through a short scroll away", () => {
     const g = make({ leaveGraceMs: 5000 });
@@ -367,6 +401,27 @@ describe("reduced motion", () => {
     setReducedMotion(true);
     const g = make({ motion: "full" });
     expect(g.getState().reduced).toBe(false);
+  });
+
+  test("auto follows a [data-sf-motion=reduce] ancestor live", async () => {
+    const g = make();
+    observer().fire(true);
+    advance(500);
+    expect(g.getState().reduced).toBe(false);
+    document.documentElement.setAttribute("data-sf-motion", "reduce");
+    await vi.waitFor(() => expect(g.getState()).toMatchObject({ reduced: true, complete: true }));
+    document.documentElement.setAttribute("data-sf-motion", "full");
+    await vi.waitFor(() => expect(g.getState().reduced).toBe(false));
+    document.documentElement.removeAttribute("data-sf-motion");
+  });
+
+  test("auto starts reduced inside a [data-sf-motion=reduce] ancestor", () => {
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-sf-motion", "reduce");
+    wrapper.append(el);
+    document.body.append(wrapper);
+    expect(make().getState().reduced).toBe(true);
+    wrapper.remove();
   });
 
   test("auto allows motion when matchMedia is missing", () => {

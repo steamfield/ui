@@ -194,3 +194,60 @@ test("copyText reports false with no clipboard and no document", async () => {
     vi.stubGlobal("document", doc);
   }
 });
+
+test("a failure after a success restores the idle label", async () => {
+  enhanceCopyButtons(document, { copiedMs: 1000 });
+  await click();
+  expect(label()).toBe("Copied");
+  writeText.mockRejectedValue(new Error("denied"));
+  document.execCommand = vi.fn(() => false);
+  delete button().dataset.state;
+  await click();
+  expect(button().dataset.state).toBe("failed");
+  expect(label()).toBe("Copy");
+  vi.advanceTimersByTime(5000);
+  expect(label()).toBe("Copy");
+});
+
+test("calling it twice wires one listener", async () => {
+  const onCopy = vi.fn();
+  const first = enhanceCopyButtons(document, { onCopy });
+  const second = enhanceCopyButtons(document, { onCopy });
+  const events = vi.fn();
+  document.addEventListener("sf:copy", events);
+  await click();
+  document.removeEventListener("sf:copy", events);
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(onCopy).toHaveBeenCalledTimes(1);
+  expect(events).toHaveBeenCalledTimes(1);
+  second();
+  first();
+});
+
+test("the disposer hides the buttons again and a later call rewires them", async () => {
+  const dispose = enhanceCopyButtons(document);
+  expect(button().hidden).toBe(false);
+  dispose();
+  expect(button().hidden).toBe(true);
+  button().click();
+  await Promise.resolve();
+  expect(writeText).not.toHaveBeenCalled();
+  enhanceCopyButtons(document);
+  expect(button().hidden).toBe(false);
+  await click();
+  expect(writeText).toHaveBeenCalledTimes(1);
+});
+
+test("a copy still in flight at dispose leaves no timer and no event", async () => {
+  let release: () => void = () => {};
+  writeText.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+  const onCopy = vi.fn();
+  const dispose = enhanceCopyButtons(document, { onCopy });
+  button().click();
+  dispose();
+  release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vi.getTimerCount()).toBe(0);
+  expect(onCopy).not.toHaveBeenCalled();
+  expect(label()).toBe("Copy");
+});

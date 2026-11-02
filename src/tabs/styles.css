@@ -1,20 +1,28 @@
 /* @steamfield/ui/tabs/styles.css: the no-JS fallback for anchor tabs, plus minimal structure.
    Before hydration every panel is in the HTML and the tabs are links to them. CSS shows the first
-   panel, or the one the URL fragment targets, so each panel is reachable by deep link. Once a
+   panel (or the one marked `data-default`), or the one the URL fragment targets, so each panel is reachable by deep link. Once a
    controller marks the root `data-live` it sets `hidden` on panels, and the fallback is off.
    Layered and zero-specificity, so any consumer class wins. That includes a `display` utility on
    a panel, so put display styles on an element inside the panel. */
 @layer sf {
   /* Without JS, hide every panel after the first unless the URL targets it... */
   :where(
-    [data-part="tabs"]:not([data-live])
+    [data-part="tabs"]:not([data-live]):not(:has([data-part="tab-panel"][data-default]))
       [data-part="tab-panel"]
       ~ [data-part="tab-panel"]:not(:target)
   ) {
     display: none;
   }
 
-  /* ...and hide the first one too while another panel is targeted. */
+  /* ...or, when a panel is marked data-default, hide all the others unless targeted... */
+  :where(
+    [data-part="tabs"]:not([data-live]):has([data-part="tab-panel"][data-default])
+      [data-part="tab-panel"]:not([data-default]):not(:target)
+  ) {
+    display: none;
+  }
+
+  /* ...and hide the first (or default) one too while another panel is targeted. */
   :where(
     [data-part="tabs"]:not([data-live]):has([data-part="tab-panel"]:target)
       [data-part="tab-panel"]:not(:target)

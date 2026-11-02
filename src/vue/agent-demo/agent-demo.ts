@@ -79,6 +79,7 @@ export interface AgentDemoProps
 export interface AgentDemoSlotState {
   readonly view: DemoView;
   readonly controls: AgentDemoControls;
+  readonly started: boolean;
   readonly playing: boolean;
   readonly paused: boolean;
   readonly complete: boolean;
@@ -106,11 +107,13 @@ function playbackControls(
   labels: AgentDemoLabels,
   full: boolean,
 ): VNode {
-  const { controls, complete, paused, animating, timeline, speed, turn } = state;
+  const { controls, complete, started, paused, animating, timeline, speed, turn } = state;
   const elapsed = animating ? state.view.elapsed : 0;
+  // At the end without having played there (motion came back after reduced motion) still replays.
+  const atEnd = complete || (animating && state.view.complete);
   let label = labels.pause;
-  if (complete) label = labels.replay;
-  else if (paused || !animating) label = labels.play;
+  if (atEnd) label = labels.replay;
+  else if (!started || paused) label = labels.play;
   const { turnStarts, duration } = timeline;
   const turns = full && turnStarts.length > 1;
   const next = (): void => {
@@ -147,7 +150,7 @@ function playbackControls(
         type: "button",
         "data-part": "control",
         "data-control": "play",
-        onClick: complete ? controls.replay : controls.toggle,
+        onClick: atEnd ? controls.replay : controls.toggle,
       },
       label,
     ),
@@ -158,7 +161,7 @@ function playbackControls(
             type: "button",
             "data-part": "control",
             "data-control": "next",
-            disabled: complete,
+            disabled: atEnd,
             onClick: next,
           },
           labels.next,
@@ -229,26 +232,19 @@ const PROPS = {
   rootMargin: null,
   leaveGraceMs: null,
   motion: null,
+  reducedPolicy: null,
   speed: null,
   onStepStart: null,
   onComplete: null,
 } as const;
 
-/**
- * The default agent demo renderer for Vue, in the same parts and `data-*` markup as the React
- * `AgentDemo`, so `agent-demo/styles.css` styles both. The server and pre-mount render are the
- * final transcript; entrance and typing CSS only apply under `[data-sf-animating]`, which is set
- * once mounted and playing (or following a click position).
- *
- * Slots: `toolCall` and `toolBody` get a `ToolCallContext`, `stage` gets `{ view }`, `header`
- * takes markup and `controls` gets the state as plain values.
- */
 type Demo = UseAgentDemoResult<unknown>;
 
 function slotState(demo: Demo): AgentDemoSlotState {
   return {
     view: demo.view.value,
     controls: demo.controls,
+    started: demo.started.value,
     playing: demo.playing.value,
     paused: demo.paused.value,
     complete: demo.complete.value,

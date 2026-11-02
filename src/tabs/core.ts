@@ -13,8 +13,10 @@ export type TabsActivation = "auto" | "manual";
 
 /**
  * `false` leaves the URL alone. `true` reads `location.hash` on mount and on `hashchange`, and
- * records each selection with `history.pushState` (Back returns to the previous tab). `"replace"`
- * reads the same way but records with `history.replaceState`, so tab switches add no history.
+ * records each selection with `history.pushState` (Back returns to the previous tab), except that
+ * arrow-key moves under auto activation use `replaceState` so a keyboard walk along the tabs
+ * doesn't fill the history. `"replace"` reads the same way but always records with
+ * `history.replaceState`, so tab switches add no history.
  */
 export type TabsHash = boolean | "replace";
 
@@ -82,12 +84,15 @@ export function tabForHash(scope: ParentNode, hash: string): HTMLElement | null 
   return tabsIn(scope).find((tab) => panelIdOf(tab) === id && !isTabDisabled(tab)) ?? null;
 }
 
-/** Records the selected panel in the URL. A no-op when `mode` is false. */
-export function writeHash(panelId: string, mode: TabsHash): void {
+/**
+ * Records the selected panel in the URL. A no-op when `mode` is false. `replace` forces
+ * `replaceState` even when `mode` is true (arrow-key moves under auto activation).
+ */
+export function writeHash(panelId: string, mode: TabsHash, replace = false): void {
   if (!mode) return;
   const history = globalThis.history;
   const url = `#${encodeURIComponent(panelId)}`;
-  if (mode === "replace") history?.replaceState(history.state, "", url);
+  if (mode === "replace" || replace) history?.replaceState(history.state, "", url);
   else history?.pushState(null, "", url);
 }
 

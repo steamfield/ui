@@ -116,11 +116,22 @@ test("server markup keeps every panel, anchors to each, and no aria-selected", (
   expect(html).not.toContain('tabindex="-1"');
 });
 
-test("keepMounted false renders only the selected panel's content", async () => {
-  const user = userEvent.setup();
+test("the server marks the defaultValue panel data-default so the no-JS CSS can show it", () => {
+  for (const keepMounted of [true, false]) {
+    const html = renderToStaticMarkup(<Four keepMounted={keepMounted} defaultValue="b" />);
+    expect(html.match(/data-default=""/g)).toHaveLength(1);
+    expect(html).toMatch(/id="t-b"[^>]*data-default=""/);
+    expect(html).toContain("panel b");
+  }
   expect(renderToStaticMarkup(<Four keepMounted={false} defaultValue="b" />)).not.toContain(
     "panel a",
   );
+  expect(renderToStaticMarkup(<Four />)).not.toContain("data-default");
+  expect(renderToStaticMarkup(<Four value="d" />)).toMatch(/id="t-d"[^>]*data-default=""/);
+});
+
+test("keepMounted false renders only the selected panel's content", async () => {
+  const user = userEvent.setup();
   expect(renderToStaticMarkup(<Four keepMounted={false} />)).toContain("panel d");
   render(<Four keepMounted={false} />);
   expect(screen.queryByText("panel b")).toBeNull();
@@ -236,6 +247,23 @@ test("hash true pushes, hash 'replace' replaces, and hashchange selects", async 
   expect(replace).toHaveBeenCalledTimes(1);
   push.mockRestore();
   replace.mockRestore();
+});
+
+test("hash true replaces for arrow-key auto activation and pushes for clicks and Enter", async () => {
+  const user = userEvent.setup();
+  render(<Four hash />);
+  const before = history.length;
+  tab("A").focus();
+  await user.keyboard("{ArrowRight}");
+  expect(location.hash).toBe("#t-b");
+  await user.keyboard("{End}");
+  expect(location.hash).toBe("#t-d");
+  expect(history.length).toBe(before);
+  await user.click(tab("A"));
+  expect(history.length).toBe(before + 1);
+  tab("B").focus();
+  await user.keyboard("{Enter}");
+  expect(history.length).toBe(before + 2);
 });
 
 test("without hash the URL is left alone and a hash is ignored", async () => {

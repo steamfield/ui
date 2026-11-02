@@ -1,8 +1,8 @@
 /* @steamfield/ui/markdown/styles.css: the structure the markdown plugins emit needs to work
    without a site theme. Layered and zero-specificity, so any consumer rule wins. */
 @layer sf {
-  /* The copy result is a live region for screen readers, not visible text. */
-  :where([data-code-copy] [data-copy-result]) {
+  /* A live region for screen readers, not visible text; a failure stays visible. */
+  :where([data-code-copy] [data-copy-result]:not([data-state="failed"])) {
     position: absolute;
     width: 1px;
     height: 1px;

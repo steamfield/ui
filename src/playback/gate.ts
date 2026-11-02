@@ -1,4 +1,5 @@
-import { type MotionPreference, type MotionSource, motionSourceFor } from "./motion.ts";
+import { LibraryError } from "../internal/errors.ts";
+import { type MotionPreference, type MotionSource, motionSourceFor } from "../internal/motion.ts";
 
 /** What a gate does once motion is not allowed: jump to the final frame, or hold this one. */
 export type ReducedPolicy = "end" | "hold";
@@ -14,7 +15,10 @@ export interface PlaybackGateOptions {
    * grace period resumes at once, as if it never left. Default 0.
    */
   readonly leaveGraceMs?: number;
-  /** Default `"auto"`, which follows `prefers-reduced-motion` live. */
+  /**
+   * Default `"auto"`, which follows `prefers-reduced-motion` and any `[data-sf-motion="reduce"]`
+   * ancestor of the element, live.
+   */
   readonly motion?: MotionPreference | MotionSource;
   /** Default `"end"`. */
   readonly reducedPolicy?: ReducedPolicy;
@@ -43,6 +47,8 @@ export interface GateState {
   readonly playing: boolean;
   /** Demo time in ms, kept across pauses. */
   readonly elapsed: number;
+  /** The clock rate. */
+  readonly speed: number;
 }
 
 export interface PlaybackGate {
@@ -53,10 +59,11 @@ export interface PlaybackGate {
   readonly toggle: () => void;
   /** Back to 0 and playing. Touches no DOM, so focus stays where it is. */
   readonly replay: () => void;
-  /** Moves `elapsed` to `ms`, clamped to `[0, duration]`. */
+  /** Moves `elapsed` to `ms`, clamped to `[0, duration]`. Throws `invalid_option` unless finite. */
   readonly seek: (ms: number) => void;
   /** Back to 0, unpaused, and started only if `autoStart`. */
   readonly reset: () => void;
+  /** Changes the clock rate. Throws `invalid_option` unless finite and greater than 0. */
   readonly setSpeed: (speed: number) => void;
   /** Disconnects every observer and listener and stops the clock. */
   readonly destroy: () => void;
@@ -77,6 +84,7 @@ const KEYS: ReadonlyArray<keyof GateState> = [
   "complete",
   "playing",
   "elapsed",
+  "speed",
 ];
 
 /**
@@ -91,7 +99,7 @@ export function createPlaybackGate(
 ): PlaybackGate {
   const config = readOptions(options);
   const clocked = options.duration !== undefined || options.onFrame !== undefined;
-  const motion = motionSourceFor(config.motion);
+  const motion = motionSourceFor(config.motion, el);
   const listeners = new Set<() => void>();
   let speed = config.speed;
   let started = config.autoStart;
@@ -117,7 +125,7 @@ export function createPlaybackGate(
     const ended = reduced && config.reducedPolicy === "end";
     const complete = ended || elapsed >= config.duration;
     const playing = started && inView && tabVisible && !paused && !reduced && !complete;
-    return { started, inView, tabVisible, paused, reduced, complete, playing, elapsed };
+    return { started, inView, tabVisible, paused, reduced, complete, playing, elapsed, speed };
   };
 
   let state = compute();
@@ -214,6 +222,7 @@ export function createPlaybackGate(
       update();
     },
     seek(ms) {
+      if (!Number.isFinite(ms)) throw new LibraryError("invalid_option", { field: "ms" });
       setElapsed(ms);
       update();
     },
@@ -224,7 +233,8 @@ export function createPlaybackGate(
       update();
     },
     setSpeed(next) {
-      speed = next;
+      speed = checkSpeed(next);
+      update();
     },
     destroy() {
       if (destroyed) return;
@@ -261,7 +271,18 @@ interface Config {
   readonly speed: number;
 }
 
-/** Applies defaults. Values are trusted as typed: TypeScript checks them at the call site. */
+/** A clock rate, finite and greater than 0, or `invalid_option`. */
+function checkSpeed(speed: number): number {
+  if (!Number.isFinite(speed) || speed <= 0) {
+    throw new LibraryError("invalid_option", { field: "speed" });
+  }
+  return speed;
+}
+
+/**
+ * Applies defaults. `speed` is checked, since 0, a negative rate or NaN would freeze, reverse or
+ * break the clock; the other values are trusted as typed.
+ */
 function readOptions(options: PlaybackGateOptions): Config {
   return {
     autoStart: options.autoStart ?? true,
@@ -271,7 +292,7 @@ function readOptions(options: PlaybackGateOptions): Config {
     motion: options.motion ?? "auto",
     reducedPolicy: options.reducedPolicy ?? "end",
     duration: options.duration ?? Number.POSITIVE_INFINITY,
-    speed: options.speed ?? 1,
+    speed: checkSpeed(options.speed ?? 1),
   };
 }
 

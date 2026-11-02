@@ -34,7 +34,10 @@ interface TabsContextValue {
   readonly orientation: TabsOrientation;
   readonly keepMounted: boolean;
   readonly asAnchors: boolean;
-  readonly pick: (value: string) => void;
+  /** The value the server rendered as selected; its panel is marked `data-default` for the CSS. */
+  readonly initial: string | undefined;
+  /** `replace` records the hash with `replaceState` (arrow keys under auto activation). */
+  readonly pick: (value: string, replace?: boolean) => void;
 }
 
 // Outside <Tabs> the parts render their static, pre-hydration markup rather than throwing.
@@ -46,6 +49,7 @@ const TabsContext = createContext<TabsContextValue>({
   orientation: "horizontal",
   keepMounted: true,
   asAnchors: true,
+  initial: undefined,
   pick: () => {},
 });
 
@@ -55,7 +59,10 @@ const tabId = (base: string, value: string): string => `${base}-${value}-tab`;
 export interface TabsProps {
   /** The selected value (controlled). */
   readonly value?: string;
-  /** The value selected first when uncontrolled. Default: the first tab, as the no-JS CSS shows. */
+  /**
+   * The value selected first when uncontrolled. Its panel is marked `data-default`, which the
+   * no-JS CSS shows. Default: the first tab.
+   */
   readonly defaultValue?: string;
   /**
    * Called whenever the selection changes: a click, a key, or a hash read (on mount or
@@ -111,22 +118,26 @@ export function Tabs({
   const root = useRef<HTMLDivElement>(null);
   const [internal, setInternal] = useState(defaultValue);
   const [hydrated, setHydrated] = useState(false);
+  const [initial] = useState(value ?? defaultValue);
   const controlled = value !== undefined;
   const selected = (controlled ? value : internal) ?? firstValue(root);
 
   const latest = useRef({ selected, controlled, onValueChange, hash, eventName, base });
   latest.current = { selected, controlled, onValueChange, hash, eventName, base };
 
-  const change = useCallback((next: string, picked: boolean) => {
+  const change = useCallback((next: string, picked: boolean, replace = false) => {
     const now = latest.current;
     if (next === now.selected) return;
     if (!now.controlled) setInternal(next);
     now.onValueChange?.(next);
     if (!picked) return;
-    writeHash(panelId(now.base, next), now.hash);
+    writeHash(panelId(now.base, next), now.hash, replace);
     announce(root.current, now.eventName, next);
   }, []);
-  const pick = useCallback((next: string) => change(next, true), [change]);
+  const pick = useCallback(
+    (next: string, replace = false) => change(next, true, replace),
+    [change],
+  );
 
   useEffect(() => {
     setHydrated(true);
@@ -143,7 +154,17 @@ export function Tabs({
 
   return (
     <TabsContext.Provider
-      value={{ base, selected, hydrated, activation, orientation, keepMounted, asAnchors, pick }}
+      value={{
+        base,
+        selected,
+        hydrated,
+        activation,
+        orientation,
+        keepMounted,
+        asAnchors,
+        initial,
+        pick,
+      }}
     >
       <div
         ref={root}
@@ -187,7 +208,7 @@ export function TabList({
     event.preventDefault();
     target.focus();
     const next = tabValue(target);
-    if (activation === "auto" && next !== null) pick(next);
+    if (activation === "auto" && next !== null) pick(next, true);
   };
   return (
     <div
@@ -265,7 +286,7 @@ export interface TabPanelProps {
  * `hidden`. With `keepMounted={false}` only the selected panel renders its children.
  */
 export function TabPanel({ value, className, children }: TabPanelProps): ReactElement {
-  const { base, selected, hydrated, keepMounted } = useContext(TabsContext);
+  const { base, selected, hydrated, keepMounted, initial } = useContext(TabsContext);
   const active = selected === value;
   return (
     <div
@@ -277,6 +298,7 @@ export function TabPanel({ value, className, children }: TabPanelProps): ReactEl
       hidden={hydrated && !active}
       className={className}
       data-part="tab-panel"
+      data-default={initial === value ? "" : undefined}
       data-state={stateOf(hydrated, active)}
     >
       {/* With no default chosen, the server can't know which panel CSS will show: render all. */}

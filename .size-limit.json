@@ -15,25 +15,25 @@
     "name": "playback",
     "path": "dist/playback/index.js",
     "import": "{ createPlaybackGate }",
-    "limit": "1.3 kB"
+    "limit": "1.7 kB"
   },
   {
     "name": "copy",
     "path": "dist/copy/index.js",
     "import": "{ enhanceCopyButtons, copyText }",
-    "limit": "1.2 kB"
+    "limit": "1.3 kB"
   },
   {
     "name": "tabs",
     "path": "dist/tabs/index.js",
     "import": "{ createTabs }",
-    "limit": "1.2 kB"
+    "limit": "1.4 kB"
   },
   {
     "name": "reveal",
     "path": "dist/reveal/index.js",
     "import": "{ initReveal }",
-    "limit": "800 B"
+    "limit": "1.05 kB"
   },
   {
     "name": "reveal (motionTokens)",
@@ -66,35 +66,35 @@
     "path": "dist/react/playback/index.js",
     "import": "{ usePlayback, useCountUp }",
     "ignore": ["react", "react-dom"],
-    "limit": "2 kB"
+    "limit": "2.7 kB"
   },
   {
     "name": "react/tabs",
     "path": "dist/react/tabs/index.js",
     "import": "{ Tabs, TabList, Tab, TabPanel }",
     "ignore": ["react", "react-dom"],
-    "limit": "1.7 kB"
+    "limit": "1.75 kB"
   },
   {
     "name": "react/install-tabs",
     "path": "dist/react/install-tabs/index.js",
     "import": "{ InstallTabs }",
     "ignore": ["react", "react-dom"],
-    "limit": "2.8 kB"
+    "limit": "2.9 kB"
   },
   {
     "name": "react/agent-demo",
     "path": "dist/react/agent-demo/index.js",
     "import": "{ AgentDemo }",
     "ignore": ["react", "react-dom"],
-    "limit": "10.5 kB"
+    "limit": "11.2 kB"
   },
   {
     "name": "react/agent-demo (headless)",
     "path": "dist/react/agent-demo/index.js",
     "import": "{ useAgentDemo }",
     "ignore": ["react", "react-dom"],
-    "limit": "7 kB"
+    "limit": "7.8 kB"
   },
   {
     "name": "react/window",
@@ -108,6 +108,6 @@
     "path": "dist/vue/agent-demo/index.js",
     "import": "{ AgentDemo }",
     "ignore": ["vue"],
-    "limit": "10.5 kB"
+    "limit": "11.2 kB"
   }
 ]

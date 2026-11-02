@@ -410,6 +410,17 @@
     }
   }
 
+  /* Print never runs the observer, so nothing may stay hidden on paper. */
+  @media print {
+    :where([data-reveal] :is([data-motion], [data-motion-part]), [data-reveal][data-motion]) {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      clip-path: none;
+      transition: none;
+    }
+  }
+
   :where(
     [data-sf-motion="reduce"] [data-reveal] :is([data-motion], [data-motion-part]),
     [data-sf-motion="reduce"] [data-reveal][data-motion]

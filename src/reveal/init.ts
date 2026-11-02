@@ -1,3 +1,5 @@
+import { type MotionPreference, type MotionSource, motionSourceFor } from "../internal/motion.ts";
+
 export interface RevealOptions {
   /** IntersectionObserver rootMargin. Default `"0px 0px -12% 0px"`. */
   readonly rootMargin?: string;
@@ -9,10 +11,12 @@ export interface RevealOptions {
    */
   readonly immediate?: (el: Element) => boolean;
   /**
-   * Whether entrances may run. Checked once at setup and again whenever `prefers-reduced-motion`
-   * changes. Default: the media query doesn't ask for reduced motion.
+   * Whether entrances may run, using the same contract as the playback gate. `"auto"` (the
+   * default) follows `prefers-reduced-motion` and any `[data-sf-motion="reduce"]` on `<html>`;
+   * pass a `MotionSource` to follow a site's saved motion toggle. When it turns motion off,
+   * reveals tear down and everything shows.
    */
-  readonly motionAllowed?: () => boolean;
+  readonly motion?: MotionPreference | MotionSource;
   /**
    * A container that hydrates late (an island) and isn't ready to animate yet. It is skipped at
    * setup and on focus until `readyEvent` fires from inside it. Default: inside
@@ -25,11 +29,7 @@ export interface RevealOptions {
 }
 
 const CONTAINER = "[data-reveal]";
-const REDUCE_QUERY = "(prefers-reduced-motion: reduce)";
 const noop = (): void => {};
-
-const defaultMotionAllowed = (): boolean =>
-  typeof matchMedia !== "function" || !matchMedia(REDUCE_QUERY).matches;
 
 const defaultDeferred = (el: Element): boolean =>
   el.closest("[data-reveal-defer]") !== null && el.closest("[data-reveal-hydrated]") === null;
@@ -45,12 +45,12 @@ const defaultDeferred = (el: Element): boolean =>
  * disposer that disconnects everything and removes the gate, which leaves all content visible.
  */
 export function initReveal(options: RevealOptions = {}): () => void {
-  const motionAllowed = options.motionAllowed ?? defaultMotionAllowed;
-  if (typeof IntersectionObserver === "undefined" || !motionAllowed()) return noop;
+  const root = document.documentElement;
+  const motion = motionSourceFor(options.motion ?? "auto", root);
+  if (typeof IntersectionObserver === "undefined" || !motion.get()) return noop;
   const immediate = options.immediate ?? (() => false);
   const deferred = options.deferred ?? defaultDeferred;
   const readyEvent = options.readyEvent ?? "sf:reveal-ready";
-  const root = document.documentElement;
   const released = new WeakSet<Element>();
   root.dataset.motionReady = "true";
 
@@ -92,9 +92,8 @@ export function initReveal(options: RevealOptions = {}): () => void {
     reveal(section);
   };
 
-  const query = typeof matchMedia === "function" ? matchMedia(REDUCE_QUERY) : undefined;
   const onMotionChange = (): void => {
-    if (!motionAllowed()) dispose();
+    if (!motion.get()) dispose();
   };
 
   const start = (): void => observe(document, false);
@@ -103,19 +102,32 @@ export function initReveal(options: RevealOptions = {}): () => void {
   } else {
     start();
   }
+  // Containers added later (client-side navigation, late renders) need arming too.
+  const mutations =
+    typeof MutationObserver === "undefined"
+      ? undefined
+      : new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (node instanceof Element) observe(node, false);
+            }
+          }
+        });
+  mutations?.observe(document.body ?? root, { childList: true, subtree: true });
   document.addEventListener(readyEvent, onReady);
   document.addEventListener("focusin", onFocus);
-  query?.addEventListener("change", onMotionChange);
+  const unsubscribeMotion = motion.subscribe(onMotionChange);
 
   let disposed = false;
   function dispose(): void {
     if (disposed) return;
     disposed = true;
     observer.disconnect();
+    mutations?.disconnect();
     document.removeEventListener("DOMContentLoaded", start);
     document.removeEventListener(readyEvent, onReady);
     document.removeEventListener("focusin", onFocus);
-    query?.removeEventListener("change", onMotionChange);
+    unsubscribeMotion();
     delete root.dataset.motionReady;
   }
   return dispose;

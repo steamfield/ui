@@ -154,6 +154,35 @@ test("hash 'replace' syncs with replaceState; hash true pushes", () => {
   push.mockRestore();
 });
 
+test("hash true replaces for arrow-key auto activation and pushes for clicks and Enter", () => {
+  dispose = createTabs(root(), { hash: true });
+  const before = history.length;
+  press(tab("A"), "ArrowRight");
+  expect(location.hash).toBe("#p-b");
+  press(tab("B"), "End");
+  expect(location.hash).toBe("#p-d");
+  expect(history.length).toBe(before);
+  tab("A").click();
+  expect(history.length).toBe(before + 1);
+  press(tab("B"), "Enter");
+  expect(history.length).toBe(before + 2);
+});
+
+test("dispose restores the markup as it was before setup", () => {
+  // Attribute order may differ after a restore, so compare each element's attributes as a map.
+  const attrs = (): Record<string, string>[] =>
+    [root(), ...root().querySelectorAll("*")].map((el) =>
+      Object.fromEntries([...el.attributes].map((a) => [a.name, a.value])),
+    );
+  const before = attrs();
+  dispose = createTabs(root());
+  expect(attrs()).not.toEqual(before);
+  dispose();
+  expect(attrs()).toEqual(before);
+  expect(root().hasAttribute("data-live")).toBe(false);
+  expect(visible()).toEqual(["p-a", "p-b", "p-c", "p-d"]);
+});
+
 test("without hash the URL is left alone", () => {
   history.replaceState(null, "", "#p-b");
   dispose = createTabs(root());
@@ -205,7 +234,7 @@ test("no tablist is a no-op, and the disposer removes listeners", () => {
   const off = createTabs(root());
   off();
   tab("2").click();
-  expect(tab("2").getAttribute("aria-selected")).toBe("false");
+  expect(tab("2").hasAttribute("aria-selected")).toBe(false);
   expect(tab("3").hasAttribute("aria-controls")).toBe(false);
 });
 

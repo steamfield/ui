@@ -36,6 +36,7 @@ const everyKind: DemoScript = {
     {
       kind: "tool-call",
       name: "q2",
+      args: "select 2",
       meta: "2 rows",
       body: { kind: "code", code: "x", collapsed: true },
     },
@@ -48,6 +49,7 @@ const everyKind: DemoScript = {
     },
     { kind: "tool-call", name: "ls", body: { kind: "lines", lines: ["a"], more: 4 } },
     { kind: "tool-call", name: "deploy", status: "error" },
+    { kind: "tool-call", name: "secret", args: "never shown" },
   ],
 };
 
@@ -68,7 +70,10 @@ const mcpBet: DemoScript = {
   ],
 };
 
-const tools = { query_sql: { label: "Ran query", runningLabel: "Running query", icon: "Q" } };
+const tools = {
+  query_sql: { label: "Ran query", runningLabel: "Running query", icon: "Q" },
+  secret: { hidden: true },
+};
 
 /** Every element in document order: tag, then each attribute but `style`, sorted; then the text. */
 function outline(root: Element): { elements: string[]; text: string } {
@@ -127,6 +132,16 @@ describe.each([
     );
     expect(parts(outline(vue)).length).toBeGreaterThan(10);
     expect(outline(vue)).toEqual(outline(react));
+    const transcript = vue.querySelector('[data-part="transcript"]');
+    expect(transcript?.tagName).toBe("DIV");
+    expect(transcript?.getAttribute("role")).toBe("group");
+    expect(vue.querySelector("section")).toBeNull();
+    expect(vue.textContent).not.toContain("never shown");
+    if (script === everyKind) {
+      const q2 = vue.querySelector('[data-tool="q2"]');
+      expect(q2?.querySelector('[data-part="tool-args"]')?.textContent).toContain("select 2");
+      expect(q2?.querySelector('[data-part="tool-meta"]')?.textContent).toBe("2 rows");
+    }
   });
 
   test("AgentDemo's server render matches React, with chrome, header and beats", async () => {
@@ -173,25 +188,36 @@ describe("live markup", () => {
       setTimeout(() => cb(performance.now()), 16),
     );
     vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
-    const props = {
-      script: everyKind,
-      layout: "terminal",
-      timing: presets.terminal,
-      controls: "full",
-    } as const;
-    const react = renderReact(createElement(ReactAgentDemo, props));
-    const vue = mount(AgentDemo, { props });
-    vueWrappers.push(vue);
-    await nextTick();
-    const duration = compile(everyKind, { timing: presets.terminal }).duration;
-    for (let t = 0; t <= duration + 400; t += 200) {
-      expect(outline(vue.element.parentElement as Element)).toEqual(outline(react.container));
-      act(() => {
-        vi.advanceTimersByTime(200);
-      });
+    for (const layout of ["terminal", "chat"] as const) {
+      const props = {
+        script: everyKind,
+        layout,
+        timing: presets.terminal,
+        controls: "full",
+        announce: "beats",
+        tools,
+      } as const;
+      const react = renderReact(createElement(ReactAgentDemo, props));
+      const vue = mount(AgentDemo, { props });
+      vueWrappers.push(vue);
       await nextTick();
+      const duration = compile(everyKind, { timing: presets.terminal }).duration;
+      const beats = new Set<string>();
+      for (let t = 0; t <= duration + 400; t += 200) {
+        expect(outline(vue.element.parentElement as Element)).toEqual(outline(react.container));
+        beats.add(vue.find('[data-part="beats"]').text());
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        await nextTick();
+      }
+      expect(vue.text()).toContain("Timed out");
+      expect(vue.find('[data-control="play"]').text()).toBe("Replay");
+      // The announcement names a tool the way its header does in that layout.
+      const header = layout === "terminal" ? "db query_sql: Completed" : "Ran query: Completed";
+      expect(beats).toContain(header);
+      expect([...beats].some((beat) => beat.startsWith("secret"))).toBe(false);
+      cleanup();
     }
-    expect(vue.text()).toContain("Timed out");
-    expect(vue.find('[data-control="play"]').text()).toBe("Replay");
   });
 });

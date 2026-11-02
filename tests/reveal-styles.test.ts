@@ -217,3 +217,22 @@ describe("motionTokens", () => {
     expect(Object.isFrozen(motionTokens)).toBe(true);
   });
 });
+
+describe("print backstop", () => {
+  test("print forces every reveal element visible", () => {
+    const print = rules.filter((rule) => rule.within.includes("@media print"));
+    expect(print).toHaveLength(1);
+    const body = print[0]?.body ?? "";
+    expect(body).toMatch(/opacity: 1;/);
+    expect(body).toMatch(/transform: none;/);
+    expect(body).toMatch(/filter: none;/);
+    expect(body).toMatch(/clip-path: none;/);
+  });
+});
+
+describe("markdown/styles.css", () => {
+  test("only the passing copy result is visually hidden; a failure stays visible", () => {
+    const markdown = readFileSync(join(import.meta.dirname, "../src/markdown/styles.css"), "utf8");
+    expect(markdown).toContain(`[data-code-copy] [data-copy-result]:not([data-state="failed"])`);
+  });
+});

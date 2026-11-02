@@ -11,7 +11,12 @@ import {
   watch,
 } from "vue";
 import { countAt, defined, signature } from "../../internal/agent-demo.ts";
-import { createPlaybackGate, type GateState, type PlaybackGate } from "../../playback/gate.ts";
+import {
+  createPlaybackGate,
+  type GateState,
+  type PlaybackGate,
+  type ReducedPolicy,
+} from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
 import type { DemoScript, Step } from "../../script/types.ts";
 import { compile, type Timeline } from "../../sequencer/compile.ts";
@@ -27,7 +32,11 @@ import {
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
    * The script's identity. When it changes, the script recompiles and playback resets to the
-   * start. Without it, the script and timing are compared by content.
+   * start. Without it, the script and timing are compared by content whenever one of them is a
+   * new object. Content comparison has two limits: a function compares by its source text, so a
+   * callback whose captured variables change is not seen as new; and a script that can't be
+   * serialized (a cycle, a BigInt) compares by identity, so building one inline restarts playback
+   * on every update. Pass `scriptKey` in either case.
    */
   readonly scriptKey?: string | undefined;
   /** Fields to change from the `chat` preset, such as `presets.terminal`. */
@@ -59,6 +68,12 @@ export interface UseAgentDemoOptions<TData = unknown> {
   readonly leaveGraceMs?: number | undefined;
   /** Default "auto", which follows `prefers-reduced-motion` live. Keep a custom source stable. */
   readonly motion?: MotionPreference | MotionSource | undefined;
+  /**
+   * What reduced motion shows: "end" (the default) is `finalState(finalPolicy)`; "hold" freezes
+   * the frame playback had reached and resumes from it when motion returns. Before playback has
+   * moved, both show the final state.
+   */
+  readonly reducedPolicy?: ReducedPolicy | undefined;
   /** Initial clock rate. Default 1. */
   readonly speed?: number | undefined;
   /**
@@ -66,7 +81,10 @@ export interface UseAgentDemoOptions<TData = unknown> {
    * seek skips over). Playing a stretch again, after a replay or a backward seek, calls it again.
    */
   readonly onStepStart?: ((index: number, step: Step<TData>) => void) | undefined;
-  /** Called when playback reaches the end. Never under reduced motion. */
+  /**
+   * Called when the clock plays through to the end. Never under reduced motion, and not for a
+   * `seek` or `cancel` to the end.
+   */
   readonly onComplete?: (() => void) | undefined;
 }
 
@@ -91,10 +109,15 @@ export interface UseAgentDemoResult<TData = unknown> {
   readonly el: Ref<Element | null>;
   /** False on the server and before mount. Show controls only once true. */
   readonly ready: ComputedRef<boolean>;
+  /** `autoStart`, or `play()`, `toggle()` or `replay()` has been called. False until mounted. */
+  readonly started: ComputedRef<boolean>;
   readonly playing: ComputedRef<boolean>;
   readonly paused: ComputedRef<boolean>;
   readonly reduced: ComputedRef<boolean>;
-  /** Playback reached the end. False under reduced motion, which shows the end without playing. */
+  /**
+   * Playback reached the end, by playing or by a `seek` or `cancel`. False under reduced motion,
+   * which shows the end without playing, and after motion returns from it.
+   */
   readonly complete: ComputedRef<boolean>;
   /**
    * Mounted with motion allowed, and either following the clock or pinned to a `position`.
@@ -126,6 +149,7 @@ const IDLE: GateState = {
   complete: false,
   playing: false,
   elapsed: 0,
+  speed: 1,
 };
 
 /**
@@ -154,14 +178,22 @@ export function useAgentDemo<TData = unknown>(
   const clickMode = computed(() => position.value !== undefined);
 
   let cache: { key: unknown; timeline: Timeline<TData> } | null = null;
+  let content: { inputs: readonly unknown[]; key: unknown } | null = null;
   const compiled = computed(() => {
     // Raw, so steps handed to callbacks are the caller's objects and not reactive proxies.
     const value = toRaw(toValue(script));
     const { scriptKey, timing, seed, composer } = opts.value;
-    const key: unknown =
-      scriptKey !== undefined
-        ? `key:${scriptKey}`
-        : (signature({ script: value, timing, seed, composer }) ?? value);
+    // The content signature is recomputed only when an input is a new object.
+    let key: unknown = `key:${scriptKey}`;
+    if (scriptKey === undefined) {
+      const inputs = [value, toRaw(timing), seed, composer];
+      let last = content;
+      if (last === null || inputs.some((input, i) => !Object.is(input, last?.inputs[i]))) {
+        last = { inputs, key: signature({ script: value, timing, seed, composer }) ?? value };
+        content = last;
+      }
+      key = last.key;
+    }
     if (cache === null || !Object.is(cache.key, key)) {
       cache = { key, timeline: compile(value, defined({ timing, seed, composer })) };
     }
@@ -190,7 +222,7 @@ export function useAgentDemo<TData = unknown>(
   const state = shallowRef<GateState>(IDLE);
   const speed = ref(opts.value.speed ?? 1);
   const autoStart = computed(() => opts.value.autoStart ?? true);
-  const started = ref(autoStart.value);
+  const reducedPolicy = computed(() => opts.value.reducedPolicy ?? "end");
 
   watch(
     () => opts.value.speed,
@@ -212,9 +244,20 @@ export function useAgentDemo<TData = unknown>(
       () => opts.value.rootMargin,
       () => opts.value.leaveGraceMs,
       () => opts.value.motion,
+      reducedPolicy,
     ] as const,
     (
-      [isMounted, element, duration, gateAutoStart, threshold, rootMargin, leaveGraceMs, motion],
+      [
+        isMounted,
+        element,
+        duration,
+        gateAutoStart,
+        threshold,
+        rootMargin,
+        leaveGraceMs,
+        motion,
+        policy,
+      ],
       _,
       onCleanup,
     ) => {
@@ -223,6 +266,7 @@ export function useAgentDemo<TData = unknown>(
         duration,
         autoStart: gateAutoStart,
         speed: speed.value,
+        reducedPolicy: policy,
         ...defined({ threshold, rootMargin, leaveGraceMs, motion }),
       });
       gate.value = next;
@@ -244,14 +288,18 @@ export function useAgentDemo<TData = unknown>(
 
   // A new script (by key) starts over.
   watch(key, () => {
-    started.value = autoStart.value;
     gate.value?.reset();
   });
 
   const ready = computed(() => gate.value !== null);
   const elapsed = computed(() => state.value.elapsed);
-  const live = computed(
-    () => !clickMode.value && ready.value && !state.value.reduced && started.value,
+  // The clock has moved: started, or a seek before play. Before that the view is the final state.
+  const moved = computed(
+    () => !clickMode.value && ready.value && (state.value.started || elapsed.value > 0),
+  );
+  const live = computed(() => moved.value && !state.value.reduced);
+  const held = computed(
+    () => moved.value && state.value.reduced && reducedPolicy.value === "hold" && elapsed.value > 0,
   );
 
   let firedUpTo = -1;
@@ -269,36 +317,33 @@ export function useAgentDemo<TData = unknown>(
     }
   });
 
-  const finished = computed(() => live.value && state.value.complete);
-  watch(finished, (done) => {
-    if (done) opts.value.onComplete?.();
+  // The end counts only when the clock plays across it, or a seek or cancel lands on it; never
+  // the jump reduced motion makes. `from` is where the last move started.
+  const ended = ref(false);
+  let from = 0;
+  watch([elapsed, live, () => state.value.playing] as const, ([t, isLive], [, , wasPlaying]) => {
+    const { duration } = timeline.value;
+    if (t < duration) ended.value = false;
+    else if (isLive && wasPlaying && from < duration) {
+      ended.value = true;
+      opts.value.onComplete?.();
+    }
+    from = t;
   });
 
-  const start = (): void => {
-    started.value = true;
+  const seek = (ms: number): void => {
+    const { duration } = timeline.value;
+    gate.value?.seek(ms);
+    from = Math.min(Math.max(ms, 0), duration);
+    if (ms >= duration) ended.value = true;
   };
   const controls: AgentDemoControls = {
-    play: () => {
-      start();
-      gate.value?.play();
-    },
+    play: () => gate.value?.play(),
     pause: () => gate.value?.pause(),
-    toggle: () => {
-      start();
-      gate.value?.toggle();
-    },
-    replay: () => {
-      start();
-      gate.value?.replay();
-    },
-    seek: (ms: number) => {
-      start();
-      gate.value?.seek(ms);
-    },
-    cancel: () => {
-      start();
-      gate.value?.seek(timeline.value.duration);
-    },
+    toggle: () => gate.value?.toggle(),
+    replay: () => gate.value?.replay(),
+    seek,
+    cancel: () => seek(timeline.value.duration),
     setSpeed: (next: number) => {
       speed.value = next;
     },
@@ -306,7 +351,7 @@ export function useAgentDemo<TData = unknown>(
 
   const view = computed<DemoView<TData>>(() => {
     if (position.value !== undefined) return stateAt(timeline.value, position.value);
-    if (live.value) return stateAt(timeline.value, { ms: elapsed.value });
+    if (live.value || held.value) return stateAt(timeline.value, { ms: elapsed.value });
     return finalState(timeline.value, { policy: opts.value.finalPolicy ?? "all" });
   });
 
@@ -315,10 +360,11 @@ export function useAgentDemo<TData = unknown>(
     controls,
     el,
     ready,
+    started: computed(() => live.value && state.value.started),
     playing: computed(() => live.value && state.value.playing),
     paused: computed(() => state.value.paused),
     reduced: computed(() => state.value.reduced),
-    complete: computed(() => (clickMode.value ? view.value.complete : finished.value)),
+    complete: computed(() => (clickMode.value ? view.value.complete : live.value && ended.value)),
     animating: computed(
       () => live.value || (clickMode.value && ready.value && !state.value.reduced),
     ),

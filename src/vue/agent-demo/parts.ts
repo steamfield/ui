@@ -25,7 +25,8 @@ import {
   type ToolRegistry as BaseToolRegistry,
   promptFor,
   spinnerFrame,
-  toolLabel,
+  toolHidden,
+  toolName,
 } from "../../internal/agent-demo.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
@@ -62,7 +63,10 @@ export interface ToolCallContext<TData = unknown> {
   readonly mode: "static" | "live";
 }
 
-/** A slot over a tool call. Rendering nothing (or only comments) keeps the built-in rendering. */
+/**
+ * A slot over a tool call. Rendering nothing (or only comments) keeps the built-in rendering; to
+ * leave a tool's calls out, set `hidden` in the tool registry.
+ */
 export type ToolSlot<TData = unknown> = (ctx: ToolCallContext<TData>) => VNode[];
 
 /** Everything the parts need besides the view. */
@@ -264,17 +268,14 @@ function toolHeader<TData>(
   const terminal = config.layout === "terminal";
   const running = entry.status === "running";
   const iconValue = terminal ? undefined : config.tools?.[step.name]?.icon;
-  const name = terminal
-    ? `${step.server ? `${step.server} ` : ""}${step.name}`
-    : toolLabel(config.tools, step.name, running);
-  const showArgs = step.args !== undefined && (terminal || !step.meta);
+  const name = toolName(config.tools, step, config.layout, running);
   return h("div", { "data-part": "tool-header" }, [
     statusPip(running, entry.status === "error", config, frame),
     iconValue
       ? h("span", { "data-part": "tool-icon", "aria-hidden": "true" }, [icon(iconValue)])
       : null,
     h("span", { "data-part": "tool-label" }, name),
-    showArgs
+    step.args !== undefined
       ? h("span", { "data-part": "tool-args" }, terminal ? `(${step.args})` : step.args)
       : null,
     step.meta ? h("span", { "data-part": "tool-meta" }, step.meta) : null,
@@ -340,6 +341,7 @@ function toolCall<TData>(
   frame: string,
 ): VNodeChild {
   const step = entry.step as ToolCallStep<TData>;
+  if (toolHidden(config.tools, step.name)) return null;
   const loading = entry.status === "running" || (step.body !== undefined && !entry.bodyVisible);
   const ctx: ToolCallContext<TData> = {
     step,
@@ -392,13 +394,19 @@ function entryNodes<TData>(
 /**
  * The scrollable transcript: an outer `column-reverse` scroller around an inner `column`, so it
  * anchors to the bottom without JS, leaves a reader who scrolled up alone, and keeps DOM order
- * equal to visual order. Focusable so keyboard users can scroll it.
+ * equal to visual order. Focusable so keyboard users can scroll it. A named group rather than a
+ * landmark, so two demos on one page don't repeat a region.
  */
 export function transcript<TData>(view: DemoView<TData>, config: PartsConfig<TData>): VNode {
   const frame = spinnerFrame(config.glyphs.spinner, view.elapsed);
   return h(
-    "section",
-    { "data-part": "transcript", tabindex: 0, "aria-label": config.labels.transcript },
+    "div",
+    {
+      "data-part": "transcript",
+      role: "group",
+      tabindex: 0,
+      "aria-label": config.labels.transcript,
+    },
     [
       h(
         "div",

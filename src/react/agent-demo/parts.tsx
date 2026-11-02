@@ -11,7 +11,8 @@ import {
   type AgentDemoLayout,
   promptFor,
   spinnerFrame,
-  toolLabel,
+  toolHidden,
+  toolName,
 } from "../../internal/agent-demo.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
@@ -36,8 +37,8 @@ export interface ToolCallContext<TData = unknown> {
 }
 
 /**
- * Replaces a whole tool card, or a tool card's body. Return `undefined` to fall back to the
- * built-in rendering.
+ * Replaces a whole tool card, or a tool card's body. Return `undefined` or `null` to fall back to
+ * the built-in rendering; to leave a tool's calls out, set `hidden` in the tool registry.
  */
 export type ToolRenderer<TData = unknown> = (ctx: ToolCallContext<TData>) => ReactNode | undefined;
 
@@ -263,10 +264,7 @@ function ToolHeader<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactE
   const terminal = config.layout === "terminal";
   const running = entry.status === "running";
   const icon = terminal ? undefined : config.tools?.[step.name]?.icon;
-  const name = terminal
-    ? `${step.server ? `${step.server} ` : ""}${step.name}`
-    : toolLabel(config.tools, step.name, running);
-  const showArgs = step.args !== undefined && (terminal || !step.meta);
+  const name = toolName(config.tools, step, config.layout, running);
   return (
     <div data-part="tool-header">
       <ToolStatusPip
@@ -281,7 +279,7 @@ function ToolHeader<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactE
         </span>
       ) : null}
       <span data-part="tool-label">{name}</span>
-      {showArgs ? (
+      {step.args !== undefined ? (
         <span data-part="tool-args">{terminal ? `(${step.args})` : step.args}</span>
       ) : null}
       {step.meta ? <span data-part="tool-meta">{step.meta}</span> : null}
@@ -295,7 +293,7 @@ function ToolBodyContent<TData>({
   body,
 }: Omit<ToolPartProps<TData>, "frame"> & { readonly body: ToolBody<TData> }): ReactNode {
   const custom = config.renderToolBody?.(ctx);
-  if (custom !== undefined) return custom;
+  if (custom != null) return custom;
   return <BuiltInBody body={body} labels={config.labels} />;
 }
 
@@ -359,6 +357,7 @@ function ToolCall<TData>({
   readonly frame: string;
 }): ReactNode {
   const step = entry.step as ToolCallStep<TData>;
+  if (toolHidden(config.tools, step.name)) return null;
   const loading = entry.status === "running" || (step.body !== undefined && !entry.bodyVisible);
   const ctx: ToolCallContext<TData> = {
     step,
@@ -368,7 +367,7 @@ function ToolCall<TData>({
     mode: config.mode,
   };
   const replaced = config.renderToolCall?.(ctx);
-  if (replaced !== undefined) return replaced;
+  if (replaced != null) return replaced;
   return <ToolCard ctx={ctx} config={config} frame={frame} />;
 }
 
@@ -421,7 +420,8 @@ function Entry<TData>({
 /**
  * The scrollable transcript: an outer `column-reverse` scroller around an inner `column`, so it
  * anchors to the bottom without JS, leaves a reader who scrolled up alone, and keeps DOM order
- * equal to visual order. Focusable so keyboard users can scroll it.
+ * equal to visual order. Focusable so keyboard users can scroll it. A named group rather than a
+ * landmark, so two demos on one page don't repeat a region.
  */
 export function Transcript<TData>({
   view,
@@ -433,7 +433,8 @@ export function Transcript<TData>({
   const frame = spinnerFrame(config.glyphs.spinner, view.elapsed);
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard reachable (axe scrollable-region-focusable)
-    <section data-part="transcript" tabIndex={0} aria-label={config.labels.transcript}>
+    // biome-ignore lint/a11y/useSemanticElements: a fieldset would add form semantics; a named group isn't a landmark, so two demos don't repeat one (axe landmark-unique)
+    <div data-part="transcript" role="group" tabIndex={0} aria-label={config.labels.transcript}>
       <div data-part="turns">
         {view.entries.map((entry) => (
           <Fragment key={entry.key}>
@@ -441,7 +442,7 @@ export function Transcript<TData>({
           </Fragment>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 

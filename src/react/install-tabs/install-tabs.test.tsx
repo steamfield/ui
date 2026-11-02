@@ -44,6 +44,35 @@ test("shows the first command before any interaction", () => {
   expect(screen.getByRole("tabpanel").textContent).toContain("npm install -g acme");
 });
 
+test("value controls the selected option and onValueChange reports requests", async () => {
+  const user = setup();
+  const onValueChange = vi.fn();
+  const { rerender } = render(
+    <InstallTabs options={options} value="bun" onValueChange={onValueChange} />,
+  );
+  expect(screen.getByRole("tabpanel").textContent).toContain("bun add -g acme");
+  await user.click(screen.getByRole("tab", { name: "brew" }));
+  expect(onValueChange).toHaveBeenCalledWith("brew");
+  expect(screen.getByRole("tabpanel").textContent).toContain("bun add -g acme");
+  rerender(<InstallTabs options={options} value="brew" onValueChange={onValueChange} />);
+  expect(screen.getByRole("tabpanel").textContent).toContain("brew install acme");
+});
+
+test("forwards orientation, keepMounted and asAnchors to Tabs", () => {
+  const { container } = render(
+    <InstallTabs options={options} orientation="vertical" keepMounted={false} asAnchors={false} />,
+  );
+  expect(screen.getByRole("tablist").getAttribute("aria-orientation")).toBe("vertical");
+  expect(screen.getByRole("tab", { name: "npm" }).tagName).toBe("BUTTON");
+  expect(container.textContent).not.toContain("bun add -g acme");
+});
+
+test("the server marks the defaultValue panel for the no-JS CSS", () => {
+  const html = renderToStaticMarkup(<InstallTabs options={options} defaultValue="bun" id="i" />);
+  expect(html).toMatch(/id="i-bun"[^>]*data-default=""/);
+  expect(html.match(/data-default=""/g)).toHaveLength(1);
+});
+
 test("switches tabs by click and arrow keys", async () => {
   const user = setup();
   render(<InstallTabs options={options} />);

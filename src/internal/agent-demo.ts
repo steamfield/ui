@@ -106,6 +106,8 @@ export interface ToolInfo<TIcon = unknown> {
   readonly icon?: TIcon;
   /** Any CSS color; sets `--sf-tool-accent` on the card. */
   readonly accent?: string;
+  /** Leaves the tool's calls out of the transcript and the announcements, in both layouts. */
+  readonly hidden?: boolean;
 }
 
 /** The consumer's tool registry, by tool `name`. */
@@ -123,11 +125,36 @@ export function humanize(name: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-/** The header label for a tool, from the registry or its name. */
+/** The chat header label for a tool, from the registry or its name. */
 export function toolLabel(tools: ToolRegistry | undefined, name: string, running: boolean): string {
   const info = tools?.[name];
   const label = info?.label ?? humanize(name);
   return running ? (info?.runningLabel ?? label) : label;
+}
+
+/** The fields of a tool-call step that name it. */
+export interface ToolNameStep {
+  readonly name: string;
+  readonly server?: string;
+}
+
+/**
+ * What a tool call's header shows and its beat announces: the registry label in the chat layout,
+ * the raw `server name` in the terminal layout, which ignores the registry's labels.
+ */
+export function toolName(
+  tools: ToolRegistry | undefined,
+  step: ToolNameStep,
+  layout: AgentDemoLayout,
+  running: boolean,
+): string {
+  if (layout === "terminal") return `${step.server ? `${step.server} ` : ""}${step.name}`;
+  return toolLabel(tools, step.name, running);
+}
+
+/** Whether the registry hides this tool's calls. */
+export function toolHidden(tools: ToolRegistry | undefined, name: string): boolean {
+  return tools?.[name]?.hidden === true;
 }
 
 /** Demo time per spinner frame. */
@@ -146,7 +173,7 @@ export type StepText =
       readonly lead?: string;
     }
   | { readonly kind: "output"; readonly lines: readonly (string | { readonly text: string })[] }
-  | { readonly kind: "tool-call"; readonly name: string }
+  | { readonly kind: "tool-call"; readonly name: string; readonly server?: string }
   | { readonly kind: "thinking" | "pause" };
 
 /** The fields of a view entry `beatText` reads. Every `DemoEntry` is assignable to it. */
@@ -168,6 +195,7 @@ export function promptFor(steps: readonly StepText[], index: number, fallback: s
 
 /** What `beatText` needs from a renderer's config. */
 export interface BeatConfig {
+  readonly layout: AgentDemoLayout;
   readonly labels: AgentDemoLabels;
   readonly glyphs: AgentDemoGlyphs;
   readonly tools: ToolRegistry | undefined;
@@ -189,8 +217,9 @@ export function beatText(entry: EntryText | undefined, config: BeatConfig): stri
     case "output":
       return step.lines.map((l) => (typeof l === "string" ? l : l.text)).join(" ");
     case "tool-call": {
+      if (toolHidden(config.tools, step.name)) return "";
       const status = entry.status === "error" ? labels.failed : labels.done;
-      return `${toolLabel(config.tools, step.name, false)}: ${status}`;
+      return `${toolName(config.tools, step, config.layout, false)}: ${status}`;
     }
     default:
       return "";

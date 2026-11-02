@@ -50,7 +50,7 @@ export interface Timing<TData = unknown> {
   readonly gapMs: Span;
 }
 
-const clampTool = (): number => 1000;
+const flatToolMs = (): number => 1000;
 
 /**
  * The chat preset reproduces the OpenData chat demo: a 400–800ms start, per-character typing with
@@ -76,7 +76,7 @@ const chat: Timing = Object.freeze({
   readMs: [1000, 1600],
   lineMs: 45,
   revealCapMs: 2400,
-  toolMs: clampTool,
+  toolMs: flatToolMs,
   gapMs: [500, 900],
 } as const);
 

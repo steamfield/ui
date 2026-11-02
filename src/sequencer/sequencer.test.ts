@@ -128,12 +128,24 @@ describe("monotonicity", () => {
     expect(view.entries.map((e) => e.key)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
     expect(finalState(chat()).entries.map((e) => e.key)).toEqual([
       "0",
-      "search",
+      "id:search",
       "2",
       "3",
-      "chart",
+      "id:chart",
       "5",
     ]);
+  });
+
+  test("a tool-call id that looks like an index never collides with that step's key", () => {
+    const timeline = compile({
+      steps: [
+        { kind: "user", text: "q" },
+        { kind: "tool-call", name: "a", id: "2" },
+        { kind: "agent-text", text: "done" },
+      ],
+    });
+    const keys = finalState(timeline).entries.map((e) => e.key);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   test("complete flips exactly at duration", () => {
@@ -486,6 +498,19 @@ describe("finalState", () => {
     expect(finalState(textFirst, { policy: "last" }).entries.map((e) => e.index)).toEqual([1, 2]);
   });
 
+  test('"last" on a commands-only script keeps the last command and output', () => {
+    const commands = compile({
+      steps: [
+        { kind: "command", text: "make" },
+        { kind: "output", lines: ["built"] },
+        { kind: "command", text: "make test" },
+        { kind: "output", lines: ["ok"] },
+      ],
+    });
+    const view = finalState(commands, { policy: "last" });
+    expect(view.entries.map((e) => e.index)).toEqual([2, 3]);
+  });
+
   test("a function policy picks indices", () => {
     const view = finalState(timeline, { policy: (steps) => [steps.length - 1, 0, 0] });
     expect(view.entries.map((e) => e.index)).toEqual([0, 5]);
@@ -547,6 +572,12 @@ describe("options", () => {
       code: "invalid_option",
       field: "position.click",
     });
+    for (const position of [null, undefined, 3]) {
+      expect(failure(() => stateAt(timeline, position as never))).toEqual({
+        code: "invalid_option",
+        field: "position",
+      });
+    }
     expect(failure(() => stateAt({ ...timeline }, { ms: 0 }))).toEqual({
       code: "invalid_option",
       field: "timeline",

@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createSSRApp, defineComponent, h, nextTick, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
+import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
 import { compile } from "../../sequencer/compile.ts";
 import { presets } from "../../sequencer/timing.ts";
@@ -657,5 +658,128 @@ describe("useAgentDemo", () => {
     await nextTick();
     expect(demo?.speed.value).toBe(3);
     expect(demo?.timeline.value).toBe(first);
+  });
+});
+
+/** A site motion toggle the test flips by hand. */
+function motionToggle(): MotionSource & { set(allowed: boolean): Promise<void> } {
+  let allowed = true;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => allowed,
+    subscribe(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    async set(next) {
+      allowed = next;
+      for (const cb of listeners) cb();
+      await nextTick();
+    },
+  };
+}
+
+describe("completion, reduced motion and the play label", () => {
+  test("reducedPolicy hold freezes the frame playback reached and resumes from it", async () => {
+    const motion = motionToggle();
+    const w = await mountDemo({ motion, reducedPolicy: "hold" });
+    await advance(startOf(1) + 50);
+    const frame = region(w);
+    expect(frame).not.toContain("All green.");
+    await motion.set(false);
+    await advance(5000);
+    expect(region(w)).toBe(frame);
+    await motion.set(true);
+    await advance(TOTAL);
+    expect(region(w)).toContain("All green.");
+  });
+
+  test("reduced motion on and off mid-play neither completes nor announces complete", async () => {
+    const motion = motionToggle();
+    const onComplete = vi.fn();
+    const w = await mountDemo({ motion, onComplete });
+    await advance(startOf(1));
+    await motion.set(false);
+    await motion.set(true);
+    await advance(100);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(w.find('[role="status"]').text()).toBe("Example agent session.");
+    await button(w, "Replay").trigger("click");
+    await advance(TOTAL + 100);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(w.find('[role="status"]').text()).toBe("Demo complete.");
+  });
+
+  test("a seek or cancel before play keeps started false and fires no onComplete", async () => {
+    const onComplete = vi.fn();
+    let demo: UseAgentDemoResult | undefined;
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(terminalScript, {
+        timing: presets.terminal,
+        autoStart: false,
+        onComplete,
+      });
+      demo = result;
+      return () => h("div", { ref: result.el });
+    });
+    wrappers.push(mount(Probe));
+    await nextTick();
+    demo?.controls.seek(startOf(2));
+    await nextTick();
+    expect(demo?.started.value).toBe(false);
+    expect(demo?.playing.value).toBe(false);
+    expect(demo?.animating.value).toBe(true);
+    expect(demo?.view.value.current).toBe(2);
+    demo?.controls.cancel();
+    await nextTick();
+    expect(demo?.started.value).toBe(false);
+    expect(demo?.complete.value).toBe(true);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  test("the controls slot sees started stay false after a seek before play", async () => {
+    const w = await mountDemo(
+      { autoStart: false },
+      {
+        controls: (state: AgentDemoSlotState) => [
+          h(
+            "button",
+            { type: "button", onClick: () => state.controls.seek(startOf(2)) },
+            `Seek ${state.started ? "started" : "idle"}`,
+          ),
+        ],
+      },
+    );
+    await button(w, "Seek idle").trigger("click");
+    expect(button(w, "Seek idle")).toBeTruthy();
+    expect(region(w)).toContain("Fix the failing test");
+  });
+
+  test("the content signature is computed once per input, not on every update", async () => {
+    let reads = 0;
+    const step = {
+      kind: "agent-text" as const,
+      get text() {
+        reads++;
+        return "Streaming a reply word by word.";
+      },
+    };
+    const script: DemoScript = { steps: [step] };
+    const w = await mountDemo({ script, header: "a" });
+    const before = reads;
+    await w.setProps({ header: "b" });
+    await advance(2000);
+    expect(reads).toBe(before);
+  });
+
+  test("hidden in tools drops a tool's cards", async () => {
+    const w = await mountDemo({
+      script: chatScript,
+      layout: "chat",
+      tools: { query_sql: { hidden: true } },
+    });
+    await advance(20_000);
+    expect(w.find('[data-part="tool-call"]').exists()).toBe(false);
+    expect(region(w)).toContain("There are 54 rows");
   });
 });
