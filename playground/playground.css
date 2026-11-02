@@ -2,7 +2,7 @@
 
 @import "@steamfield/ui/copy/styles.css";
 @import "@steamfield/ui/agent-demo/styles.css";
-@import "@steamfield/ui/react/window/styles.css";
+@import "@steamfield/ui/window/styles.css";
 @import "@steamfield/ui/tabs/styles.css";
 @import "@steamfield/ui/react/install-tabs/styles.css";
 @import "@steamfield/ui/reveal/styles.css";

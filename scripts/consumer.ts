@@ -22,6 +22,8 @@ const CONSUMER_PEERS = [
   "satteri",
   "github-slugger",
   "shiki",
+  "vue",
+  "@types/node",
 ];
 const peers = Object.fromEntries(
   CONSUMER_PEERS.map((peer) => [peer, devDependencies[peer] ?? "latest"]),

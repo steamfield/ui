@@ -38,6 +38,7 @@ const api: Record<string, string[]> = {
   "react/tabs/index.ts": ["Tab", "TabList", "TabPanel", "Tabs"],
   "react/window/index.ts": ["DemoWindow"],
   "tabs/index.ts": ["createTabs"],
+  "vue/agent-demo/index.ts": ["AgentDemo", "StaticTranscript", "useAgentDemo"],
   "script/index.ts": ["LibraryError", "isLibraryError", "validateScript"],
   "sequencer/index.ts": [
     "clickCount",

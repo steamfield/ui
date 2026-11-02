@@ -7,18 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  type AgentDemoLayout,
+  promptFor,
+  spinnerFrame,
+  toolLabel,
+} from "../../internal/agent-demo.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
 import type { DemoEntry, DemoView } from "../../sequencer/view.ts";
-import {
-  type AgentDemoGlyphs,
-  type AgentDemoLabels,
-  type ToolRegistry,
-  toolLabel,
-} from "./labels.ts";
+import type { AgentDemoGlyphs, AgentDemoLabels, ToolRegistry } from "./labels.ts";
 
-/** The two looks over one set of parts. */
-export type AgentDemoLayout = "chat" | "terminal";
+export type { AgentDemoLayout } from "../../internal/agent-demo.ts";
 
 /** What `renderToolCall` and `renderToolBody` receive. */
 export interface ToolCallContext<TData = unknown> {
@@ -65,8 +65,6 @@ export const srOnly: CSSProperties = {
   whiteSpace: "nowrap",
   border: 0,
 };
-
-const SPINNER_FRAME_MS = 80;
 
 const Caret = (): ReactElement => <span data-part="caret" aria-hidden="true" />;
 
@@ -115,14 +113,6 @@ export function Thinking({ label }: { readonly label: string }): ReactElement {
       <span data-part="thinking-dot" />
     </div>
   );
-}
-
-function promptFor(steps: readonly Step<unknown>[], index: number, fallback: string): string {
-  for (let i = index - 1; i >= 0; i--) {
-    const step = steps[i];
-    if (step?.kind === "prompt") return step.text;
-  }
-  return fallback;
 }
 
 function Message<TData>({
@@ -440,9 +430,7 @@ export function Transcript<TData>({
   readonly view: DemoView<TData>;
   readonly config: PartsConfig<TData>;
 }): ReactElement {
-  const frames = config.glyphs.spinner;
-  const frame =
-    frames[Math.floor(view.elapsed / SPINNER_FRAME_MS) % Math.max(1, frames.length)] ?? "";
+  const frame = spinnerFrame(config.glyphs.spinner, view.elapsed);
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard reachable (axe scrollable-region-focusable)
     <section data-part="transcript" tabIndex={0} aria-label={config.labels.transcript}>
@@ -494,32 +482,4 @@ export function Composer({
       </span>
     </div>
   );
-}
-
-/** What a screen reader hears when a beat finishes; empty while it still plays. */
-export function beatText<TData>(
-  entry: DemoEntry<TData> | undefined,
-  config: Pick<PartsConfig<TData>, "labels" | "tools" | "steps" | "glyphs">,
-): string {
-  if (entry?.phase !== "done") return "";
-  const { step } = entry;
-  const { labels } = config;
-  const lineText = (lines: readonly Line[]): string =>
-    lines.map((l) => (typeof l === "string" ? l : l.text)).join(" ");
-  switch (step.kind) {
-    case "user":
-      return `${labels.you}: ${step.text}`;
-    case "agent-text":
-      return `${labels.agent}: ${step.lead ? `${step.lead} ` : ""}${step.text}`;
-    case "command":
-      return `${promptFor(config.steps, entry.index, config.glyphs.prompt)} ${step.text}`;
-    case "output":
-      return lineText(step.lines);
-    case "tool-call": {
-      const status = entry.status === "error" ? labels.failed : labels.done;
-      return `${toolLabel(config.tools, step.name, false)}: ${status}`;
-    }
-    default:
-      return "";
-  }
 }

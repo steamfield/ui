@@ -35,8 +35,16 @@ import {
   transcriptText,
 } from "@steamfield/ui/sequencer";
 import { type CreateTabsOptions, createTabs } from "@steamfield/ui/tabs";
+import {
+  useAgentDemo as useVueAgentDemo,
+  AgentDemo as VueAgentDemo,
+  type AgentDemoProps as VueAgentDemoProps,
+  StaticTranscript as VueStaticTranscript,
+} from "@steamfield/ui/vue/agent-demo";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createSSRApp, h } from "vue";
+import { renderToString } from "vue/server-renderer";
 
 function check(condition: boolean, message: string): void {
   if (!condition) throw new Error(`consumer (ts): ${message}`);
@@ -98,6 +106,16 @@ check(
   renderToStaticMarkup(createElement(DemoWindow, windowProps)).includes("session"),
   "DemoWindow",
 );
+
+// vue/agent-demo: same markup contract, rendered on the server.
+const vueProps: VueAgentDemoProps = { script, layout: "terminal", position: { click: 1 } };
+const vueHtml = await renderToString(
+  createSSRApp({ render: () => h(VueStaticTranscript, { script }) }),
+);
+check(vueHtml.includes("Hello there."), "Vue StaticTranscript SSR");
+const vueDemoHtml = await renderToString(createSSRApp({ render: () => h(VueAgentDemo, vueProps) }));
+check(vueDemoHtml.includes("data-sf-agent-demo"), "Vue AgentDemo SSR");
+check(typeof useVueAgentDemo === "function", "Vue useAgentDemo export");
 
 // playback: a gate without an element counts as in view.
 const gate = createPlaybackGate(null, { duration: 1000, motion: "full", autoStart: false });

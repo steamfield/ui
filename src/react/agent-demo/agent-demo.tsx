@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
+import { type AnnounceMode, lastBeat as lastBeatOf } from "../../internal/agent-demo.ts";
 import type { DemoScript } from "../../script/types.ts";
 import type { DemoView } from "../../sequencer/view.ts";
 import { DemoWindow } from "../window/demo-window.tsx";
@@ -11,7 +12,6 @@ import {
 } from "./labels.ts";
 import {
   type AgentDemoLayout,
-  beatText,
   Composer,
   type PartsConfig,
   srOnly,
@@ -24,8 +24,7 @@ import {
   useAgentDemo,
 } from "./use-agent-demo.ts";
 
-/** What the screen reader hears: one status message, that plus each finished beat, or nothing. */
-export type AnnounceMode = "status" | "beats" | "none";
+export type { AnnounceMode } from "../../internal/agent-demo.ts";
 
 /**
  * Which controls show once hydrated (never under reduced motion or a fixed `position`):
@@ -147,11 +146,7 @@ function PlaybackControls<TData>({
 
 function lastBeat<TData>(demo: UseAgentDemoResult<TData>, config: PartsConfig<TData>): string {
   if (!demo.animating) return "";
-  for (let i = demo.view.entries.length - 1; i >= 0; i--) {
-    const text = beatText(demo.view.entries[i], config);
-    if (text) return text;
-  }
-  return "";
+  return lastBeatOf(demo.view.entries, config);
 }
 
 function controlsFor<TData>(

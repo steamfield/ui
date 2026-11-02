@@ -53,7 +53,6 @@
       "types": "./dist/react/window/index.d.ts",
       "import": "./dist/react/window/index.js"
     },
-    "./react/window/styles.css": "./dist/react/window/styles.css",
     "./reveal": {
       "types": "./dist/reveal/index.d.ts",
       "import": "./dist/reveal/index.js"
@@ -72,6 +71,11 @@
       "import": "./dist/tabs/index.js"
     },
     "./tabs/styles.css": "./dist/tabs/styles.css",
+    "./vue/agent-demo": {
+      "types": "./dist/vue/agent-demo/index.d.ts",
+      "import": "./dist/vue/agent-demo/index.js"
+    },
+    "./window/styles.css": "./dist/window/styles.css",
     "./package.json": "./package.json"
   },
   "files": [

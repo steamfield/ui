@@ -102,5 +102,12 @@
     "import": "{ DemoWindow }",
     "ignore": ["react", "react-dom"],
     "limit": "250 B"
+  },
+  {
+    "name": "vue/agent-demo",
+    "path": "dist/vue/agent-demo/index.js",
+    "import": "{ AgentDemo }",
+    "ignore": ["vue"],
+    "limit": "10.5 kB"
   }
 ]

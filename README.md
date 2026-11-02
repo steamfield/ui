@@ -39,7 +39,7 @@ JavaScript never imports CSS. Import the stylesheet for each subpath you use, on
 
 ```ts
 import "@steamfield/ui/agent-demo/styles.css";
-import "@steamfield/ui/react/window/styles.css";
+import "@steamfield/ui/window/styles.css";
 import "@steamfield/ui/copy/styles.css";
 import "@steamfield/ui/tabs/styles.css";
 import "@steamfield/ui/react/install-tabs/styles.css";
@@ -50,7 +50,7 @@ import "@steamfield/ui/markdown/styles.css";
 | Stylesheet | For |
 | --- | --- |
 | `agent-demo/styles.css` | `react/agent-demo` (and the Vue binding) |
-| `react/window/styles.css` | `react/window`, and `AgentDemo` with `chrome` |
+| `window/styles.css` | `react/window`, and `AgentDemo` with `chrome` |
 | `copy/styles.css` | `copy`, `react/copy`, and the copy button in `react/install-tabs` |
 | `tabs/styles.css` | `tabs`, `react/tabs`, `react/install-tabs` (includes the no-JS fallback) |
 | `react/install-tabs/styles.css` | `react/install-tabs` |
@@ -220,7 +220,7 @@ All hook options plus:
 | `stage` | `(view) => ReactNode` | none | Content beside the transcript that follows the view, such as a live chart |
 | `controls` | `"inline" \| "full" \| "none" \| (demo) => ReactNode` | `"inline"` | `"inline"` is one play/pause/replay button; `"full"` adds turn jumps, Next and a 1x/2x speed toggle; a function renders your own |
 | `header` | `ReactNode` | none | Content at the top, before the controls |
-| `chrome` | `boolean \| { title?, dots? }` | none | Wrap the transcript in `DemoWindow`, with controls in its title bar. Needs `react/window/styles.css` |
+| `chrome` | `boolean \| { title?, dots? }` | none | Wrap the transcript in `DemoWindow`, with controls in its title bar. Needs `window/styles.css` |
 | `announce` | `"status" \| "beats" \| "none"` | `"status"` | One `role="status"` message; `"beats"` adds a polite live region with each finished beat; `"none"` nothing |
 | `className`, `style` | | none | On the root |
 | `privacyClassName` | `string` | none | Appended to the root class, for session-recording opt-outs such as `"ph-no-capture"` |
@@ -448,7 +448,7 @@ The server and first client render return `end`, so markup without JavaScript sh
 ## react/window
 
 ```ts
-import "@steamfield/ui/react/window/styles.css";
+import "@steamfield/ui/window/styles.css";
 import { DemoWindow } from "@steamfield/ui/react/window";
 ```
 

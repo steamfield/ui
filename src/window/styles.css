@@ -1,4 +1,4 @@
-/* @steamfield/ui/react/window/styles.css: optional chrome for DemoWindow.
+/* @steamfield/ui/window/styles.css: optional chrome for DemoWindow.
    Layered and zero-specificity, so any consumer class or utility wins. Tokens: the shared --sf-*
    set, plus --sf-window-dot (one color for all three dots; set --sf-window-dot-1/2/3 for
    traffic lights). */

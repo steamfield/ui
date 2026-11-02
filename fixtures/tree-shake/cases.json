@@ -6,8 +6,13 @@
   },
   {
     "entry": "agent-demo-only.tsx",
-    "present": ["data-sf-agent-demo"],
+    "present": ["data-sf-agent-demo", "react.transitional.element"],
     "absent": ["data-copy-command", "tab-panel", "sf:reveal-ready"]
+  },
+  {
+    "entry": "vue-agent-demo.ts",
+    "present": ["data-sf-agent-demo"],
+    "absent": ["react.transitional.element", "__SECRET_INTERNALS", "data-copy-command"]
   },
   {
     "entry": "tabs-only.tsx",

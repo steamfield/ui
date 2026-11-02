@@ -1,4 +1,5 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { countAt, defined, signature } from "../../internal/agent-demo.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
 import type { DemoScript, Step } from "../../script/types.ts";
 import { compile, type Timeline } from "../../sequencer/compile.ts";
@@ -92,15 +93,6 @@ export interface UseAgentDemoResult<TData = unknown> {
   readonly timeline: Timeline<TData>;
 }
 
-/** A content signature, or undefined when the value can't be serialized (cycles, BigInt). */
-function signature(value: unknown): string | undefined {
-  try {
-    return JSON.stringify(value, (_key, v: unknown) => (typeof v === "function" ? String(v) : v));
-  } catch {
-    return undefined;
-  }
-}
-
 function useTimeline<TData>(
   script: DemoScript<TData>,
   options: UseAgentDemoOptions<TData>,
@@ -121,9 +113,6 @@ function useTimeline<TData>(
   }
   return { timeline: cache.current.timeline, key };
 }
-
-const countAt = (times: readonly number[], t: number): number =>
-  times.filter((time) => time <= t).length;
 
 /**
  * The headless agent demo: compiles a script, gates playback on visibility, tab and motion, and
@@ -252,12 +241,5 @@ export function useAgentDemo<TData = unknown>(
     speed,
     turn: showTurn ? countAt(timeline.turnStarts, elapsed) - 1 : -1,
     timeline,
-  };
-}
-
-/** Drops undefined values, which `exactOptionalPropertyTypes` won't pass as "absent". */
-function defined<O extends object>(values: O): { [K in keyof O]?: Exclude<O[K], undefined> } {
-  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined)) as {
-    [K in keyof O]?: Exclude<O[K], undefined>;
   };
 }

@@ -18,7 +18,7 @@ Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `
 | `react/copy` | `useCopy`, `CopyCommand`, `CopyButton` | `copy` |
 | `react/tabs` | `Tabs`, `TabList`, `Tab`, `TabPanel` | `tabs` (shared core) |
 | `react/install-tabs` | `InstallTabs`, `react/install-tabs/styles.css` | `react/tabs`, `react/copy` |
-| `react/window` | `DemoWindow` (optional chrome), `react/window/styles.css` | none |
+| `react/window` | `DemoWindow` (optional chrome), `window/styles.css` | none |
 | `react/agent-demo` | `useAgentDemo`, `AgentDemo`, `StaticTranscript` | `sequencer`, `playback`, `react/playback`, `react/window` |
 | `agent-demo/styles.css` | CSS only; the `data-part` contract shared by every framework renderer | none |
 | `vue/agent-demo` | `useAgentDemo` composable, `AgentDemo` component (in progress) | `sequencer`, `playback` |
