@@ -1,4 +1,4 @@
-// Keyboard, hash and event logic shared by `createTabs` and the React `Tabs`. Both read the
+// Keyboard, hash and event helpers shared by `createTabs`, the React `Tabs` and `state.ts`. Both read the
 // rendered tabs from the DOM, so the two stay in step on what counts as a tab, a disabled tab or a
 // panel's id.
 
@@ -49,6 +49,23 @@ export function tabValue(tab: HTMLElement): string | null {
   return tab.dataset.value ?? panelIdOf(tab);
 }
 
+/** What the selection controller (`state.ts`) needs to know about one rendered tab. */
+export interface TabEntry {
+  readonly value: string;
+  readonly disabled: boolean;
+  /** The id of the panel it controls, written to the URL when `hash` is on. */
+  readonly panelId: string | null;
+}
+
+/** The tabs under `scope` as the controller sees them. A tab without a value counts as `""`. */
+export function tabEntries(scope: ParentNode): TabEntry[] {
+  return tabsIn(scope).map((tab) => ({
+    value: tabValue(tab) ?? "",
+    disabled: isTabDisabled(tab),
+    panelId: panelIdOf(tab),
+  }));
+}
+
 /** True for the keys that select the focused tab under manual activation. */
 export function isActivationKey(key: string): boolean {
   return key === "Enter" || key === " ";
@@ -77,13 +94,6 @@ export function keyTarget(
   return null;
 }
 
-/** The enabled tab under `scope` whose panel the hash names, if any. */
-export function tabForHash(scope: ParentNode, hash: string): HTMLElement | null {
-  if (hash.length < 2) return null;
-  const id = decodeHash(hash);
-  return tabsIn(scope).find((tab) => panelIdOf(tab) === id && !isTabDisabled(tab)) ?? null;
-}
-
 /**
  * Records the selected panel in the URL. A no-op when `mode` is false. `replace` forces
  * `replaceState` even when `mode` is true (arrow-key moves under auto activation).
@@ -107,7 +117,8 @@ export function announce(
   target.dispatchEvent(new CustomEvent(eventName, { bubbles: true, detail }));
 }
 
-function decodeHash(hash: string): string {
+/** A fragment without its `#`, percent-decoded when it decodes cleanly. */
+export function decodeHash(hash: string): string {
   const raw = hash.slice(1);
   try {
     return decodeURIComponent(raw);

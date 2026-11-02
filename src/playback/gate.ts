@@ -97,22 +97,72 @@ export function createPlaybackGate(
   el: Element | null,
   options: PlaybackGateOptions = {},
 ): PlaybackGate {
-  const config = readOptions(options);
-  const clocked = options.duration !== undefined || options.onFrame !== undefined;
-  const motion = motionSourceFor(config.motion, el);
+  return build(el, options, false).gate;
+}
+
+/**
+ * The gate the React and Vue bindings hold for their whole life: one gate whose element and
+ * options change under it, following the binding rules in one place.
+ *
+ * - With no element yet, `autoStart` waits for one; `play()` still runs, counted as in view.
+ * - The first element starts fresh: nothing is carried from the element-less period.
+ * - Swapping one element for another keeps `elapsed`, `started`, `paused` and the rate.
+ * - Unbinding (`null`) keeps the gate, which reads as out of view once the observer reports the
+ *   element gone; binding that element again changes nothing.
+ * - Changing an option other than `speed` and `onFrame` starts over at 0, keeping the rate, with
+ *   one new observer. `speed` and `onFrame` change in place.
+ */
+export interface BoundGate extends PlaybackGate {
+  /** Binds the element whose visibility gates playback, or unbinds with `null`. */
+  readonly attach: (element: Element | null) => void;
+  /** Applies new options. Throws `invalid_option` on a bad `speed` before changing anything. */
+  readonly configure: (options: PlaybackGateOptions) => void;
+}
+
+/** Creates a `BoundGate` with no element. Create it in the browser, like `createPlaybackGate`. */
+export function createBoundGate(options: PlaybackGateOptions = {}): BoundGate {
+  const { gate, attach, configure } = build(null, options, true);
+  return { ...gate, attach, configure };
+}
+
+/** Options whose change starts a bound gate over. */
+const RESTART_KEYS = [
+  "autoStart",
+  "threshold",
+  "rootMargin",
+  "leaveGraceMs",
+  "motion",
+  "reducedPolicy",
+  "duration",
+] as const;
+
+function build(
+  el: Element | null,
+  initial: PlaybackGateOptions,
+  bound: boolean,
+): Pick<BoundGate, "attach" | "configure"> & { gate: PlaybackGate } {
+  let options = initial;
+  let config = readOptions(options);
+  let clocked = options.duration !== undefined || options.onFrame !== undefined;
   const listeners = new Set<() => void>();
+  // The element being observed: the last one bound, kept when it is unbound.
+  let observed = el;
+  // A bound gate with no element yet waits for one instead of auto-starting.
+  const autoStart = (): boolean => config.autoStart && (!bound || observed !== null);
   let speed = config.speed;
-  let started = config.autoStart;
+  let started = autoStart();
   let paused = false;
-  let inView = el === null || typeof IntersectionObserver === "undefined";
+  let inView = true;
   let tabVisible = isTabVisible();
-  let reduced = !motion.get();
+  let reduced = false;
   let elapsed = 0;
   let destroyed = false;
   let running = false;
   let frame: number | undefined;
   let last: number | undefined;
   let grace: ReturnType<typeof setTimeout> | undefined;
+  let observer: IntersectionObserver | undefined;
+  let unsubscribeMotion = (): void => {};
 
   const setElapsed = (value: number): void => {
     const next = Math.min(Math.max(value, 0), config.duration);
@@ -179,15 +229,41 @@ export function createPlaybackGate(
     }, config.leaveGraceMs);
   };
 
-  let observer: IntersectionObserver | undefined;
-  if (el && typeof IntersectionObserver !== "undefined") {
-    observer = new IntersectionObserver(
-      (entries) => onIntersect(entries.at(-1)?.isIntersecting ?? false),
-      { threshold: config.threshold, rootMargin: config.rootMargin },
-    );
-    observer.observe(el);
-  }
+  // Watches `observed`: in view until an observer says otherwise, so a `null` element (or no
+  // IntersectionObserver) counts as in view. `from` is the element a swap leaves, whose observer
+  // then follows the new one; otherwise a new observer is made.
+  const watchView = (from: Element | null): void => {
+    clearTimeout(grace);
+    grace = undefined;
+    inView = observed === null || typeof IntersectionObserver === "undefined";
+    if (inView) return;
+    if (from !== null && observer) {
+      observer.unobserve(from);
+    } else {
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries.filter((e) => e.target === observed).at(-1);
+          if (entry) onIntersect(entry.isIntersecting);
+        },
+        { threshold: config.threshold, rootMargin: config.rootMargin },
+      );
+    }
+    if (observed) observer.observe(observed);
+  };
 
+  // The motion source depends on the element (`"auto"` reads its ancestors), so it follows it.
+  const watchMotion = (): void => {
+    unsubscribeMotion();
+    const motion = motionSourceFor(config.motion, observed);
+    reduced = !motion.get();
+    unsubscribeMotion = motion.subscribe(() => {
+      reduced = !motion.get();
+      update();
+    });
+  };
+
+  watchView(null);
   const onVisibility = (): void => {
     tabVisible = isTabVisible();
     update();
@@ -195,10 +271,7 @@ export function createPlaybackGate(
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", onVisibility);
   }
-  const unsubscribeMotion = motion.subscribe(() => {
-    reduced = !motion.get();
-    update();
-  });
+  watchMotion();
   update();
 
   const play = (): void => {
@@ -210,8 +283,14 @@ export function createPlaybackGate(
     paused = true;
     update();
   };
+  /** Back to 0, unpaused, and started only if `autoStart`. */
+  const restart = (): void => {
+    setElapsed(0);
+    started = autoStart();
+    paused = false;
+  };
 
-  return {
+  const gate: PlaybackGate = {
     play,
     pause,
     toggle: () => (started && !paused ? pause() : play()),
@@ -227,9 +306,7 @@ export function createPlaybackGate(
       update();
     },
     reset() {
-      setElapsed(0);
-      started = config.autoStart;
-      paused = false;
+      restart();
       update();
     },
     setSpeed(next) {
@@ -256,6 +333,37 @@ export function createPlaybackGate(
       return () => {
         listeners.delete(callback);
       };
+    },
+  };
+
+  return {
+    gate,
+    attach(element) {
+      // Unbinding keeps the observer on the old element, so it reads as out of view as soon as
+      // the browser reports it gone, and an inline ref that detaches and reattaches the same
+      // element each commit changes nothing.
+      if (destroyed || element === null || element === observed) return;
+      const from = observed;
+      observed = element;
+      if (from === null) restart();
+      watchView(from);
+      watchMotion();
+      update();
+    },
+    configure(next) {
+      if (destroyed) return;
+      const nextConfig = readOptions(next);
+      const prev = options;
+      options = next;
+      clocked = next.duration !== undefined || next.onFrame !== undefined;
+      if (next.speed !== undefined && !Object.is(next.speed, prev.speed)) speed = nextConfig.speed;
+      if (RESTART_KEYS.some((key) => !Object.is(next[key], prev[key]))) {
+        config = nextConfig;
+        restart();
+        watchView(null);
+        watchMotion();
+      }
+      update();
     },
   };
 }

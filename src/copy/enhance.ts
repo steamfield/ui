@@ -1,4 +1,13 @@
-import { copyText } from "./copy-text.ts";
+import {
+  COPY_COMMAND,
+  COPY_CONTROLS,
+  COPY_LABEL,
+  COPY_READY,
+  COPY_RESULT,
+  COPY_ROOT,
+} from "./markup.ts";
+import { DEFAULT_COPY_MESSAGES } from "./messages.ts";
+import { createCopyState } from "./state.ts";
 
 /** What `onCopy` and the `sf:copy` event receive after every attempt. */
 export interface CopyEventDetail {
@@ -43,7 +52,6 @@ const defaultFailed = (subject: string, { hidden }: { readonly hidden: boolean }
     : `Copy failed. The ${subject} is selected; press Cmd+C or Ctrl+C.`;
 
 const IDLE_LABEL = "sfCopyIdle";
-const READY = "data-copy-ready";
 
 /**
  * Activates every `[data-copy-command]` button under `root`. Each button names its source with
@@ -62,42 +70,33 @@ export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions
   const config: Config = {
     copiedMs: options.copiedMs ?? 2000,
     subjects: { ...DEFAULT_SUBJECTS, ...options.subjects },
-    copied: options.messages?.copied ?? "Copied to clipboard.",
-    copiedLabel: options.messages?.copiedLabel ?? "Copied",
+    copied: options.messages?.copied ?? DEFAULT_COPY_MESSAGES.copied,
+    copiedLabel: options.messages?.copiedLabel ?? DEFAULT_COPY_MESSAGES.copiedLabel,
     failed: options.messages?.failed ?? defaultFailed,
     onCopy: options.onCopy,
-    timers: new Map(),
-    disposed: false,
   };
   const cleanups: Array<() => void> = [];
   const wired: HTMLButtonElement[] = [];
 
-  for (const button of root.querySelectorAll<HTMLButtonElement>("[data-copy-command]")) {
+  for (const button of root.querySelectorAll<HTMLButtonElement>(`[${COPY_COMMAND}]`)) {
     // A second call must not stack listeners; the marker is removed again on dispose.
-    if (!targetOf(button) || button.hasAttribute(READY)) continue;
+    if (!targetOf(button) || button.hasAttribute(COPY_READY)) continue;
     // Store the idle label once, so a second click while "Copied" shows can't capture it.
     button.dataset[IDLE_LABEL] ??= labelOf(button)?.textContent ?? "";
     // A re-wire after a dispose mid-"Copied" starts from the idle label.
     setLabel(button, button.dataset[IDLE_LABEL] ?? "");
     button.hidden = false;
-    button.setAttribute(READY, "");
+    button.setAttribute(COPY_READY, "");
     wired.push(button);
-    const listener = (): void => {
-      void copyFrom(button, config);
-    };
-    button.addEventListener("click", listener);
-    cleanups.push(() => button.removeEventListener("click", listener));
+    cleanups.push(wire(button, config));
   }
 
   return () => {
-    config.disposed = true;
     for (const cleanup of cleanups) cleanup();
-    for (const timer of config.timers.values()) clearTimeout(timer);
-    config.timers.clear();
     // With no listener the button would be dead, so put it back the way the server rendered it.
     for (const button of wired) {
       button.hidden = true;
-      button.removeAttribute(READY);
+      button.removeAttribute(COPY_READY);
     }
   };
 }
@@ -109,42 +108,67 @@ interface Config {
   readonly copiedLabel: string;
   readonly failed: NonNullable<CopyMessages["failed"]>;
   readonly onCopy: EnhanceCopyOptions["onCopy"];
-  readonly timers: Map<HTMLElement, ReturnType<typeof setTimeout>>;
-  disposed: boolean;
 }
 
-async function copyFrom(button: HTMLElement, config: Config): Promise<void> {
-  const controls = button.getAttribute("aria-controls") ?? "";
-  const target = targetOf(button);
-  if (!target) return;
-  const label = button.getAttribute("aria-label") ?? "";
-  const ok = await copyText(target.textContent ?? "");
-  // The target can be rewired while the copy is in flight (a prompt variant switch). Drop the
-  // result rather than reporting it against the wrong text.
-  if (config.disposed || button.getAttribute("aria-controls") !== controls) return;
-  const result = resultOf(button);
-  clearTimeout(config.timers.get(button));
-  if (ok) {
-    show(button, result, "copied", config.copied);
-    setLabel(button, config.copiedLabel);
-    const reset = (): void => {
+/** The latest click: what it copied from, and the label to report. */
+interface Attempt {
+  readonly controls: string;
+  readonly label: string;
+  readonly target: HTMLElement;
+}
+
+/** Gives `button` its own copy state, reflects it on the DOM, and returns the cleanup. */
+function wire(button: HTMLElement, config: Config): () => void {
+  const state = createCopyState({ resetMs: config.copiedMs });
+  let attempt: Attempt | undefined;
+
+  state.subscribe(() => {
+    const status = state.getState();
+    const result = resultOf(button);
+    if (status === "idle" || !attempt) {
       setLabel(button, button.dataset[IDLE_LABEL] ?? "");
       show(button, result, undefined, "");
+      return;
+    }
+    if (status === "copied") {
+      show(button, result, "copied", config.copied);
+      setLabel(button, config.copiedLabel);
+    } else {
+      setLabel(button, button.dataset[IDLE_LABEL] ?? "");
+      const hidden = isHidden(attempt.target);
+      if (!hidden) selectText(attempt.target);
+      const subject = config.subjects[attempt.label] ?? "text";
+      show(button, result, "failed", config.failed(subject, { hidden }));
+    }
+    const detail: CopyEventDetail = {
+      id: attempt.controls,
+      label: attempt.label,
+      ok: status === "copied",
     };
-    config.timers.set(button, setTimeout(reset, config.copiedMs));
-  } else {
-    setLabel(button, button.dataset[IDLE_LABEL] ?? "");
-    const hidden = isHidden(target);
-    if (!hidden) selectText(target);
-    show(button, result, "failed", config.failed(config.subjects[label] ?? "text", { hidden }));
-  }
-  const detail: CopyEventDetail = { id: controls, label, ok };
-  config.onCopy?.(detail);
-  button.dispatchEvent(new CustomEvent("sf:copy", { bubbles: true, detail }));
+    config.onCopy?.(detail);
+    button.dispatchEvent(new CustomEvent("sf:copy", { bubbles: true, detail }));
+  });
+
+  const listener = (): void => {
+    const target = targetOf(button);
+    if (!target) return;
+    const controls = button.getAttribute(COPY_CONTROLS) ?? "";
+    attempt = { controls, label: button.getAttribute("aria-label") ?? "", target };
+    // The target can be rewired while the copy is in flight (a prompt variant switch). Drop the
+    // result rather than reporting it against the wrong text.
+    void state.copy(target.textContent ?? "", {
+      isCurrent: () => button.getAttribute(COPY_CONTROLS) === controls,
+    });
+  };
+  button.addEventListener("click", listener);
+  return () => {
+    button.removeEventListener("click", listener);
+    state.destroy();
+  };
 }
 
 function labelOf(button: HTMLElement): HTMLElement | null {
-  return button.querySelector<HTMLElement>("[data-copy-label]");
+  return button.querySelector<HTMLElement>(`[${COPY_LABEL}]`);
 }
 
 function setLabel(button: HTMLElement, text: string): void {
@@ -168,13 +192,13 @@ function show(
 }
 
 function targetOf(button: HTMLElement): HTMLElement | null {
-  const id = button.getAttribute("aria-controls");
+  const id = button.getAttribute(COPY_CONTROLS);
   return id ? button.ownerDocument.getElementById(id) : null;
 }
 
 function resultOf(button: HTMLElement): HTMLElement | null {
-  const scope = button.closest("[data-copy-root]") ?? button.parentElement;
-  return scope?.querySelector<HTMLElement>("[data-copy-result]") ?? null;
+  const scope = button.closest(`[${COPY_ROOT}]`) ?? button.parentElement;
+  return scope?.querySelector<HTMLElement>(`[${COPY_RESULT}]`) ?? null;
 }
 
 function isHidden(element: HTMLElement): boolean {

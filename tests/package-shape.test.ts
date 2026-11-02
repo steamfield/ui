@@ -36,7 +36,7 @@ const ALLOWED: Record<string, string[]> = {
   copy: [],
   tabs: [],
   reveal: [],
-  markdown: [],
+  markdown: ["copy"],
   docs: [],
   "react/playback": ["playback"],
   "react/copy": ["copy"],
@@ -53,7 +53,7 @@ const ALLOWED: Record<string, string[]> = {
   ],
   "vue/agent-demo": ["script", "sequencer", "playback", "agent-demo"],
   // No entry: the renderer core both bindings share. Only its stylesheet is exported.
-  "agent-demo": ["script", "sequencer"],
+  "agent-demo": ["script", "sequencer", "playback"],
 };
 
 /**

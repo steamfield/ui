@@ -45,11 +45,14 @@ export function useCountUp<T extends Element = HTMLElement>(
     ...(options.rootMargin === undefined ? {} : { rootMargin: options.rootMargin }),
   });
 
+  // `started` turns false when the gate starts over (new options, or the element arriving late),
+  // so the count starts again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `state.started` re-runs it on a restart.
   useEffect(() => {
     if (!gate) return;
     if (enabled) gate.play();
     else gate.pause();
-  }, [gate, enabled]);
+  }, [gate, enabled, state.started]);
 
   if (!gate || state.complete) return { ref, value: end, complete: gate !== null };
   const progress = Math.min(state.elapsed / duration, 1);

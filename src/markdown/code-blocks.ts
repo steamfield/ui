@@ -1,5 +1,6 @@
 import type { Element, ElementContent, RootContent } from "hast";
 import { defineHastPlugin, type HastPluginDefinition } from "satteri";
+import { COPY_COMMAND, COPY_CONTROLS, COPY_LABEL, COPY_RESULT, COPY_ROOT } from "../copy/markup.ts";
 import { element, hasClass, stringProperty, text } from "./hast.ts";
 
 export interface CodeBlocksOptions {
@@ -29,23 +30,28 @@ const copyIcon = (): Element =>
     ],
   );
 
+/** The hast property name for an attribute: `data-copy-root` is `dataCopyRoot`. */
+const prop = (attribute: string): string =>
+  attribute.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
 // The markup `enhanceCopyButtons` (@steamfield/ui/copy) activates: hidden until it runs, with the
-// live result region beside the button and `aria-controls` naming the code's `<pre>`.
+// live result region beside the button and `aria-controls` naming the code's `<pre>`. The wrapper
+// keeps `data-code-copy` for consumer CSS and carries the shared `data-copy-root` scope.
 function copyControl(id: string, label: string, visible: string): Element {
-  return element("span", { dataCodeCopy: "" }, [
+  return element("span", { dataCodeCopy: "", [prop(COPY_ROOT)]: "" }, [
     element(
       "button",
       {
         type: "button",
         hidden: true,
-        dataCopyCommand: "",
+        [prop(COPY_COMMAND)]: "",
         ariaLabel: label,
-        ariaControls: [id],
+        [prop(COPY_CONTROLS)]: [id],
       },
-      [copyIcon(), element("span", { dataCopyLabel: "" }, [text(visible)])],
+      [copyIcon(), element("span", { [prop(COPY_LABEL)]: "" }, [text(visible)])],
     ),
     element("span", {
-      dataCopyResult: "",
+      [prop(COPY_RESULT)]: "",
       role: "status",
       ariaLive: "polite",
     }),

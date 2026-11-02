@@ -435,16 +435,16 @@ import { usePlayback, useCountUp } from "@steamfield/ui/react/playback";
 
 ### `usePlayback(options?)`
 
-React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts a fresh gate at 0 that keeps the current rate; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
+React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts over at 0 and keeps the current rate; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
 
-Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a rebuilt gate. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
+Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a restart. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
 
 `ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another:
 
 - Before any element attaches, `autoStart` waits for one, so nothing plays (and no `onStepStart` or `onComplete` fires) where nobody can see it. `play()`, `replay()` and `toggle()` still run the clock, and a gate with no element counts as in view, so a demo that never attaches a ref and starts from a button works as before.
-- An element that attaches later gets a fresh gate: elapsed 0, `started` from `autoStart`, nothing carried from the element-less gate, even if `play()` ran it.
-- Swapping one element for another keeps `elapsed`, `started`, `paused` and the rate; only option changes (`duration`, `motion`, observer options) start over at 0. An option change and a swap in the same render build one gate, at 0.
-- Detaching an element (with no new one) keeps the gate, which reads as out of view once the browser reports the removed element as no longer intersecting. An inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, doesn't rebuild.
+- An element that attaches later starts fresh: elapsed 0, `started` from `autoStart`, nothing carried from the element-less period, even if `play()` ran the clock.
+- Swapping one element for another keeps `elapsed`, `started`, `paused` and the rate; only option changes (`duration`, `motion`, observer options) start over at 0. An option change and a swap in the same render start over once, at 0, with one new observer.
+- Detaching an element (with no new one) keeps the state, which reads as out of view once the browser reports the removed element as no longer intersecting. An inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, changes nothing.
 
 ### `useCountUp(end, options?)`
 
@@ -509,7 +509,7 @@ import type { CopyEventDetail, CopyMessages, EnhanceCopyOptions } from "@steamfi
 <code id="cmd">bun add @steamfield/ui</code>
 ```
 
-The button names its source with `aria-controls` and stays `hidden` until the target exists. On success the label switches to `copiedLabel` and the result region announces `copied`. On failure the text is selected (opening any enclosing `<details>`) for a manual copy and the region shows the failure message.
+The button names its source with `aria-controls` and stays `hidden` until the target exists. On success the label switches to `copiedLabel` and the result region announces `copied`. On failure the text is selected (opening any enclosing `<details>`) for a manual copy and the region shows the failure message. The result region is the one inside the button's closest `[data-copy-root]`, or its parent's when there is no root. `CopyButton` from `react/copy` and markdown's code blocks render this same markup.
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -633,7 +633,7 @@ Panels get the id `${id}-${value}` and tabs `${id}-${value}-tab`, so values must
 | Prop | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `value` | `string` | none | Selected value (controlled) |
-| `defaultValue` | `string` | the first tab | Initially selected value (uncontrolled). The server marks its panel `data-default`, which the no-JS CSS shows |
+| `defaultValue` | `string` | the first tab | Initially selected value (uncontrolled). The server marks its panel `data-default`, which the no-JS CSS shows. After hydration a disabled or unknown value falls back to the first enabled tab, as in `createTabs` |
 | `onValueChange` | `(value) => void` | none | Click, key or hash read |
 | `activation` | `"auto" \| "manual"` | `"auto"` | As in `createTabs` |
 | `orientation` | `"horizontal" \| "vertical"` | `"horizontal"` | |
@@ -793,7 +793,7 @@ const processor = await createSatteriMarkdownProcessor({
 
 What they emit:
 
-- `codeBlocks`: each highlighted block becomes `<figure data-code-block>` with an optional `<figcaption data-code-title>` from the fence title, and a copy button that `enhanceCopyButtons` from `copy` activates (`[data-code-copy]`, `[data-copy-command]`, `[data-copy-result]`).
+- `codeBlocks`: each highlighted block becomes `<figure data-code-block>` with an optional `<figcaption data-code-title>` from the fence title, and a copy button that `enhanceCopyButtons` from `copy` activates. Its wrapper is `<span data-code-copy data-copy-root>` (`data-code-copy` for your CSS, `data-copy-root` for the enhancer), holding `[data-copy-command]` and `[data-copy-result]`.
 - `codeGroups`: adjacent figures sharing a `group` get `data-group-position="first|middle|last"` so CSS can join them into one frame.
 - `callouts`: GitHub alert blockquotes (`> [!NOTE]`) get `role="note"`, `data-callout="note"` and a leading `<p data-callout-title>`. An unknown marker stays a blockquote.
 - `headingAnchors`: `h2` and `h3` get an id and a trailing `<a data-heading-anchor>`.
@@ -878,7 +878,7 @@ The composable behind `AgentDemo`; call it in `setup`. `script` and `options` ma
 | `position` | `MaybeRefOrGetter<{ ms } \| { click } \| undefined>` | none | Click mode: the view follows this position, no clock runs and no controls show |
 | `active` | `MaybeRefOrGetter<boolean \| undefined>` | always active | Whether the slide is on screen. Each change from inactive to active bumps `playCount` |
 
-The result holds refs and computed values: `view`, `ready`, `started`, `playing`, `paused`, `reduced`, `complete`, `animating`, `mode` (`"static"` before mount, then `"live"`), `speed`, `turn`, `timeline`, `clickMode` (whether `position` is set) and `playCount`, plus `controls` (`play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`, as in React) and `el`, the template ref for the element whose visibility gates playback. `el` follows the same rules as React's `ref` (see `usePlayback`): before an element is bound, autoStart waits and no callbacks fire (`play()` still runs, counted as in view); an element bound later gets a fresh gate; swapping one element for another keeps `elapsed`, `started`, `paused` and the speed; option changes start over at 0; unbinding keeps the gate, which reads as out of view. A slide re-entry (a `playCount` bump) also starts over, so the demo plays again when the presenter returns. Bind `playCount` as `:key` on the demo root so entrances replay when the presenter returns to the slide; `AgentDemo` does this.
+The result holds refs and computed values: `view`, `ready`, `started`, `playing`, `paused`, `reduced`, `complete`, `animating`, `mode` (`"static"` before mount, then `"live"`), `speed`, `turn`, `timeline`, `clickMode` (whether `position` is set) and `playCount`, plus `controls` (`play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`, as in React) and `el`, the template ref for the element whose visibility gates playback. `el` follows the same rules as React's `ref` (see `usePlayback`): before an element is bound, autoStart waits and no callbacks fire (`play()` still runs, counted as in view); an element bound later starts fresh; swapping one element for another keeps `elapsed`, `started`, `paused` and the speed; option changes start over at 0; unbinding keeps the gate, which reads as out of view. A slide re-entry (a `playCount` bump) also starts over, so the demo plays again when the presenter returns. Bind `playCount` as `:key` on the demo root so entrances replay when the presenter returns to the slide; `AgentDemo` does this.
 
 ```vue
 <script setup lang="ts">

@@ -1,19 +1,13 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { countAt, hiddenToolNames, signature, type ToolRegistry } from "../../agent-demo/core.ts";
-import { defined } from "../../internal/options.ts";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { createDemoController } from "../../agent-demo/controller.ts";
+import type { ToolRegistry } from "../../agent-demo/core.ts";
 import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
 import type { DemoScript, Step } from "../../script/types.ts";
-import { compile, type Timeline } from "../../sequencer/compile.ts";
+import type { Timeline } from "../../sequencer/compile.ts";
 import type { Timing } from "../../sequencer/timing.ts";
-import {
-  type DemoView,
-  type FinalPolicy,
-  finalState,
-  type Position,
-  stateAt,
-} from "../../sequencer/view.ts";
-import { type PlaybackRef, usePlayback } from "../playback/use-playback.ts";
+import type { DemoView, FinalPolicy, Position } from "../../sequencer/view.ts";
+import { type PlaybackRef, playbackRef } from "../playback/use-playback.ts";
 
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
@@ -121,148 +115,6 @@ export interface UseAgentDemoResult<TData = unknown> {
   readonly timeline: Timeline<TData>;
 }
 
-function useTimeline<TData>(
-  script: DemoScript<TData>,
-  options: UseAgentDemoOptions<TData>,
-): { timeline: Timeline<TData>; key: unknown } {
-  const { scriptKey, timing, seed, composer } = options;
-  const hiddenTools = hiddenToolNames(options.tools);
-  // Joined into a string, so an inline registry rebuilt every render compares by its names.
-  const hidden = hiddenTools.join("\n");
-  // The content signature is recomputed only when an input is a new object, not every frame.
-  const content = useRef<{ inputs: readonly unknown[]; key: unknown } | null>(null);
-  let key: unknown = `key:${scriptKey}\n${hidden}`;
-  if (scriptKey === undefined) {
-    const inputs = [script, timing, seed, composer, hidden];
-    const last = content.current;
-    if (last === null || inputs.some((input, i) => !Object.is(input, last.inputs[i]))) {
-      const sig = signature({ script, timing, seed, composer, hidden });
-      content.current = { inputs, key: sig ?? script };
-    }
-    key = content.current?.key;
-  }
-  const cache = useRef<{ key: unknown; timeline: Timeline<TData> } | null>(null);
-  if (cache.current === null || !Object.is(cache.current.key, key)) {
-    const compileOptions = {
-      ...(timing === undefined ? {} : { timing }),
-      ...(seed === undefined ? {} : { seed }),
-      ...(composer === undefined ? {} : { composer }),
-      ...(hiddenTools.length === 0 ? {} : { hiddenTools }),
-    };
-    cache.current = { key, timeline: compile(script, compileOptions) };
-  }
-  return { timeline: cache.current.timeline, key };
-}
-
-/**
- * Whether playback reached the end. It counts only when the clock plays across the end (which
- * calls `onComplete`) or a seek lands on it; never the jump reduced motion makes. `from` is where
- * the last move started; `seeked` records a seek so it isn't taken for the clock.
- */
-function useEnd({
-  elapsed,
-  live,
-  playing,
-  duration,
-  onComplete,
-}: {
-  readonly elapsed: number;
-  readonly live: boolean;
-  readonly playing: boolean;
-  readonly duration: number;
-  readonly onComplete: RefObject<(() => void) | undefined>;
-}): { ended: boolean; seeked: (ms: number) => void } {
-  const [ended, setEnded] = useState(false);
-  const from = useRef(0);
-  const wasPlaying = useRef(false);
-  useEffect(() => {
-    if (elapsed < duration) setEnded(false);
-    else if (live && wasPlaying.current && from.current < duration) {
-      setEnded(true);
-      onComplete.current?.();
-    }
-    from.current = elapsed;
-  }, [elapsed, live, duration, onComplete]);
-  useEffect(() => {
-    wasPlaying.current = playing;
-  }, [playing]);
-  const seeked = useCallback(
-    (ms: number) => {
-      from.current = Math.min(Math.max(ms, 0), duration);
-      if (ms >= duration) setEnded(true);
-    },
-    [duration],
-  );
-  return { ended, seeked };
-}
-
-/**
- * Which view the clock drives, outside click mode. `live` once the clock has moved (started, or a
- * seek before play) with motion allowed; `held` when reduced motion under "hold" froze a frame
- * past 0. Otherwise the view is the final state. `animating` is `live`, or in click mode, motion
- * allowed once hydrated.
- */
-function clockMode(
-  playback: { readonly ready: boolean; readonly started: boolean; readonly reduced: boolean },
-  elapsed: number,
-  {
-    clickMode,
-    reducedPolicy,
-  }: { readonly clickMode: boolean; readonly reducedPolicy: ReducedPolicy },
-): { live: boolean; held: boolean; animating: boolean } {
-  const motion = playback.ready && !playback.reduced;
-  const moved = !clickMode && playback.ready && (playback.started || elapsed > 0);
-  const live = moved && motion;
-  return {
-    live,
-    held: moved && playback.reduced && reducedPolicy === "hold" && elapsed > 0,
-    animating: clickMode ? motion : live,
-  };
-}
-
-/** Calls `onStepStart` once per step as `elapsed` passes its start, again after a rewind. */
-function useStepStarts<TData>(
-  timeline: Timeline<TData>,
-  {
-    elapsed,
-    live,
-    playing,
-    onStepStart,
-  }: {
-    readonly elapsed: number;
-    readonly live: boolean;
-    readonly playing: boolean;
-    readonly onStepStart: RefObject<((index: number, step: Step<TData>) => void) | undefined>;
-  },
-): void {
-  const firedUpTo = useRef(-1);
-  const lastElapsed = useRef(0);
-  useEffect(() => {
-    const steps = timeline.steps;
-    if (elapsed < lastElapsed.current) {
-      firedUpTo.current = steps.filter((s) => s.start < elapsed).length - 1;
-    }
-    lastElapsed.current = elapsed;
-    if (!live || (!playing && elapsed === 0)) return;
-    while ((steps[firedUpTo.current + 1]?.start ?? Number.POSITIVE_INFINITY) <= elapsed) {
-      firedUpTo.current += 1;
-      const index = firedUpTo.current;
-      const step = timeline.script.steps[index];
-      if (step) onStepStart.current?.(index, step);
-    }
-  }, [elapsed, live, playing, timeline, onStepStart]);
-}
-
-/** `stateAt` a position, or the final state without one. */
-function viewAt<TData>(
-  timeline: Timeline<TData>,
-  position: Position | undefined,
-  finalPolicy: FinalPolicy,
-): DemoView<TData> {
-  if (position !== undefined) return stateAt(timeline, position);
-  return finalState(timeline, { policy: finalPolicy });
-}
-
 /**
  * The headless agent demo: compiles a script, gates playback on visibility, tab and motion, and
  * returns the view to render with its controls. The server and pre-hydration render are
@@ -272,91 +124,20 @@ export function useAgentDemo<TData = unknown>(
   script: DemoScript<TData>,
   options: UseAgentDemoOptions<TData> = {},
 ): UseAgentDemoResult<TData> {
-  const { timeline, key } = useTimeline(script, options);
-  const { position, finalPolicy = "all", autoStart = true, reducedPolicy = "end" } = options;
-  const clickMode = position !== undefined;
-  const playback = usePlayback<HTMLDivElement>({
-    duration: timeline.duration,
-    autoStart: clickMode ? false : autoStart,
-    reducedPolicy,
-    ...defined({
-      speed: options.speed,
-      threshold: options.threshold,
-      rootMargin: options.rootMargin,
-      leaveGraceMs: options.leaveGraceMs,
-      motion: options.motion,
-    }),
+  const [controller] = useState(() => createDemoController(script, options));
+  const [ref] = useState(() => playbackRef<HTMLDivElement>(controller.attach));
+  // Every commit, before paint: the controller compares the props itself.
+  useLayoutEffect(() => {
+    controller.update(script, options);
   });
-  const { elapsed, reset, started } = playback;
-  const { duration } = timeline;
-  const clock = clockMode(playback, elapsed, { clickMode, reducedPolicy });
-  const { live } = clock;
-
-  // A new script (by key) starts over. The first run only records the key.
-  const lastKey = useRef(key);
   useEffect(() => {
-    if (Object.is(lastKey.current, key)) return;
-    lastKey.current = key;
-    reset();
-  }, [key, reset]);
-
-  const onStepStart = useRef(options.onStepStart);
-  onStepStart.current = options.onStepStart;
-  const onComplete = useRef(options.onComplete);
-  onComplete.current = options.onComplete;
-
-  useStepStarts(timeline, { elapsed, live, playing: playback.playing, onStepStart });
-
-  const { ended, seeked } = useEnd({
-    elapsed,
-    live,
-    playing: playback.playing,
-    duration,
-    onComplete,
-  });
-
-  const {
-    play: gatePlay,
-    pause,
-    toggle: gateToggle,
-    replay: gateReplay,
-    seek: gateSeek,
-    setSpeed,
-  } = playback;
-  const controls = useMemo<AgentDemoControls>(() => {
-    const seek = (ms: number): void => {
-      gateSeek(ms);
-      seeked(ms);
-    };
-    return {
-      play: gatePlay,
-      pause,
-      toggle: gateToggle,
-      replay: gateReplay,
-      seek,
-      cancel: () => seek(duration),
-      setSpeed,
-    };
-  }, [gatePlay, pause, gateToggle, gateReplay, gateSeek, setSpeed, seeked, duration]);
-
-  const clockPosition = live || clock.held ? { ms: elapsed } : undefined;
-  const view = viewAt(timeline, position ?? clockPosition, finalPolicy);
-
-  const showTurn = live && (elapsed > 0 || playback.playing);
-  return {
-    view,
-    controls,
-    ref: playback.ref,
-    ready: playback.ready,
-    started: live && started,
-    playing: live && playback.playing,
-    paused: playback.paused,
-    reduced: playback.reduced,
-    complete: clickMode ? view.complete : live && ended,
-    animating: clock.animating,
-    mode: playback.ready ? "live" : "static",
-    speed: playback.speed,
-    turn: showTurn ? countAt(timeline.turnStarts, elapsed) - 1 : -1,
-    timeline,
-  };
+    controller.mount();
+    return controller.destroy;
+  }, [controller]);
+  const state = useSyncExternalStore(
+    controller.subscribe,
+    controller.getState,
+    controller.getState,
+  );
+  return { ...state, ref };
 }

@@ -1,17 +1,15 @@
 import {
-  announce,
   isActivationKey,
-  isTabDisabled,
   keyTarget,
   panelIdOf,
   type TabsActivation,
   type TabsHash,
   type TabsOrientation,
-  tabForHash,
+  tabEntries,
   tabsIn,
   tabValue,
-  writeHash,
 } from "./core.ts";
+import { createTabsState } from "./state.ts";
 
 export interface CreateTabsOptions {
   /** Default "auto". */
@@ -41,9 +39,9 @@ export interface CreateTabsOptions {
  * `aria-selected`, the roving `tabindex`, `data-state` and each panel's `hidden`. A tab's value is
  * its `data-value`, or its panel id. The first selection is the enabled tab marked
  * `aria-selected="true"`, else the enabled tab whose panel has `data-default` (the panel the no-JS
- * CSS shows), else the first enabled tab. Returns a function that removes the listeners and puts back
- * what setup touched (`data-live`, `aria-selected`, `tabindex`, `data-state`, `hidden`,
- * `aria-controls`), so the markup is as it was before.
+ * CSS shows), else the first enabled tab (`init` in `state.ts`). Returns a function
+ * that removes the listeners and puts back what setup touched (`data-live`, `aria-selected`,
+ * `tabindex`, `data-state`, `hidden`, `aria-controls`), so the markup is as it was before.
  */
 export function createTabs(root: HTMLElement, options: CreateTabsOptions = {}): () => void {
   const list = root.querySelector<HTMLElement>('[role="tablist"]');
@@ -52,36 +50,33 @@ export function createTabs(root: HTMLElement, options: CreateTabsOptions = {}): 
   const orientation =
     options.orientation ??
     (list.getAttribute("aria-orientation") === "vertical" ? "vertical" : "horizontal");
-  const hash = options.hash ?? false;
-  const view = root.ownerDocument.defaultView;
 
   const restore = snapshot(root, list);
   for (const tab of tabsIn(list)) {
     const panel = panelIdOf(tab);
     if (panel && !tab.hasAttribute("aria-controls")) tab.setAttribute("aria-controls", panel);
   }
-  const initial = tabsIn(list).find((tab) => tab.getAttribute("aria-selected") === "true");
-  let current =
-    initial && !isTabDisabled(initial) ? initial : (defaultTab(list) ?? firstEnabled(list));
-  apply(list, current);
+  const marked = tabsIn(list).find((tab) => tab.getAttribute("aria-selected") === "true");
+  const state = createTabsState({
+    tabs: () => tabEntries(list),
+    selected: marked ? valueOfTab(marked) : undefined,
+    defaultValue: defaultValue(list),
+    hash: options.hash ?? false,
+    eventName: options.eventName,
+    onValueChange: options.onValueChange,
+    target: () => root,
+    window: root.ownerDocument.defaultView,
+  });
+  const unsubscribe = state.subscribe(() => apply(list, state.getState()));
+  state.init();
+  apply(list, state.getState());
   root.setAttribute("data-live", "");
-
-  const change = (tab: HTMLElement, picked: boolean, replace = false): void => {
-    if (tab === current || isTabDisabled(tab)) return;
-    current = tab;
-    apply(list, tab);
-    const value = tabValue(tab) ?? "";
-    options.onValueChange?.(value);
-    if (!picked) return;
-    writeHash(panelIdOf(tab) ?? "", hash, replace);
-    announce(root, options.eventName, value);
-  };
 
   const onClick = (event: MouseEvent): void => {
     const tab = (event.target as Element).closest<HTMLElement>('[role="tab"]');
     if (!tab || !list.contains(tab)) return;
     event.preventDefault();
-    change(tab, true);
+    state.select(valueOfTab(tab), { via: "pointer" });
   };
   const onKeyDown = (event: KeyboardEvent): void => {
     const from = event.target as Element;
@@ -89,34 +84,30 @@ export function createTabs(root: HTMLElement, options: CreateTabsOptions = {}): 
       const tab = from.closest<HTMLElement>('[role="tab"]');
       if (!tab) return;
       event.preventDefault();
-      change(tab, true);
+      state.select(valueOfTab(tab), { via: "pointer" });
       return;
     }
     const target = keyTarget(list, from, event.key, orientation);
     if (!target) return;
     event.preventDefault();
     target.focus();
-    if (activation === "auto") change(target, true, true);
-  };
-  const onHash = (): void => {
-    const tab = tabForHash(list, view?.location.hash ?? "");
-    if (tab) change(tab, false);
+    if (activation === "auto") state.select(valueOfTab(target), { via: "keyboard" });
   };
 
   list.addEventListener("click", onClick);
   list.addEventListener("keydown", onKeyDown);
-  if (hash) {
-    onHash();
-    view?.addEventListener("hashchange", onHash);
-  }
+  const disconnect = state.connectHash();
 
   return () => {
     list.removeEventListener("click", onClick);
     list.removeEventListener("keydown", onKeyDown);
-    view?.removeEventListener("hashchange", onHash);
+    disconnect();
+    unsubscribe();
     restore();
   };
 }
+
+const valueOfTab = (tab: HTMLElement): string => tabValue(tab) ?? "";
 
 const TOUCHED_TAB = ["aria-selected", "tabindex", "data-state", "aria-controls"] as const;
 const TOUCHED_PANEL = ["hidden", "data-state"] as const;
@@ -141,22 +132,21 @@ function snapshot(root: HTMLElement, list: HTMLElement): () => void {
   };
 }
 
-function firstEnabled(list: ParentNode): HTMLElement | undefined {
-  return tabsIn(list).find((tab) => !isTabDisabled(tab));
-}
-
-/** The enabled tab whose panel carries `data-default`, the one the no-JS CSS shows. */
-function defaultTab(list: HTMLElement): HTMLElement | undefined {
-  return tabsIn(list).find((tab) => {
+/** The value of the first tab whose panel carries `data-default`, the one the no-JS CSS shows. */
+function defaultValue(list: HTMLElement): string | undefined {
+  const tab = tabsIn(list).find((tab) => {
     const id = panelIdOf(tab);
-    const panel = id ? list.ownerDocument.getElementById(id) : null;
-    return !isTabDisabled(tab) && panel?.hasAttribute("data-default") === true;
+    return id !== null && list.ownerDocument.getElementById(id)?.hasAttribute("data-default");
   });
+  return tab ? valueOfTab(tab) : undefined;
 }
 
-function apply(list: HTMLElement, selected: HTMLElement | undefined): void {
-  for (const tab of tabsIn(list)) {
-    const active = tab === selected;
+/** Applies the selection: the first tab with `selected` as its value is the active one. */
+function apply(list: HTMLElement, selected: string | undefined): void {
+  const tabs = tabsIn(list);
+  const current = tabs.find((tab) => valueOfTab(tab) === selected);
+  for (const tab of tabs) {
+    const active = tab === current;
     tab.setAttribute("aria-selected", String(active));
     tab.tabIndex = active ? 0 : -1;
     tab.dataset.state = active ? "active" : "inactive";

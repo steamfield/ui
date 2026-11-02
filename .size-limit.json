@@ -15,19 +15,19 @@
     "name": "playback",
     "path": "dist/playback/index.js",
     "import": "{ createPlaybackGate }",
-    "limit": "1.7 kB"
+    "limit": "1.95 kB"
   },
   {
     "name": "copy",
     "path": "dist/copy/index.js",
     "import": "{ enhanceCopyButtons, copyText }",
-    "limit": "1.3 kB"
+    "limit": "1.5 kB"
   },
   {
     "name": "tabs",
     "path": "dist/tabs/index.js",
     "import": "{ createTabs }",
-    "limit": "1.4 kB"
+    "limit": "1.8 kB"
   },
   {
     "name": "reveal",
@@ -52,14 +52,14 @@
     "path": "dist/markdown/index.js",
     "import": "{ createHastPlugins, createShikiConfig }",
     "ignore": ["satteri", "github-slugger", "shiki"],
-    "limit": "2 kB"
+    "limit": "2.3 kB"
   },
   {
     "name": "react/copy",
     "path": "dist/react/copy/index.js",
     "import": "{ CopyCommand, useCopy }",
     "ignore": ["react", "react-dom"],
-    "limit": "900 B"
+    "limit": "1.15 kB"
   },
   {
     "name": "react/playback",
@@ -73,14 +73,14 @@
     "path": "dist/react/tabs/index.js",
     "import": "{ Tabs, TabList, Tab, TabPanel }",
     "ignore": ["react", "react-dom"],
-    "limit": "1.75 kB"
+    "limit": "2 kB"
   },
   {
     "name": "react/install-tabs",
     "path": "dist/react/install-tabs/index.js",
     "import": "{ InstallTabs }",
     "ignore": ["react", "react-dom"],
-    "limit": "2.9 kB"
+    "limit": "3.4 kB"
   },
   {
     "name": "react/agent-demo",

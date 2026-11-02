@@ -1,4 +1,5 @@
 import { type ReactElement, useEffect, useRef, useState } from "react";
+import { DEFAULT_COPY_MESSAGES } from "../../copy/messages.ts";
 import { defined } from "../../internal/options.ts";
 import type { TabsActivation, TabsHash, TabsOrientation } from "../../tabs/core.ts";
 import { useCopy } from "../copy/use-copy.ts";
@@ -57,9 +58,10 @@ export interface InstallTabsProps {
 const DEFAULT_LABELS: Required<InstallTabsLabels> = {
   tabList: "Install with",
   prompt: "$",
-  copy: "Copy",
-  copied: "Copied",
-  copiedMessage: "Copied to clipboard.",
+  copy: DEFAULT_COPY_MESSAGES.label,
+  copied: DEFAULT_COPY_MESSAGES.copiedLabel,
+  copiedMessage: DEFAULT_COPY_MESSAGES.copied,
+  // Differs from the enhancer's on purpose: nothing gets selected here (see copy/messages.ts).
   failed: "Copy failed. Select the command and copy it manually.",
 };
 

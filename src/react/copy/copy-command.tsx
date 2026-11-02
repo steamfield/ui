@@ -1,4 +1,11 @@
 import type { ReactElement, ReactNode } from "react";
+import {
+  COPY_COMMAND,
+  COPY_CONTROLS,
+  COPY_LABEL,
+  COPY_RESULT,
+  COPY_ROOT,
+} from "../../copy/markup.ts";
 
 export interface CopyButtonProps {
   /** The `id` of the element whose text the button copies. */
@@ -25,13 +32,13 @@ export function CopyButton({
   icon,
 }: CopyButtonProps): ReactElement {
   return (
-    <span data-copy-root="" data-part="copy">
+    <span {...{ [COPY_ROOT]: "" }} data-part="copy">
       <button
         type="button"
         hidden
-        data-copy-command=""
+        {...{ [COPY_COMMAND]: "" }}
         data-part="copy-button"
-        aria-controls={controls}
+        {...{ [COPY_CONTROLS]: controls }}
         aria-label={label}
         className={className}
       >
@@ -40,9 +47,9 @@ export function CopyButton({
             {icon}
           </span>
         ) : null}
-        <span data-copy-label="">{children}</span>
+        <span {...{ [COPY_LABEL]: "" }}>{children}</span>
       </button>
-      <span data-copy-result="" data-part="copy-result" role="status" aria-live="polite" />
+      <span {...{ [COPY_RESULT]: "" }} data-part="copy-result" role="status" aria-live="polite" />
     </span>
   );
 }

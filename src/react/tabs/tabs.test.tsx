@@ -126,6 +126,16 @@ test("the server marks the defaultValue panel data-default so the no-JS CSS can 
   expect(renderToStaticMarkup(<Four value="d" />)).toMatch(/id="t-d"[^>]*data-default=""/);
 });
 
+test("a disabled or unknown defaultValue falls back to the first enabled tab after hydration", () => {
+  expect(renderToStaticMarkup(<Four defaultValue="c" />)).toMatch(/id="t-c"[^>]*data-default=""/);
+  for (const defaultValue of ["c", "zz"]) {
+    render(<Four defaultValue={defaultValue} />);
+    expect(shownPanel().textContent).toBe("panel a");
+    expect(tab("A").getAttribute("aria-selected")).toBe("true");
+    cleanup();
+  }
+});
+
 test("keepMounted false renders only the selected panel's content", async () => {
   const user = userEvent.setup();
   expect(renderToStaticMarkup(<Four keepMounted={false} />)).toContain("panel d");

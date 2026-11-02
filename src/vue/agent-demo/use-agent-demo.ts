@@ -11,27 +11,14 @@ import {
   toValue,
   watch,
 } from "vue";
-import { countAt, hiddenToolNames, signature, type ToolRegistry } from "../../agent-demo/core.ts";
-import { carryOver, sameInputs } from "../../internal/gate-rebuild.ts";
-import { defined } from "../../internal/options.ts";
-import {
-  checkSpeed,
-  createPlaybackGate,
-  type GateState,
-  type PlaybackGate,
-  type ReducedPolicy,
-} from "../../playback/gate.ts";
+import { createDemoController, type DemoControllerOptions } from "../../agent-demo/controller.ts";
+import type { ToolRegistry } from "../../agent-demo/core.ts";
+import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
 import type { DemoScript, Step } from "../../script/types.ts";
-import { compile, type Timeline } from "../../sequencer/compile.ts";
+import type { Timeline } from "../../sequencer/compile.ts";
 import type { Timing } from "../../sequencer/timing.ts";
-import {
-  type DemoView,
-  type FinalPolicy,
-  finalState,
-  type Position,
-  stateAt,
-} from "../../sequencer/view.ts";
+import type { DemoView, FinalPolicy, Position } from "../../sequencer/view.ts";
 
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
@@ -119,7 +106,7 @@ export interface UseAgentDemoResult<TData = unknown> {
   readonly controls: AgentDemoControls;
   /**
    * Bind as the template ref of the element whose visibility gates playback. Until one is bound,
-   * autoStart waits; a late element gets a fresh gate and a swapped one keeps the progress.
+   * autoStart waits; a late element starts fresh and a swapped one keeps the progress.
    */
   readonly el: Ref<Element | null>;
   /** False on the server and before mount. Show controls only once true. */
@@ -154,19 +141,6 @@ export interface UseAgentDemoResult<TData = unknown> {
   readonly clickMode: ComputedRef<boolean>;
 }
 
-/** Everything off: what the server and the pre-mount render see. */
-const IDLE: GateState = {
-  started: false,
-  inView: false,
-  tabVisible: false,
-  paused: false,
-  reduced: false,
-  complete: false,
-  playing: false,
-  elapsed: 0,
-  speed: 1,
-};
-
 /**
  * The headless agent demo for Vue: compiles a script and returns the reactive view to render with
  * its controls. Call it in `setup`. The server and pre-mount render are `finalState(finalPolicy)`,
@@ -188,221 +162,76 @@ export function useAgentDemo<TData = unknown>(
   script: MaybeRefOrGetter<DemoScript<TData>>,
   options: MaybeRefOrGetter<UseAgentDemoOptions<TData>> = {},
 ): UseAgentDemoResult<TData> {
-  const opts = computed(() => toValue(options));
-  const position = computed(() => toValue(opts.value.position));
-  const clickMode = computed(() => position.value !== undefined);
-
-  let cache: { key: unknown; timeline: Timeline<TData> } | null = null;
-  let content: { inputs: readonly unknown[]; key: unknown } | null = null;
-  const compiled = computed(() => {
-    // Raw, so steps handed to callbacks are the caller's objects and not reactive proxies.
-    const value = toRaw(toValue(script));
-    const { scriptKey, timing, seed, composer } = opts.value;
-    const names = hiddenToolNames(opts.value.tools);
-    // Joined into a string, so an inline registry rebuilt every render compares by its names.
-    const hidden = names.join("\n");
-    // The content signature is recomputed only when an input is a new object.
-    let key: unknown = `key:${scriptKey}\n${hidden}`;
-    if (scriptKey === undefined) {
-      const inputs = [value, toRaw(timing), seed, composer, hidden];
-      let last = content;
-      if (last === null || inputs.some((input, i) => !Object.is(input, last?.inputs[i]))) {
-        const sig = signature({ script: value, timing, seed, composer, hidden });
-        last = { inputs, key: sig ?? value };
-        content = last;
-      }
-      key = last.key;
-    }
-    if (cache === null || !Object.is(cache.key, key)) {
-      const hiddenTools = names.length === 0 ? undefined : names;
-      cache = { key, timeline: compile(value, defined({ timing, seed, composer, hiddenTools })) };
-    }
-    return cache;
+  // Raw, so steps handed to callbacks are the caller's objects and not reactive proxies, and so
+  // content comparison sees the caller's identities.
+  const read = (): [DemoScript<TData>, DemoControllerOptions<TData>] => {
+    const opts = toValue(options);
+    return [
+      toRaw(toValue(script)),
+      { ...opts, timing: toRaw(opts.timing), position: toValue(opts.position) },
+    ];
+  };
+  const controller = createDemoController(...read());
+  const state = shallowRef(controller.getState());
+  const unsubscribe = controller.subscribe(() => {
+    state.value = controller.getState();
   });
-  const timeline = computed(() => compiled.value.timeline);
-  const key = computed(() => compiled.value.key);
+  // Runs whenever a reactive source the props read changes; the controller compares the rest.
+  watch(read, (next) => controller.update(...next));
 
+  const clickMode = computed(() => toValue(toValue(options).position) !== undefined);
   const playCount = ref(0);
   let wasActive = false;
   watch(
-    () => toValue(opts.value.active) ?? true,
+    () => toValue(toValue(options).active) ?? true,
     (active) => {
-      if (active && !wasActive) playCount.value++;
+      if (active && !wasActive) {
+        playCount.value++;
+        // A slide re-entry starts over.
+        controller.reset();
+      }
       wasActive = active;
     },
     { immediate: true },
   );
 
   const el = shallowRef<Element | null>(null);
+  watch(el, (node) => controller.attach(node), { flush: "post" });
+  // Created in the flush after mount, so nothing reads the browser during SSR and the first
+  // mounted render is still the static one.
   const mounted = ref(false);
   onMounted(() => {
     mounted.value = true;
   });
-  const gate = shallowRef<PlaybackGate | null>(null);
-  const state = shallowRef<GateState>(IDLE);
-  // The rate a new gate starts at: the last one set by the `speed` option or `setSpeed`, so a
-  // rebuilt gate keeps it.
-  let rate = opts.value.speed;
-  const autoStart = computed(() => opts.value.autoStart ?? true);
-  const reducedPolicy = computed(() => opts.value.reducedPolicy ?? "end");
-
   watch(
-    () => opts.value.speed,
-    (next) => {
-      if (next === undefined) return;
-      rate = next;
-      gate.value?.setSpeed(next);
+    mounted,
+    () => {
+      controller.attach(el.value);
+      controller.mount();
     },
-  );
-
-  // The gate follows the element and the options. A swap from one element to another keeps the
-  // progress; new options, or a slide re-entry (`playCount`), start a fresh gate at 0. Before any
-  // element is bound, autoStart waits for one, so nothing plays or fires callbacks unseen; an
-  // explicit `play()` still runs it, counted as in view. An element bound later gets a fresh gate,
-  // and unbinding one keeps the gate, which then reads as out of view. Created only after mount,
-  // so nothing reads the browser during SSR. Every source is a getter compared on its own: a
-  // shallowRef source would force the callback on any props update.
-  let observed: Element | null = null;
-  let built: readonly unknown[] | null = null;
-  let unsubscribe = (): void => {};
-  watch(
-    [
-      mounted,
-      () => el.value,
-      () => timeline.value.duration,
-      () => (clickMode.value ? false : autoStart.value),
-      () => opts.value.threshold,
-      () => opts.value.rootMargin,
-      () => opts.value.leaveGraceMs,
-      () => opts.value.motion,
-      reducedPolicy,
-      playCount,
-    ] as const,
-    ([isMounted, element, ...inputs]) => {
-      if (!isMounted) return;
-      const prev = gate.value;
-      const same = prev !== null && sameInputs(built, inputs);
-      // Unbinding (null) keeps the gate, like React's ref; so does an unchanged element.
-      if (same && (element === null || element === observed)) return;
-      const carry = same && observed !== null ? prev?.getState() : undefined;
-      const [duration, gateAutoStart, threshold, rootMargin, leaveGraceMs, motion, policy] = inputs;
-      unsubscribe();
-      prev?.destroy();
-      const next = createPlaybackGate(element, {
-        duration,
-        autoStart: element === null ? false : gateAutoStart,
-        reducedPolicy: policy,
-        ...defined({ speed: rate, threshold, rootMargin, leaveGraceMs, motion }),
-      });
-      if (carry) carryOver(next, carry);
-      observed = element;
-      built = inputs;
-      gate.value = next;
-      state.value = next.getState();
-      unsubscribe = next.subscribe(() => {
-        state.value = next.getState();
-      });
-    },
-    { immediate: true, flush: "post" },
+    { flush: "post" },
   );
   onScopeDispose(() => {
     unsubscribe();
-    gate.value?.destroy();
-    gate.value = null;
-    state.value = IDLE;
+    controller.destroy();
   });
 
-  // A new script (by key) starts over.
-  watch(key, () => {
-    gate.value?.reset();
-  });
-
-  const ready = computed(() => gate.value !== null);
-  const elapsed = computed(() => state.value.elapsed);
-  // The clock has moved: started, or a seek before play. Before that the view is the final state.
-  const moved = computed(
-    () => !clickMode.value && ready.value && (state.value.started || elapsed.value > 0),
-  );
-  const live = computed(() => moved.value && !state.value.reduced);
-  const held = computed(
-    () => moved.value && state.value.reduced && reducedPolicy.value === "hold" && elapsed.value > 0,
-  );
-
-  let firedUpTo = -1;
-  let lastElapsed = 0;
-  watch([elapsed, live, () => state.value.playing, timeline], () => {
-    const t = elapsed.value;
-    const steps = timeline.value.steps;
-    if (t < lastElapsed) firedUpTo = steps.filter((s) => s.start < t).length - 1;
-    lastElapsed = t;
-    if (!live.value || (!state.value.playing && t === 0)) return;
-    while ((steps[firedUpTo + 1]?.start ?? Number.POSITIVE_INFINITY) <= t) {
-      firedUpTo += 1;
-      const step = timeline.value.script.steps[firedUpTo];
-      if (step) opts.value.onStepStart?.(firedUpTo, step);
-    }
-  });
-
-  // The end counts only when the clock plays across it, or a seek or cancel lands on it; never
-  // the jump reduced motion makes. `from` is where the last move started.
-  const ended = ref(false);
-  let from = 0;
-  watch([elapsed, live, () => state.value.playing] as const, ([t, isLive], [, , wasPlaying]) => {
-    const { duration } = timeline.value;
-    if (t < duration) ended.value = false;
-    else if (isLive && wasPlaying && from < duration) {
-      ended.value = true;
-      opts.value.onComplete?.();
-    }
-    from = t;
-  });
-
-  const seek = (ms: number): void => {
-    const { duration } = timeline.value;
-    gate.value?.seek(ms);
-    from = Math.min(Math.max(ms, 0), duration);
-    if (ms >= duration) ended.value = true;
-  };
-  const controls: AgentDemoControls = {
-    play: () => gate.value?.play(),
-    pause: () => gate.value?.pause(),
-    toggle: () => gate.value?.toggle(),
-    replay: () => gate.value?.replay(),
-    seek,
-    cancel: () => seek(timeline.value.duration),
-    setSpeed: (next: number) => {
-      if (gate.value) gate.value.setSpeed(next);
-      else checkSpeed(next);
-      rate = next;
-    },
-  };
-
-  const view = computed<DemoView<TData>>(() => {
-    if (position.value !== undefined) return stateAt(timeline.value, position.value);
-    if (live.value || held.value) return stateAt(timeline.value, { ms: elapsed.value });
-    return finalState(timeline.value, { policy: opts.value.finalPolicy ?? "all" });
-  });
-
+  const view = computed(() => state.value.view);
   return {
     view,
-    controls,
+    controls: controller.getState().controls,
     el,
-    ready,
-    started: computed(() => live.value && state.value.started),
-    playing: computed(() => live.value && state.value.playing),
+    ready: computed(() => state.value.ready),
+    started: computed(() => state.value.started),
+    playing: computed(() => state.value.playing),
     paused: computed(() => state.value.paused),
     reduced: computed(() => state.value.reduced),
-    complete: computed(() => (clickMode.value ? view.value.complete : live.value && ended.value)),
-    animating: computed(
-      () => live.value || (clickMode.value && ready.value && !state.value.reduced),
-    ),
-    mode: computed(() => (ready.value ? "live" : "static")),
-    speed: computed(() => (gate.value ? state.value.speed : (opts.value.speed ?? 1))),
-    turn: computed(() => {
-      const show = live.value && (elapsed.value > 0 || state.value.playing);
-      return show ? countAt(timeline.value.turnStarts, elapsed.value) - 1 : -1;
-    }),
-    timeline,
+    complete: computed(() => state.value.complete),
+    animating: computed(() => state.value.animating),
+    mode: computed(() => state.value.mode),
+    speed: computed(() => state.value.speed),
+    turn: computed(() => state.value.turn),
+    timeline: computed(() => state.value.timeline),
     playCount,
     clickMode,
   };

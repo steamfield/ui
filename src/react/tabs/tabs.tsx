@@ -4,25 +4,23 @@ import {
   type MouseEvent,
   type ReactElement,
   type ReactNode,
-  type RefObject,
-  useCallback,
   useContext,
   useEffect,
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
-  announce,
   isActivationKey,
   keyTarget,
   type TabsActivation,
   type TabsHash,
   type TabsOrientation,
-  tabForHash,
+  tabEntries,
   tabValue,
-  writeHash,
 } from "../../tabs/core.ts";
+import { createTabsState } from "../../tabs/state.ts";
 
 interface TabsContextValue {
   readonly base: string;
@@ -36,8 +34,8 @@ interface TabsContextValue {
   readonly asAnchors: boolean;
   /** The value the server rendered as selected; its panel is marked `data-default` for the CSS. */
   readonly initial: string | undefined;
-  /** `replace` records the hash with `replaceState` (arrow keys under auto activation). */
-  readonly pick: (value: string, replace?: boolean) => void;
+  /** `keyboard` is an arrow-key move under auto activation, recorded with `replaceState`. */
+  readonly pick: (value: string, via: "keyboard" | "pointer") => void;
 }
 
 // Outside <Tabs> the parts render their static, pre-hydration markup rather than throwing.
@@ -116,41 +114,35 @@ export function Tabs({
   const generated = useId();
   const base = id ?? generated;
   const root = useRef<HTMLDivElement>(null);
-  const [internal, setInternal] = useState(defaultValue);
   const [hydrated, setHydrated] = useState(false);
   const [initial] = useState(value ?? defaultValue);
-  const controlled = value !== undefined;
-  const selected = (controlled ? value : internal) ?? firstValue(root);
 
-  const latest = useRef({ selected, controlled, onValueChange, hash, eventName, base });
-  latest.current = { selected, controlled, onValueChange, hash, eventName, base };
-
-  const change = useCallback((next: string, picked: boolean, replace = false) => {
-    const now = latest.current;
-    if (next === now.selected) return;
-    if (!now.controlled) setInternal(next);
-    now.onValueChange?.(next);
-    if (!picked) return;
-    writeHash(panelId(now.base, next), now.hash, replace);
-    announce(root.current, now.eventName, next);
-  }, []);
-  const pick = useCallback(
-    (next: string, replace = false) => change(next, true, replace),
-    [change],
+  const latest = useRef({ value, onValueChange, hash, eventName });
+  latest.current = { value, onValueChange, hash, eventName };
+  const [state] = useState(() =>
+    createTabsState({
+      tabs: () => (root.current ? tabEntries(root.current) : []),
+      selected: value,
+      defaultValue,
+      controlled: () => latest.current.value,
+      get hash() {
+        return latest.current.hash;
+      },
+      get eventName() {
+        return latest.current.eventName;
+      },
+      onValueChange: (next) => latest.current.onValueChange?.(next),
+      target: () => root.current,
+    }),
   );
+  const selected = useSyncExternalStore(state.subscribe, state.getState, state.getState);
+  const pick = (next: string, via: "keyboard" | "pointer"): void => state.select(next, { via });
 
   useEffect(() => {
+    state.init();
     setHydrated(true);
-    if (!hash) return;
-    const fromHash = (): void => {
-      const tab = root.current ? tabForHash(root.current, globalThis.location?.hash ?? "") : null;
-      const next = tab ? tabValue(tab) : null;
-      if (next !== null) change(next, false);
-    };
-    fromHash();
-    globalThis.addEventListener?.("hashchange", fromHash);
-    return () => globalThis.removeEventListener?.("hashchange", fromHash);
-  }, [hash, change]);
+  }, [state]);
+  useEffect(() => (hash ? state.connectHash() : undefined), [state, hash]);
 
   return (
     <TabsContext.Provider
@@ -179,14 +171,6 @@ export function Tabs({
   );
 }
 
-/** Before the first render nothing is selected yet; afterwards the first enabled tab's value. */
-function firstValue(root: RefObject<HTMLDivElement | null>): string | undefined {
-  const tab = root.current?.querySelector<HTMLElement>(
-    '[role="tab"]:not([disabled]):not([aria-disabled="true"])',
-  );
-  return tab ? (tabValue(tab) ?? undefined) : undefined;
-}
-
 export interface TabListProps {
   readonly "aria-label"?: string;
   readonly "aria-labelledby"?: string;
@@ -208,7 +192,7 @@ export function TabList({
     event.preventDefault();
     target.focus();
     const next = tabValue(target);
-    if (activation === "auto" && next !== null) pick(next, true);
+    if (activation === "auto" && next !== null) pick(next, "keyboard");
   };
   return (
     <div
@@ -239,7 +223,7 @@ export function Tab({ value, disabled = false, className, children }: TabProps):
   const active = selected === value;
   const activate = (event: MouseEvent | KeyboardEvent): void => {
     event.preventDefault();
-    if (!disabled) pick(value);
+    if (!disabled) pick(value, "pointer");
   };
   const props = {
     id: tabId(base, value),

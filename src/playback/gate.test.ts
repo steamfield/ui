@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import {
   FakeIntersectionObserver,
   setTabHidden,
@@ -6,7 +6,13 @@ import {
   stubReducedMotion,
 } from "../../tests/helpers/dom.ts";
 import { LibraryError } from "../script/errors.ts";
-import { createPlaybackGate, type MotionSource, type PlaybackGate } from "./index.ts";
+import { type BoundGate, createBoundGate } from "./gate.ts";
+import {
+  createPlaybackGate,
+  type MotionSource,
+  type PlaybackGate,
+  type PlaybackGateOptions,
+} from "./index.ts";
 
 const observer = (): FakeIntersectionObserver => FakeIntersectionObserver.last();
 
@@ -376,5 +382,195 @@ describe("reduced motion", () => {
   test("auto allows motion when matchMedia is missing", () => {
     vi.stubGlobal("matchMedia", undefined);
     expect(make().getState().reduced).toBe(false);
+  });
+});
+
+describe("bound gate (the bindings' element and option rules)", () => {
+  let bound: BoundGate | undefined;
+  const other = (): HTMLElement => {
+    const node = document.createElement("section");
+    document.body.append(node);
+    onTestFinished(() => node.remove());
+    return node;
+  };
+  const makeBound = (options: PlaybackGateOptions = {}): BoundGate => {
+    bound = createBoundGate({ duration: 10_000, ...options });
+    onTestFinished(() => bound?.destroy());
+    return bound;
+  };
+  const targets = (): Element[] => [...observer().targets];
+
+  test("with no element, autoStart waits and observes nothing", () => {
+    const g = makeBound();
+    advance(500);
+    expect(g.getState()).toMatchObject({ started: false, inView: true, elapsed: 0 });
+    expect(FakeIntersectionObserver.instances).toHaveLength(0);
+  });
+
+  test("with no element, play() runs, counted as in view", () => {
+    const g = makeBound({ autoStart: false });
+    g.play();
+    advance(500);
+    expect(g.getState()).toMatchObject({ playing: true, inView: true });
+    expect(g.getState().elapsed).toBeGreaterThan(400);
+  });
+
+  test("the first element starts fresh, with nothing carried from before it", () => {
+    const onFrame = vi.fn();
+    const g = makeBound({ onFrame });
+    g.play();
+    g.pause();
+    g.seek(700);
+    g.attach(el);
+    expect(g.getState()).toMatchObject({
+      elapsed: 0,
+      started: true,
+      paused: false,
+      inView: false,
+    });
+    expect(onFrame).toHaveBeenLastCalledWith(0);
+    expect(targets()).toEqual([el]);
+    observer().fire(true);
+    advance(500);
+    expect(g.getState().elapsed).toBeGreaterThan(400);
+  });
+
+  test("a swap carries elapsed, started, paused and the rate, on the same observer", () => {
+    const g = makeBound();
+    g.attach(el);
+    observer().fire(true);
+    advance(500);
+    g.setSpeed(2);
+    g.pause();
+    const at = g.getState().elapsed;
+    const b = other();
+    g.attach(b);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    expect(targets()).toEqual([b]);
+    expect(g.getState()).toMatchObject({
+      elapsed: at,
+      started: true,
+      paused: true,
+      speed: 2,
+      inView: false,
+    });
+    // A late report about the old element is ignored.
+    observer().report([{ target: el, isIntersecting: true }]);
+    expect(g.getState().inView).toBe(false);
+    observer().enter(b);
+    g.play();
+    advance(100);
+    expect(g.getState().elapsed).toBeGreaterThan(at + 150);
+  });
+
+  test("a swap keeps an unstarted gate unstarted", () => {
+    const g = makeBound({ autoStart: false });
+    g.attach(el);
+    g.attach(other());
+    expect(g.getState()).toMatchObject({ started: false, elapsed: 0 });
+  });
+
+  test("an option change starts over at 0 with the rate kept and one new observer", () => {
+    const g = makeBound();
+    g.attach(el);
+    observer().fire(true);
+    advance(500);
+    g.setSpeed(3);
+    g.pause();
+    const b = other();
+    g.attach(b);
+    g.configure({ duration: 10_000, threshold: 0.5 });
+    expect(FakeIntersectionObserver.instances).toHaveLength(2);
+    expect(FakeIntersectionObserver.live()).toHaveLength(1);
+    expect(targets()).toEqual([b]);
+    expect(observer().options).toEqual({ threshold: 0.5, rootMargin: "0px" });
+    expect(g.getState()).toMatchObject({ elapsed: 0, started: true, paused: false, speed: 3 });
+  });
+
+  test("an option change before any element keeps autoStart waiting", () => {
+    const g = makeBound();
+    g.play();
+    advance(200);
+    g.configure({ duration: 5000 });
+    expect(g.getState()).toMatchObject({ elapsed: 0, started: false });
+  });
+
+  test("the same options change nothing; speed and onFrame change in place", () => {
+    const first = vi.fn();
+    const g = makeBound({ onFrame: first });
+    g.attach(el);
+    observer().fire(true);
+    advance(500);
+    const at = g.getState().elapsed;
+    const listener = vi.fn();
+    g.subscribe(listener);
+    g.configure({ duration: 10_000, onFrame: first });
+    expect(listener).not.toHaveBeenCalled();
+    const second = vi.fn();
+    g.configure({ duration: 10_000, onFrame: second, speed: 4 });
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    expect(g.getState().speed).toBe(4);
+    advance(100);
+    expect(g.getState().elapsed).toBeGreaterThan(at + 300);
+    expect(second).toHaveBeenCalled();
+    // An unchanged `speed` option leaves a rate set with setSpeed alone.
+    g.setSpeed(2);
+    g.configure({ duration: 10_000, onFrame: second, speed: 4 });
+    expect(g.getState().speed).toBe(2);
+  });
+
+  test("a bad speed throws before anything changes", () => {
+    const g = makeBound();
+    g.attach(el);
+    expect(() => g.configure({ duration: 1, speed: 0 })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "speed" }),
+    );
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+  });
+
+  test("unbinding keeps the state; the observer then reports it out of view", () => {
+    const g = makeBound();
+    g.attach(el);
+    observer().fire(true);
+    advance(300);
+    g.attach(null);
+    const at = g.getState().elapsed;
+    expect(g.getState()).toMatchObject({ started: true, inView: true });
+    observer().fire(false);
+    advance(300);
+    expect(g.getState()).toMatchObject({ playing: false, elapsed: at });
+    // Binding the same element again changes nothing.
+    g.attach(el);
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    expect(g.getState().elapsed).toBe(at);
+  });
+
+  test("the motion source follows the element", () => {
+    const g = makeBound();
+    g.attach(el);
+    const wrap = document.createElement("div");
+    wrap.dataset.sfMotion = "reduce";
+    const b = document.createElement("section");
+    wrap.append(b);
+    document.body.append(wrap);
+    onTestFinished(() => wrap.remove());
+    g.attach(b);
+    expect(g.getState()).toMatchObject({ reduced: true, complete: true });
+  });
+
+  test("after destroy, attach and configure do nothing", () => {
+    const g = makeBound();
+    g.destroy();
+    g.attach(el);
+    g.configure({ duration: 5 });
+    expect(FakeIntersectionObserver.instances).toHaveLength(0);
+  });
+
+  test("without IntersectionObserver a bound element counts as in view", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const g = makeBound();
+    g.attach(el);
+    advance(200);
+    expect(g.getState()).toMatchObject({ inView: true, playing: true });
   });
 });

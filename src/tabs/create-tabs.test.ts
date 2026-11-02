@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { tabForHash, writeHash } from "./core.ts";
+import { writeHash } from "./core.ts";
 import { createTabs } from "./create-tabs.ts";
 
 let dispose: () => void = () => {};
@@ -255,10 +255,22 @@ test("no tablist is a no-op, and the disposer removes listeners", () => {
 });
 
 test("hash helpers decode fragments and ignore an empty one", () => {
-  document.body.innerHTML = `<div role="tablist"><a role="tab" href="#caf%C3%A9">x</a></div>`;
-  expect(tabForHash(document, "#café")?.textContent).toBe("x");
-  expect(tabForHash(document, "#%E0%A4%A")).toBeNull();
-  expect(tabForHash(document, "#")).toBeNull();
+  document.body.innerHTML = `<div id="root"><div role="tablist">
+    <a role="tab" href="#first">first</a><a role="tab" href="#caf%C3%A9">x</a>
+  </div></div>`;
+  // The tab a hash read on setup selects, or null when the hash names none.
+  const pickedByHash = (hash: string): HTMLElement | null => {
+    history.replaceState(null, "", hash);
+    const picked = vi.fn();
+    const off = createTabs(root(), { hash: "replace", onValueChange: picked });
+    const selected = document.querySelector<HTMLElement>('[aria-selected="true"]');
+    off();
+    return picked.mock.calls.length > 0 ? selected : null;
+  };
+  expect(pickedByHash("#café")?.textContent).toBe("x");
+  expect(pickedByHash("#%E0%A4%A")).toBeNull();
+  expect(pickedByHash("#")).toBeNull();
+  history.replaceState(null, "", "/");
   writeHash("ignored", false);
   expect(location.hash).toBe("");
 });
