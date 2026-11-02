@@ -843,3 +843,37 @@ describe("completion, reduced motion and the play label", () => {
     expect(region(w)).toContain("There are 54 rows");
   });
 });
+
+describe("terminal tool header", () => {
+  const script: DemoScript = {
+    steps: [
+      { kind: "tool-call", name: "query_sql", server: "db", args: "spec" },
+      { kind: "tool-call", name: "ls" },
+    ],
+  };
+  const parts = (w: VueWrapper) =>
+    w.findAll('[data-part="tool-label"]').map((label) => ({
+      text: label.text(),
+      server: label.find('[data-part="tool-server"]').exists()
+        ? label.find('[data-part="tool-server"]').text()
+        : null,
+      name: label.find('[data-part="tool-name"]').text(),
+    }));
+
+  test("renders server and name as separate parts, reading 'server name' by default", () => {
+    const w = mount(StaticTranscript, { props: { script, layout: "terminal" } });
+    expect(parts(w)).toEqual([
+      { text: "db query_sql", server: "db", name: "query_sql" },
+      { text: "ls", server: null, name: "ls" },
+    ]);
+    w.unmount();
+  });
+
+  test("glyphs.serverSeparator sets the text between them", () => {
+    const w = mount(StaticTranscript, {
+      props: { script, layout: "terminal", glyphs: { serverSeparator: " · " } },
+    });
+    expect(w.find('[data-part="tool-label"]').element.textContent).toBe("db · query_sql");
+    w.unmount();
+  });
+});

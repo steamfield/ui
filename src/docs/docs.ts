@@ -58,6 +58,8 @@ export interface DocsConfig {
   readonly summary: string;
   /** The product name: the llms.txt title. */
   readonly name: string;
+  /** Extra llms.txt text after the summary: one paragraph, or one per array item. Default none. */
+  readonly intro?: string | readonly string[] | undefined;
   /** Whether page URLs end in a slash. Must match the site's Astro `trailingSlash` setting. */
   readonly trailingSlash: "always" | "never";
   /** Extra links for llms.txt's "Optional" section. Omitted from the file when empty. */
@@ -205,6 +207,7 @@ export function llmsIndex(config: DocsConfig, entries: readonly DocEntry[], site
   return `${[
     `# ${config.name}`,
     `> ${config.summary}`,
+    ...(typeof config.intro === "string" ? [config.intro] : (config.intro ?? [])),
     `Every docs page is also Markdown: add \`.md\` to its path, as in ${absolute(markdownPath(exampleId))}. ${absolute("/llms-full.txt")} has every page in one file.`,
     ...groups,
     ...optional,

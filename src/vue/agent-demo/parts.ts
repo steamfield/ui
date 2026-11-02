@@ -259,6 +259,20 @@ function icon(value: ToolIcon): VNodeChild {
   return h(value);
 }
 
+/** The terminal header's `server name`, as parts a stylesheet can tell apart. */
+function terminalToolName<TData>(
+  step: ToolCallContext<TData>["step"],
+  config: PartsConfig<TData>,
+): VNodeChild[] {
+  const name = h("span", { "data-part": "tool-name" }, step.name);
+  if (!step.server) return [name];
+  return [
+    h("span", { "data-part": "tool-server" }, step.server),
+    config.glyphs.serverSeparator,
+    name,
+  ];
+}
+
 function toolHeader<TData>(
   ctx: ToolCallContext<TData>,
   config: PartsConfig<TData>,
@@ -268,7 +282,9 @@ function toolHeader<TData>(
   const terminal = config.layout === "terminal";
   const running = entry.status === "running";
   const iconValue = terminal ? undefined : config.tools?.[step.name]?.icon;
-  const name = toolName(config.tools, step, config.layout, running);
+  const name = terminal
+    ? terminalToolName(step, config)
+    : toolName(config.tools, step, config.layout, running);
   return h("div", { "data-part": "tool-header" }, [
     statusPip(running, entry.status === "error", config, frame),
     iconValue

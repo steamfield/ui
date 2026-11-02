@@ -8,5 +8,5 @@ export type { HeadingAnchorsOptions } from "./heading-anchors.ts";
 export { headingAnchors } from "./heading-anchors.ts";
 export type { MarkdownOptions, ShikiOptions } from "./plugins.ts";
 export { createHastPlugins, createShikiConfig } from "./plugins.ts";
-export type { TablesOptions } from "./tables.ts";
+export type { TableLabelContext, TablesOptions } from "./tables.ts";
 export { tables } from "./tables.ts";

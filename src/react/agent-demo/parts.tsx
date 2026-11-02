@@ -267,7 +267,20 @@ function ToolHeader<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactE
   const terminal = config.layout === "terminal";
   const running = entry.status === "running";
   const icon = terminal ? undefined : config.tools?.[step.name]?.icon;
-  const name = toolName(config.tools, step, config.layout, running);
+  // The terminal shows `server name` as parts a stylesheet can tell apart; chat shows the label.
+  const name = terminal ? (
+    <>
+      {step.server ? (
+        <>
+          <span data-part="tool-server">{step.server}</span>
+          {config.glyphs.serverSeparator}
+        </>
+      ) : null}
+      <span data-part="tool-name">{step.name}</span>
+    </>
+  ) : (
+    toolName(config.tools, step, config.layout, running)
+  );
   return (
     <div data-part="tool-header">
       <ToolStatusPip

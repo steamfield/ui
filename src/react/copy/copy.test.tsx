@@ -40,6 +40,23 @@ test("prose renders a prompt without the shell glyph", () => {
   expect(document.querySelector('[data-part="prompt"]')).toBeNull();
 });
 
+test("part class names reach the button, prompt and command", () => {
+  const { container } = render(
+    <CopyCommand
+      id="c"
+      command="ls"
+      className="wrap"
+      buttonClassName="btn"
+      promptClassName="glyph"
+      commandClassName="cmd"
+    />,
+  );
+  expect(container.querySelector('[data-part="copy-command"]')?.className).toBe("wrap");
+  expect(container.querySelector('[data-part="copy-button"]')?.className).toBe("btn");
+  expect(container.querySelector('[data-part="prompt"]')?.className).toBe("glyph");
+  expect(container.querySelector('[data-part="command"]')?.className).toBe("cmd");
+});
+
 test("useCopy flips copied, resets, and reports to onCopy", async () => {
   vi.useFakeTimers();
   const onCopy = vi.fn();

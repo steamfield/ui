@@ -6,7 +6,7 @@ The design rules:
 
 - Content is data. A demo is a `DemoScript` object, install options are an array, docs are entries you pass in. Nothing is fetched or hard-coded to a product.
 - The CSS is headless-ish. Stylesheets read `--sf-*` custom properties with fallbacks, select on `data-part` attributes, and sit inside `@layer sf` with `:where()` selectors, so any consumer class or utility wins.
-- Cores are framework-free. React bindings live under `react/*`. A Vue binding is in progress.
+- Cores are framework-free. React bindings live under `react/*`; the agent demo also has a Vue binding at `vue/agent-demo`.
 - Every component has a deterministic final state. The server render, the first client render, reduced motion and a page without JavaScript all show the finished content.
 - Motion is optional everywhere: `prefers-reduced-motion` and `[data-sf-motion="reduce"]` turn it off, and content never depends on it to be readable.
 
@@ -29,7 +29,7 @@ Nothing is installed for you. Add the peers for the subpaths you use.
 | `script`, `sequencer`, `playback`, `copy`, `tabs`, `reveal`, `docs` | nothing |
 | `react/*` | `react` `^19.2` (and `react-dom` to render; `@types/react` `^19.2` for TypeScript) |
 | `markdown` | `satteri` `^0.10.5`, `github-slugger` `^2.0.0`; `shiki` `^4.5.0` for its types |
-| `vue/*` | `vue` `^3.5` (in progress) |
+| `vue/*` | `vue` `^3.5` |
 
 All peers are marked optional, so a package manager does not warn for the ones you skip.
 
@@ -49,7 +49,7 @@ import "@steamfield/ui/markdown/styles.css";
 
 | Stylesheet | For |
 | --- | --- |
-| `agent-demo/styles.css` | `react/agent-demo` (and the Vue binding) |
+| `agent-demo/styles.css` | `react/agent-demo`, `vue/agent-demo` |
 | `window/styles.css` | `react/window`, and `AgentDemo` with `chrome` |
 | `copy/styles.css` | `copy`, `react/copy`, and the copy button in `react/install-tabs` |
 | `tabs/styles.css` | `tabs`, `react/tabs`, `react/install-tabs` (includes the no-JS fallback) |
@@ -61,14 +61,14 @@ The package has `"sideEffects": ["**/*.css"]`, so unused JavaScript tree-shakes 
 
 ### Layer ordering with Tailwind v4
 
-Every rule is inside `@layer sf`. Declare the order once, before your utilities, so your own CSS and utilities beat the library:
+Every rule is inside `@layer sf`. Declare the order once, as the first statement of your stylesheet, with `sf` after `base` and before `components` and `utilities`:
 
 ```css
-@layer sf, theme, base, components, utilities;
+@layer theme, base, sf, components, utilities;
 @import "tailwindcss";
 ```
 
-With the order declared, a utility such as `h-96` on the demo overrides `--sf-demo-height` defaults, and a class on a tab panel overrides its `display`. Without it, the browser orders layers by first appearance, which may put `sf` above your utilities.
+Later layers win. `sf` after `base` keeps Tailwind's preflight (`* { margin: 0; border: 0 solid }` in `@layer base`) from stripping the library's borders and spacing, since the library's selectors are zero-specificity and would otherwise lose to the reset. `sf` before `components` and `utilities` lets your classes win: a utility such as `h-96` on the demo overrides `--sf-demo-height` defaults, and a class on a tab panel overrides its `display`. Without the statement, the browser orders layers by first appearance, which may put `sf` above your utilities or below the reset.
 
 ## Theming
 
@@ -196,7 +196,7 @@ Result:
 | --- | --- | --- |
 | `view` | `DemoView` | What to render now |
 | `controls` | `AgentDemoControls` | `play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`. `cancel` stops and shows the finished transcript. `setSpeed` throws `invalid_option` on `speed` unless the rate is finite and greater than 0 |
-| `ref` | `RefObject<HTMLDivElement>` | Attach to the element whose visibility gates playback |
+| `ref` | `PlaybackRef<HTMLDivElement>` | Attach to the element whose visibility gates playback. A callback ref that also has `current`, so it can attach to an element that mounts later or changes (see `usePlayback`) |
 | `ready` | `boolean` | False on the server and first client render |
 | `started` | `boolean` | `autoStart`, or `play`, `toggle` or `replay` was called. A `seek` or `cancel` before play leaves it false. Label a play button from `!started \|\| paused` |
 | `playing`, `paused`, `reduced` | `boolean` | Gate state |
@@ -234,7 +234,7 @@ Custom tool rendering follows one rule in React and Vue: a `renderToolCall` or `
 
 Default labels (`AgentDemoLabels`): `play` "Play", `pause` "Pause", `replay` "Replay", `completeStatus` "Demo complete.", `idleStatus` "Example agent session.", `you` "You", `agent` "Agent", `running` "Running", `done` "Completed", `failed` "Failed", `thinking` "Agent thinking", `placeholder` "Message the agent…", `next` "Next", `speed` "Playback speed", `jumpToTurn` "Jump to turn", `transcript` "Demo transcript", `showCode` "Show code", `more(count)` `… +N lines`.
 
-Default glyphs (`AgentDemoGlyphs`): `prompt` `$`, `user` `❯`, `agent` `●`, `output` `⎿`, `ok` `✓`, `fail` `✕`, `submit` `↵`, `spinner` ten braille frames at 80ms each.
+Default glyphs (`AgentDemoGlyphs`): `prompt` `$`, `user` `❯`, `agent` `●`, `output` `⎿`, `ok` `✓`, `fail` `✕`, `submit` `↵`, `spinner` ten braille frames at 80ms each, `serverSeparator` `" "`. The glyphs are hidden from assistive tech, except `serverSeparator`, which is plain text between a tool's server and name in the terminal header so the two words aren't read as one.
 
 #### `<StaticTranscript>`
 
@@ -259,7 +259,13 @@ CSS variables (set on the demo or an ancestor), besides the base tokens:
 
 Root attributes: `data-sf-agent-demo`, `data-part="agent-demo"`, `data-layout="chat|terminal"`, `data-sf-animating` (hydrated and playing), `data-paused`, `data-complete`, `data-static` (`StaticTranscript`).
 
-`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`), `tool-header`, `tool-status`, `tool-icon`, `tool-label`, `tool-args`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
+`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`), `tool-header`, `tool-status`, `tool-icon`, `tool-label` (in the terminal layout it holds `tool-server`, the separator text and `tool-name`), `tool-args`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
+
+To show a terminal tool header as `server · name` with the server dimmed, set `glyphs={{ serverSeparator: " · " }}` and style the part:
+
+```css
+[data-part="agent-demo"] [data-part="tool-server"] { color: var(--sf-muted); font-weight: 400; }
+```
 
 The transcript is a `column-reverse` scroller around a column, so the newest line stays in view without JavaScript and a reader who scrolled up is left alone. It is focusable so keyboard users can scroll it, and it is a named `role="group"` rather than a landmark, so two demos on one page don't repeat a region. Its height is `--sf-demo-height` (default `20rem`).
 
@@ -433,6 +439,8 @@ React state over the gate. Options are `PlaybackGateOptions`. Changing `duration
 
 Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a rebuilt gate. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
 
+`ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another; each new element starts a fresh gate at 0 that keeps the current rate. Until an element attaches, the gate counts the demo as in view. Detaching an element doesn't rebuild the gate, so an inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, is fine.
+
 ### `useCountUp(end, options?)`
 
 Counts from 0 to `end` once, while the element is in view and the tab is visible.
@@ -445,7 +453,7 @@ Counts from 0 to `end` once, while the element is in view and the tab is visible
 | `motion` | `"auto" \| "reduce" \| "full" \| MotionSource` | `"auto"` | Under reduced motion the value is `end` straight away |
 | `threshold`, `rootMargin` | | `0.15`, `"0px"` | In-view options |
 
-Returns `{ ref, value, complete }`. Intermediate values are floored; the last is exactly `end`.
+Returns `{ ref, value, complete }`, where `ref` is the same `PlaybackRef` as `usePlayback`'s. Intermediate values are floored; the last is exactly `end`.
 
 ### Without JavaScript
 
@@ -535,6 +543,9 @@ import { CopyCommand, CopyButton, useCopy } from "@steamfield/ui/react/copy";
 | `buttonText` | `ReactNode` | `"Copy"` | Visible idle text |
 | `icon` | `ReactNode` | none | Rendered before the label, hidden from assistive tech |
 | `className` | `string` | none | On the wrapper |
+| `buttonClassName` | `string` | none | On the copy button (`data-part="copy-button"`) |
+| `promptClassName` | `string` | none | On the prompt glyph (`data-part="prompt"`) |
+| `commandClassName` | `string` | none | On the command text (`data-part="command"`) |
 
 ### `<CopyButton>`
 
@@ -682,10 +693,30 @@ Every command is in the HTML and reachable through the tab links. Copy buttons r
 
 ```ts
 import "@steamfield/ui/reveal/styles.css";
-import { initReveal, motionTokens } from "@steamfield/ui/reveal";
+import { initReveal, motionTokens, revealGateScript } from "@steamfield/ui/reveal";
 ```
 
 One-shot scroll entrances. `initReveal(options?)` sets `data-motion-ready="true"` on `<html>` (the CSS gate) and flips `data-revealed="true"` on each `[data-reveal]` container the first time it enters the viewport or takes keyboard focus. It returns a disposer that disconnects everything and removes the gate, which leaves all content visible. Call it from a script in `<head>` (it waits for the DOM) or after the DOM is parsed.
+
+#### Recommended setup: gate before first paint
+
+Module scripts are deferred, so `initReveal()` can set the gate after the first paint, and above-the-fold `[data-reveal]` content then paints visible and jumps back to its start state. `revealGateScript` is a minified classic script (a string, under 300 bytes) that sets `data-motion-ready` synchronously. Inline it in `<head>`, then call `initReveal()` as usual:
+
+```astro
+---
+import { revealGateScript } from "@steamfield/ui/reveal";
+---
+<head>
+  <script is:inline set:html={revealGateScript} />
+  <!-- stylesheets -->
+</head>
+<script>
+  import { initReveal } from "@steamfield/ui/reveal";
+  initReveal();
+</script>
+```
+
+The snippet sets the gate only when `initReveal()` would: `IntersectionObserver` exists, `prefers-reduced-motion: reduce` doesn't match, and `<html>` has no `data-sf-motion="reduce"` (set that attribute before the snippet runs if your toggle lives in storage). `initReveal()` takes over a gate that is already set, removes it when its `motion` option says no at setup, and still removes it when motion turns off later. With a `script-src` CSP, allow the snippet by hash or nonce.
 
 ```html
 <section data-reveal>
@@ -710,13 +741,13 @@ Markup attributes: `data-reveal` on a container (`"quiet"` for the quiet entranc
 
 Roles: unnamed default, `quiet`, `card`, `drop`, `popover`, `wipe`, `lift-xs`, `lift-sm`, `lift-md`, `lift-lg`, `lift-xl`, `lift-card`, `blur-in-soft`, `scale-in-media`, `slide-in-chip`, and the older `fade-up`, `blur-in`, `bounce-in`, `slide-left`, `slide-right`.
 
-Variables (unset by default, so each role keeps its own timing; set one on an element or ancestor to override every role below it): `--sf-reveal-duration`, `--sf-reveal-ease`, `--sf-reveal-delay`, `--sf-reveal-step` (stagger between `data-motion-part` rows, default 70ms, capped at six steps), `--sf-reveal-lift` (distance traveled), `--sf-reveal-scale` (start scale for roles that scale).
+Variables (unset by default, so each role keeps its own timing; set one on an element or ancestor to override every role below it): `--sf-reveal-duration`, `--sf-reveal-ease`, `--sf-reveal-delay`, `--sf-reveal-step` (stagger between `data-motion-part` rows, default 70ms, capped at six steps), `--sf-reveal-lift` (distance traveled), `--sf-reveal-scale` (start scale for roles that scale), `--sf-reveal-blur` (start blur: `2px` for the default role, `6px` for `blur-in-soft`, `10px` for `blur-in`, `0px` for the rest; `wipe` never blurs).
 
 `motionTokens` is plain data for JavaScript animation code that wants the same numbers: `easings`, `durations` (seconds), `springs`, `animationTypes` (initial and animate keyframes by role) and `motionRoles` (easing and duration per role). The CSS roles use their own millisecond timings, which run a little shorter.
 
 ### Without JavaScript
 
-Static HTML is always visible. Start states apply only under `html[data-motion-ready]` and `prefers-reduced-motion: no-preference`, and `initReveal` is what sets the attribute. Under reduced motion, or with `[data-sf-motion="reduce"]` on an ancestor, every element is shown with no transition. Keyboard focus inside a container is never hidden behind an entrance, and `[data-reveal-defer]` content stays visible until it hydrates. Without `IntersectionObserver`, `initReveal` does nothing and every section stays visible.
+Static HTML is always visible. Start states apply only under `html[data-motion-ready]` and `prefers-reduced-motion: no-preference`, and `revealGateScript` or `initReveal` is what sets the attribute. Under reduced motion, or with `[data-sf-motion="reduce"]` on an ancestor, every element is shown with no transition. Keyboard focus inside a container is never hidden behind an entrance, and `[data-reveal-defer]` content stays visible until it hydrates. Without `IntersectionObserver`, `initReveal` does nothing and every section stays visible.
 
 ## markdown
 
@@ -746,7 +777,7 @@ const processor = await createSatteriMarkdownProcessor({
 | `codeBlocks.idPrefix` | `string` | `"code"` | Prefix for generated `<pre>` ids (`code-1`, `code-2`, …) |
 | `callouts.titles` | `Partial<Record<CalloutKind, string>>` | English: Note, Tip, Warning, Important, Caution | Visible titles by marker (`NOTE`, `TIP`, `WARNING`, `IMPORTANT`, `CAUTION`) |
 | `headingAnchors.label` | `(heading) => string` | `"Link to section: <text>"` | Accessible name of a heading's link |
-| `tables.regionLabel` | `string` | `"Scrollable table"` | Accessible name of the scroll region around each table |
+| `tables.regionLabel` | `string \| false \| (table, index, { caption, heading }) => string` | the caption, else `"<heading> table"`, else `"Scrollable table"` | Accessible name of the scroll region around each table. `index` is the table's 0-based position in the document, `heading` the nearest preceding heading's text (the third argument's type is exported as `TableLabelContext`). A name already used on the page gets ` 2`, ` 3` appended, so two regions never share a label (axe `landmark-unique`). `false` drops `role="region"` and the label but keeps the box focusable for keyboard scrolling |
 
 What they emit:
 
@@ -754,7 +785,7 @@ What they emit:
 - `codeGroups`: adjacent figures sharing a `group` get `data-group-position="first|middle|last"` so CSS can join them into one frame.
 - `callouts`: GitHub alert blockquotes (`> [!NOTE]`) get `role="note"`, `data-callout="note"` and a leading `<p data-callout-title>`. An unknown marker stays a blockquote.
 - `headingAnchors`: `h2` and `h3` get an id and a trailing `<a data-heading-anchor>`.
-- `tables`: each table is wrapped in `<div data-table-scroll role="region" tabindex="0">` and `th` cells get `scope="col"`.
+- `tables`: each table is wrapped in `<div data-table-scroll role="region" tabindex="0" aria-label="…">` (or, with `regionLabel: false`, `<div data-table-scroll tabindex="0">`) and `th` cells get `scope="col"`.
 
 `markdown/styles.css` supplies structure only: the visually hidden copy result, relative positioning and horizontal scroll for code, the table scroll region (focus outline uses `--sf-focus`), and the heading anchor (hidden until hover or focus, `#` glyph). Callout, code title and code group looks are yours to style on the `data-*` attributes above.
 
@@ -789,6 +820,7 @@ new Response(docs.llmsIndex(await getCollection("docs"), String(site)));
 | --- | --- | --- | --- |
 | `name` | `string` | required | The product name; the `llms.txt` title |
 | `summary` | `string` | required | One-paragraph description under the title |
+| `intro` | `string \| string[]` | none | Extra `llms.txt` paragraphs right after the summary, one per array item |
 | `groups` | `string[]` | required | Group names in reading order. A page whose `group` is not listed is left out of the nav |
 | `trailingSlash` | `"always" \| "never"` | required | Must match the site's Astro `trailingSlash` setting |
 | `optionalLinks` | `{ label, href, description }[]` | required | Extra links for the "Optional" section; omitted from the file when empty |
@@ -816,7 +848,85 @@ Marks the "On this page" link for the section being read with `aria-current="loc
 
 ## vue/agent-demo
 
-The Vue binding (`vue/agent-demo`: a `useAgentDemo` composable and an `AgentDemo` component over the same `script`, `sequencer`, `playback` and `agent-demo/styles.css` cores) is in progress. It is not in the package `exports` yet, and this section will describe it when it lands.
+```ts
+import "@steamfield/ui/agent-demo/styles.css";
+import { AgentDemo, StaticTranscript, useAgentDemo } from "@steamfield/ui/vue/agent-demo";
+```
+
+Also exported as types: `AgentDemoProps`, `AgentDemoSlots`, `AgentDemoSlotState`, `AgentDemoControlsMode`, `AgentDemoChrome`, `AgentDemoLabels`, `AgentDemoGlyphs`, `AgentDemoLayout`, `AnnounceMode`, `ToolInfo`, `ToolIcon`, `ToolRegistry`, `ToolSlot`, `ToolCallContext`, `StaticTranscriptProps`, `StaticTranscriptSlots`, `AgentDemoControls`, `UseAgentDemoOptions`, `UseAgentDemoResult`.
+
+The Vue binding renders the same elements, `data-part` values, ARIA and text as `react/agent-demo` (a contract test holds the two together), so `agent-demo/styles.css`, the styling hooks and the no-JS behavior above apply unchanged. It needs `vue` `^3.5`.
+
+### `useAgentDemo(script, options?)`
+
+The composable behind `AgentDemo`; call it in `setup`. `script` and `options` may each be a value, a ref or a getter, so a component can pass its props through reactively. The options are React's `useAgentDemo` options (`scriptKey`, `timing`, `seed`, `composer`, `tools`, `finalPolicy`, `autoStart`, `threshold`, `rootMargin`, `leaveGraceMs`, `motion`, `reducedPolicy`, `speed`, `onStepStart`, `onComplete`), plus two for decks:
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `position` | `MaybeRefOrGetter<{ ms } \| { click } \| undefined>` | none | Click mode: the view follows this position, no clock runs and no controls show |
+| `active` | `MaybeRefOrGetter<boolean \| undefined>` | always active | Whether the slide is on screen. Each change from inactive to active bumps `playCount` |
+
+The result holds refs and computed values: `view`, `ready`, `started`, `playing`, `paused`, `reduced`, `complete`, `animating`, `mode` (`"static"` before mount, then `"live"`), `speed`, `turn`, `timeline`, `clickMode` (whether `position` is set) and `playCount`, plus `controls` (`play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`, as in React) and `el`, the template ref for the element whose visibility gates playback. A new element in `el` (a remount, a late `v-if`) gets a fresh gate. Bind `playCount` as `:key` on the demo root so entrances replay when the presenter returns to the slide; `AgentDemo` does this.
+
+```vue
+<script setup lang="ts">
+import { useAgentDemo } from "@steamfield/ui/vue/agent-demo";
+import { script } from "./script";
+
+const { el, view, controls, ready, playing } = useAgentDemo(script);
+</script>
+
+<template>
+  <div ref="el">
+    <p v-for="entry in view.entries" :key="entry.index">{{ entry.step.kind }}</p>
+    <button v-if="ready" type="button" @click="controls.toggle">{{ playing ? "Pause" : "Play" }}</button>
+  </div>
+</template>
+```
+
+#### Slidev
+
+The binding imports nothing from `@slidev/*`. To follow a deck's clicks, pass the click index as `position` and the slide's visibility as `active`:
+
+```ts
+import { useIsSlideActive, useSlideContext } from "@slidev/client";
+const { $clicks } = useSlideContext();
+const demo = useAgentDemo(script, { position: () => ({ click: $clicks.value }), active: useIsSlideActive() });
+```
+
+With `AgentDemo`, pass the same values as props: `<AgentDemo :script="script" :position="{ click: $clicks }" :active="isActive" />`, where `isActive` is `useIsSlideActive()`. `clickCount(script)` from `sequencer` gives the number for the slide's `clicks` frontmatter.
+
+### `<AgentDemo>`
+
+Props are the composable's options plus the React component's display props, under the same names and defaults: `script` (required), `layout`, `labels`, `glyphs`, `tools`, `controls` (`"inline" | "full" | "none"`), `header` (a string; the `header` slot takes markup), `chrome`, `announce` and `privacyClassName`. `position` and `active` take plain values here (Vue unwraps the ref for you). `class` and `style` fall through to the root. `@step-start` and `@complete` bind the `onStepStart` and `onComplete` options; they are props, not emits.
+
+`ToolRegistry` icons may be a string, a VNode or a component.
+
+Slots replace React's render props:
+
+| Slot | Props | Meaning |
+| --- | --- | --- |
+| `toolCall` | `ToolCallContext` | Replaces a whole tool card. Render nothing (or only comments) to keep the default |
+| `toolBody` | `ToolCallContext` | Renders a tool body (`custom` bodies, or any kind you override). Render nothing for the default |
+| `stage` | `{ view }` | Content beside the transcript that follows the view, such as a live chart |
+| `header` | none | Content at the top of the demo, before the controls |
+| `controls` | `AgentDemoSlotState` | Your own controls in place of the built-in ones: `view`, `controls`, `started`, `playing`, `paused`, `complete`, `animating`, `speed`, `turn`, `timeline` as plain values |
+
+```vue
+<AgentDemo :script="script" layout="chat" :tools="tools" @complete="onDone">
+  <template #toolBody="{ step, mode }">
+    <ResultChart v-if="step.body?.kind === 'custom' && mode === 'live'" :data="step.body.data" />
+  </template>
+</AgentDemo>
+```
+
+### `<StaticTranscript>`
+
+The finished transcript with no playback, controls or composer, in the same parts and CSS. It reads no browser state, so it renders on the server and in print or PDF export. Props: `script` (required), `layout` (`"chat"`), `finalPolicy` (`"all"`), `labels`, `glyphs`, `tools`, `privacyClassName`; slots `toolCall` and `toolBody`, called with `mode: "static"`. It sets `data-static` on the root.
+
+### Without JavaScript
+
+The same as React: the server render and the render before mount are `finalState(finalPolicy)`, controls show only once mounted, and reduced motion shows the final transcript. Click mode renders `stateAt` the given position on the server too.
 
 ## Errors
 

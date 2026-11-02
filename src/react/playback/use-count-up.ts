@@ -1,6 +1,6 @@
-import { type RefObject, useEffect } from "react";
+import { useEffect } from "react";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
-import { useGate } from "./use-playback.ts";
+import { type PlaybackRef, useGate } from "./use-playback.ts";
 
 export interface UseCountUpOptions {
   /** Length of the count in ms. Default 2000. */
@@ -18,7 +18,7 @@ export interface UseCountUpOptions {
 
 export interface UseCountUpResult<T extends Element> {
   /** Optional: attach it to count only while the element is on screen. */
-  readonly ref: RefObject<T | null>;
+  readonly ref: PlaybackRef<T>;
   readonly value: number;
   readonly complete: boolean;
 }

@@ -147,6 +147,7 @@ describe("reveal/styles.css contract", () => {
       [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/--[a-z][\w-]*/g)].map(([name]) => name),
     );
     expect([...names].sort()).toEqual([
+      "--sf-reveal-blur",
       "--sf-reveal-delay",
       "--sf-reveal-duration",
       "--sf-reveal-ease",
@@ -154,6 +155,30 @@ describe("reveal/styles.css contract", () => {
       "--sf-reveal-scale",
       "--sf-reveal-step",
     ]);
+  });
+
+  test("start-state blur is the --sf-reveal-blur token, with each role's own default", () => {
+    const starts = rules.filter(
+      (rule) => rule.selector.includes(":not([data-revealed])") && /filter:/.test(rule.body),
+    );
+    const blurOf = (role: string | null): string | undefined => {
+      const rule = starts.find((r) =>
+        role === null
+          ? complexSelectors(r).every((s) => /\[data-motion\]:not|\[data-motion\]$/.test(s))
+          : r.selector.includes(`[data-motion="${role}"]`),
+      );
+      return rule?.body.match(/filter:\s*([^;]+)/)?.[1];
+    };
+    expect(blurOf(null)).toBe("blur(var(--sf-reveal-blur, 2px))");
+    expect(blurOf("blur-in-soft")).toBe("blur(var(--sf-reveal-blur, 6px))");
+    expect(blurOf("blur-in")).toBe("blur(var(--sf-reveal-blur, 10px))");
+    for (const role of ["card", "drop", "popover", "lift-md", "scale-in-media", "slide-left"]) {
+      expect(blurOf(role), role).toBe("blur(var(--sf-reveal-blur, 0px))");
+    }
+    // A wipe uncovers with clip-path only; its filter stays off.
+    expect(blurOf("wipe")).toBe("none");
+    // No start state hard-codes a blur the token can't reach.
+    for (const rule of starts) expect(rule.body).not.toMatch(/blur\(\d/);
   });
 
   test.each([

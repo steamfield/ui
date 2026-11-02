@@ -231,6 +231,62 @@ describe("tables", () => {
     const { root } = await render(table, custom);
     expect(root.querySelector("[data-table-scroll]")?.getAttribute("aria-label")).toBe("Tableau");
   });
+
+  const labels = (root: HTMLElement) =>
+    [...root.querySelectorAll("[data-table-scroll]")].map((box) => box.getAttribute("aria-label"));
+
+  it("names each region after its preceding heading, so two tables differ", async () => {
+    const { root } = await render(`## Flags\n\n${table}\n\n## Exit codes\n\n${table}`);
+    expect(labels(root)).toEqual(["Flags table", "Exit codes table"]);
+  });
+
+  it("prefers a caption, falls back without a heading and never repeats a label", async () => {
+    // Raw HTML only becomes elements (a table with a caption) with Sätteri's rawHtml feature.
+    const raw = await createSatteriMarkdownProcessor({
+      hastPlugins: createHastPlugins(),
+      features: { smartPunctuation: false, rawHtml: true },
+    });
+    const html = "<table><caption>Ports</caption><tr><td>80</td></tr></table>";
+    const { root } = await render(
+      `${table}\n\n${table}\n\n## Flags\n\n${html}\n\n${table}\n\n${table}`,
+      raw,
+    );
+    expect(labels(root)).toEqual([
+      "Scrollable table",
+      "Scrollable table 2",
+      "Ports",
+      "Flags table",
+      "Flags table 2",
+    ]);
+  });
+
+  it("takes a label function with the table, its index and its context", async () => {
+    const custom = await processorFor({
+      tables: {
+        regionLabel: (node, index, { heading }) => `${node.tagName} ${index} ${heading ?? "none"}`,
+      },
+    });
+    const { root } = await render(`${table}\n\n## Flags\n\n${table}`, custom);
+    expect(labels(root)).toEqual(["table 0 none", "table 1 Flags"]);
+  });
+
+  it("keeps a fixed string label unique across tables", async () => {
+    const custom = await processorFor({ tables: { regionLabel: "Data" } });
+    const { root } = await render(`${table}\n\n${table}`, custom);
+    expect(labels(root)).toEqual(["Data", "Data 2"]);
+  });
+
+  it("regionLabel: false keeps a focusable scroll box without a region", async () => {
+    const custom = await processorFor({ tables: { regionLabel: false } });
+    const { root } = await render(`${table}\n\n${table}`, custom);
+    const boxes = [...root.querySelectorAll("[data-table-scroll]")];
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) {
+      expect(box.getAttribute("tabindex")).toBe("0");
+      expect(box.hasAttribute("role")).toBe(false);
+      expect(box.hasAttribute("aria-label")).toBe(false);
+    }
+  });
 });
 
 describe("prose", () => {

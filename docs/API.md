@@ -2,7 +2,7 @@
 
 Status: reflects the built code as of 2026-11-02. Originally a proposal derived from [SURVEY.md](SURVEY.md); where the build differs from that proposal the text says **Deviation** and gives the reason. The consumer-facing reference with every prop and default is the package [README](../README.md); this file is the design-level view.
 
-Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `vue/*` follows React and is in progress. Each subpath imports only what is shown in its "depends on" line; an import-graph test enforces this.
+Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `vue/*` follows React; `vue/agent-demo` is the one Vue subpath. Each subpath imports only what is shown in its "depends on" line; an import-graph test enforces this.
 
 | Subpath | Contents | Depends on |
 |---|---|---|
@@ -11,7 +11,7 @@ Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `
 | `playback` | `createPlaybackGate` | none |
 | `copy` | `copyText`, `enhanceCopyButtons`, `copy/styles.css` | none |
 | `tabs` | `createTabs` (DOM controller), `tabs/styles.css` (`:target` fallback) | none |
-| `reveal` | `initReveal`, `motionTokens`, `reveal/styles.css` | none |
+| `reveal` | `initReveal`, `revealGateScript`, `motionTokens`, `reveal/styles.css` | none |
 | `markdown` | Sätteri hast plugin factories, `createShikiConfig`, `markdown/styles.css` | optional peers `satteri`, `github-slugger` (and `shiki` for types) |
 | `docs` | `createDocs(config)`, the unbound helpers, `spyToc` | none |
 | `react/playback` | `usePlayback`, `useCountUp` | `playback` |
@@ -21,7 +21,7 @@ Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `
 | `react/window` | `DemoWindow` (optional chrome), `window/styles.css` | none |
 | `react/agent-demo` | `useAgentDemo`, `AgentDemo`, `StaticTranscript` | `sequencer`, `playback`, `react/playback`, `react/window` |
 | `agent-demo/styles.css` | CSS only; the `data-part` contract shared by every framework renderer | none |
-| `vue/agent-demo` | `useAgentDemo` composable, `AgentDemo` component (in progress) | `sequencer`, `playback` |
+| `vue/agent-demo` | `useAgentDemo` composable, `AgentDemo` and `StaticTranscript` components | `sequencer`, `playback` |
 
 **Deviation:** `react/agent-demo` also depends on `react/playback` (it is `usePlayback` underneath) and `react/window` (the `chrome` prop). `tabs` and `react/tabs` share a `core.ts` for keyboard, hash and event logic rather than the React tabs wrapping `createTabs`, so the two cannot disagree. `markdown` uses `shiki` for types only; at runtime it needs `satteri` and `github-slugger`. `docs` also exports `spyToc`, the one browser-touching function there.
 
@@ -143,6 +143,8 @@ createPlaybackGate(el: Element | null, {
 
 `usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts a fresh gate. `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
 
+**Deviation:** `ref` is a `PlaybackRef<T>`, a callback ref that also has a read/write `current`, not a `RefObject`. Each new element attached to it starts a fresh gate, so an element that mounts after the first render (an iframe behind a state flip) or is swapped still gates playback; detaching doesn't rebuild. `ref={ref}` and `ref.current` keep working. `useCountUp` and `useAgentDemo` return the same type.
+
 **Deviation:** `usePlayback` returns `speed` and `setSpeed`; the option is applied to the gate in place, and a gate rebuilt for a new `duration` or `motion` starts at the current rate. `useAgentDemo` drives its `speed` and `controls.setSpeed` through the same gate, so an invalid rate throws at the call.
 
 ## react/agent-demo
@@ -161,7 +163,7 @@ const demo = useAgentDemo(script, {
   layout="chat" | "terminal"                       // default "chat"
   labels={{ play, pause, replay, completeStatus, idleStatus, you, agent, running, done,
             failed, thinking, placeholder, next, speed, jumpToTurn, transcript, showCode, more }}
-  glyphs={{ prompt, user, agent, output, ok, fail, submit, spinner }}
+  glyphs={{ prompt, user, agent, output, ok, fail, submit, spinner, serverSeparator }}
   tools={{ [name]: { label, runningLabel, icon?, accent? } }}   // consumer registry
   renderToolCall?={(ctx) => ReactNode | undefined}              // whole card
   renderToolBody?={(ctx) => ReactNode | undefined}              // body only; ctx: { step, entry, index, loading, mode: "static" | "live" }
@@ -191,7 +193,7 @@ The server and pre-hydration render are `finalState(finalPolicy)`. Entrance CSS 
 
 **Deviation:** `renderToolCall` and `renderToolBody` may return `undefined` to keep the built-in rendering, and the context carries `entry` and `index` (not only `step`).
 
-**Deviation:** `tools` entries only affect the chat layout's card header (label, running label and icon; `accent` sets `--sf-tool-accent`). The terminal layout prints the raw tool `name` (with `server` before it) and ignores the registry.
+**Deviation:** `tools` entries only affect the chat layout's card header (label, running label and icon; `accent` sets `--sf-tool-accent`). The terminal layout prints the raw tool `name` (with `server` before it) and ignores the registry. There `tool-label` holds `<span data-part="tool-server">`, the `glyphs.serverSeparator` text (default `" "`, so it reads `server name`) and `<span data-part="tool-name">`, in React and Vue, so a site can show `server · name` with the server dimmed through CSS alone. The stylesheet doesn't style the two parts apart.
 
 **Deviation:** `labels` gained `failed`, `thinking`, `next`, `speed`, `jumpToTurn`, `transcript`, `showCode` and `more`, and `glyphs` gained `ok`, `fail` and `submit`, each needed by a part the proposal's lists did not name. `glyphs.spinner` is ten braille frames advanced every 80ms of demo time.
 
@@ -202,6 +204,21 @@ The server and pre-hydration render are `finalState(finalPolicy)`. Entrance CSS 
 **Deviation:** `StaticTranscript` takes no timing, seed or composer: it compiles with the defaults and renders `finalState`. It sets `data-static` on the root instead of `data-sf-animating`.
 
 The agent demo's `data-part` values, `data-layout`, `data-from`, `data-status`, `data-tone`, `data-phase` and the `--sf-demo-*` and `--sf-tool-accent` variables live in `agent-demo/styles.css`, so a Vue renderer shares them.
+
+## vue/agent-demo
+
+```ts
+useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<UseAgentDemoOptions>)
+// -> { view, ready, started, playing, paused, reduced, complete, animating, mode, speed, turn,
+//      timeline, clickMode, playCount } as refs/computeds, plus controls and el (template ref)
+// options: React's, with position and active as MaybeRefOrGetter (Slidev: $clicks, useIsSlideActive())
+<AgentDemo :script layout labels glyphs tools controls="inline|full|none" header chrome announce
+           privacyClassName :position :active @step-start @complete>
+  slots: toolCall, toolBody, stage({ view }), header, controls(AgentDemoSlotState)
+<StaticTranscript :script layout finalPolicy labels glyphs tools privacyClassName>  slots: toolCall, toolBody
+```
+
+**Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).
 
 ## react/window
 
@@ -220,7 +237,8 @@ enhanceCopyButtons(root: ParentNode, {
   onCopy?(e: { id: string; label: string; ok: boolean }): void   // also dispatches "sf:copy"
 }): () => void
 useCopy({ resetMs?, onCopy?(ok) }): { copied: boolean; failed: boolean; copy(text): Promise<boolean> }
-<CopyCommand id command prose? prompt?="$" label? buttonText? className? icon? />
+<CopyCommand id command prose? prompt?="$" label? buttonText? className? buttonClassName?
+             promptClassName? commandClassName? icon? />
 <CopyButton controls label? children? className? icon? />
 ```
 
@@ -251,16 +269,19 @@ React `Tabs` takes `value`/`defaultValue`/`onValueChange`, plus `activation`, `o
 initReveal({ rootMargin?, threshold?, immediate?: (el) => boolean,
              motion?: "auto" | "reduce" | "full" | MotionSource, deferred?: (el) => boolean,
              readyEvent?: string }): () => void
+revealGateScript: string   // inline in <head>: sets html[data-motion-ready] before first paint
 motionTokens: { easings, durations, springs, animationTypes, motionRoles }
 ```
 
 Markup contract: `[data-reveal]` containers (`"quiet"` for the quiet entrance), `[data-motion="<role>"]` children (or the container itself), `[data-motion-part]` staggered parts, `data-revealed` set by the script, and `html[data-motion-ready]` as the root gate.
 
-Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-reveal-lift`, `--sf-reveal-scale`, `--sf-reveal-delay`.
+Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-reveal-lift`, `--sf-reveal-scale`, `--sf-reveal-delay`, `--sf-reveal-blur` (start blur; `2px` default role, `6px` `blur-in-soft`, `10px` `blur-in`, `0px` otherwise).
+
+**Deviation:** `revealGateScript` was added because `initReveal()` runs from deferred module scripts, so the gate could land after first paint and above-the-fold content flashed. The snippet applies the same checks as `initReveal` (IntersectionObserver, `prefers-reduced-motion`, `html[data-sf-motion="reduce"]`); `initReveal` adopts a gate it finds and removes it when its own `motion` option vetoes setup.
 
 **Deviation:** the proposal's `readyEvent` became the way late-hydrating islands opt in, and `deferred` was added to define which containers wait for it. The default `deferred` matches `[data-reveal-defer]` that does not yet contain `[data-reveal-hydrated]`, the same rule the CSS uses to keep such content visible if hydration never happens. `readyEvent` defaults to `"sf:reveal-ready"`.
 
-**Deviation:** the six reveal tokens have no value set in CSS by default; each role keeps its own timing and the token is a fallback `var(--sf-reveal-x, <role default>)`. Set a token to override every role below it. The proposal implied one global default.
+**Deviation:** the seven reveal tokens have no value set in CSS by default; each role keeps its own timing and the token is a fallback `var(--sf-reveal-x, <role default>)`. Set a token to override every role below it. The proposal implied one global default.
 
 **Deviation:** `motionTokens` was added as plain data (`easings`, `durations` in seconds, `springs`, `animationTypes`, role timings) so JS animation code shares numbers with the CSS. The CSS role timings run a little shorter than the JS durations, by design.
 
@@ -268,7 +289,7 @@ Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-re
 
 ## markdown
 
-`createHastPlugins(options?)` returns the factories for `codeBlocks`, `codeGroups`, `callouts`, `headingAnchors` and `tables`; each is also exported alone. `createShikiConfig()` returns `{ theme: "css-variables", transformers: [codeMeta()] }`. Options: `codeBlocks: { copyLabel, copyText, idPrefix }`, `callouts: { titles }`, `headingAnchors: { label }`, `tables: { regionLabel }`. `parseFenceMeta` and `codeMeta` read `title="…"` and `group="…"` from the fence.
+`createHastPlugins(options?)` returns the factories for `codeBlocks`, `codeGroups`, `callouts`, `headingAnchors` and `tables`; each is also exported alone. `createShikiConfig()` returns `{ theme: "css-variables", transformers: [codeMeta()] }`. Options: `codeBlocks: { copyLabel, copyText, idPrefix }`, `callouts: { titles }`, `headingAnchors: { label }`, `tables: { regionLabel }`, where `regionLabel` is a string, `false` (no `role="region"`, still focusable) or `(table, index, { caption, heading }) => string`. The default is the caption, else `"<heading> table"`, else `"Scrollable table"`, and a repeated name gets ` 2`, ` 3` so regions stay unique for axe `landmark-unique`. `parseFenceMeta` and `codeMeta` read `title="…"` and `group="…"` from the fence.
 
 **Deviation:** the proposal said only "Sätteri hast plugin factories". The built set also carries a Shiki config because Sätteri swaps the fence for Shiki's output before any hast plugin runs, so fence meta has to be carried on the `<pre>` by a Shiki transformer. The code-block plugin recognises Astro's `astro-code` class, so the plugins target Astro's pipeline.
 
@@ -276,8 +297,8 @@ Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-re
 
 ```ts
 createDocs(config: DocsConfig): Docs
-// config: { name, summary, groups, trailingSlash: "always" | "never", optionalLinks,
-//           rewriteLink?, exampleId?, featured? }
+// config: { name, summary, intro?: string | string[], groups, trailingSlash: "always" | "never",
+//           optionalLinks, rewriteLink?, exampleId?, featured? }
 // Docs: { config, docPath, markdownPath, docsNav, pageLinks, featuredDocs,
 //         pageMarkdown, llmsIndex, llmsFull }
 spyToc(root, { linkSelector?, current?, rootMargin? }): () => void
@@ -295,7 +316,7 @@ The unbound helpers (`docPath`, `markdownPath`, `docsNav`, `pageLinks`, `feature
 
 ## CSS contract
 
-Every stylesheet is wrapped in `@layer sf` and uses `:where()` selectors. Consumers declare `@layer sf, …` ahead of their utilities so Tailwind classes win.
+Every stylesheet is wrapped in `@layer sf` and uses `:where()` selectors. Consumers declare `@layer theme, base, sf, components, utilities;` first: `sf` after `base` so a preflight reset (`* { margin: 0; border: 0 solid }`) can't strip library borders, and before `components` and `utilities` so Tailwind classes win. `tests/browser/layers.spec.ts` checks both.
 
 Base tokens read by the stylesheets: `--sf-bg`, `--sf-surface`, `--sf-fg`, `--sf-muted`, `--sf-faint`, `--sf-accent`, `--sf-border`, `--sf-radius`, `--sf-font`, `--sf-font-size`, `--sf-ok`, `--sf-fail`, `--sf-warn`, `--sf-focus`, `--sf-demo-height`. Component tokens extend these where the survey showed real need: `--sf-demo-*` and `--sf-tool-accent` (agent demo), `--sf-window-dot*` (window), `--sf-reveal-*` (reveal).
 

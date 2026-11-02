@@ -1,5 +1,5 @@
 import {
-  type RefObject,
+  type RefCallback,
   useCallback,
   useEffect,
   useRef,
@@ -22,9 +22,19 @@ import {
  */
 export type UsePlaybackOptions = PlaybackGateOptions;
 
+/**
+ * The element ref `usePlayback` and `useCountUp` return: a callback ref, so an element that
+ * mounts late or is swapped for another gets a fresh gate, that also reads and writes like a
+ * `RefObject` through `current`.
+ */
+export type PlaybackRef<T extends Element> = RefCallback<T> & { current: T | null };
+
 export interface UsePlaybackResult<T extends Element> {
-  /** Attach to the element whose visibility gates playback. */
-  readonly ref: RefObject<T | null>;
+  /**
+   * Attach to the element whose visibility gates playback. It may mount after the first render
+   * or change; a new element starts a fresh gate at 0 that keeps the current rate.
+   */
+  readonly ref: PlaybackRef<T>;
   readonly elapsed: number;
   /** `autoStart`, or `play()`/`replay()` has been called. */
   readonly started: boolean;
@@ -72,15 +82,32 @@ const idle = (): GateState => IDLE;
 export function useGate<T extends Element>(
   options: PlaybackGateOptions,
 ): {
-  readonly ref: RefObject<T | null>;
+  readonly ref: PlaybackRef<T>;
   readonly gate: PlaybackGate | null;
   readonly state: GateState;
   /** Checks the rate and applies it to the gate, or to the first gate when none exists yet. */
   readonly setSpeed: (speed: number) => void;
 } {
-  const ref = useRef<T>(null);
   const [gate, setGate] = useState<PlaybackGate | null>(null);
   const live = useRef<PlaybackGate | null>(null);
+  // The element the live gate observes. A different one attached after the gate exists bumps
+  // `element` to rebuild the gate; one attached before the first gate is simply picked up.
+  const observed = useRef<Element | null>(null);
+  const [element, setElement] = useState(0);
+  const [ref] = useState(() => {
+    let current: T | null = null;
+    const attach = (node: T | null): void => {
+      if (node === current) return;
+      current = node;
+      // Only a new node rebuilds. Detaching (null) doesn't: an inline ref callback detaches and
+      // reattaches the same node on every commit, and a removed element just reads as out of view.
+      if (node && live.current && observed.current !== node) setElement((n) => n + 1);
+    };
+    return Object.defineProperty(attach, "current", {
+      get: () => current,
+      set: attach,
+    }) as PlaybackRef<T>;
+  });
   const onFrame = useRef(options.onFrame);
   onFrame.current = options.onFrame;
   // The rate a new gate starts at: the last one set by the `speed` option or by `setSpeed`, so a
@@ -91,7 +118,9 @@ export function useGate<T extends Element>(
   const { autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy, duration } =
     options;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `element` changing means a new node is attached to `ref`, which the effect reads.
   useEffect(() => {
+    observed.current = ref.current;
     const next = createPlaybackGate(ref.current, {
       ...defined({ autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy }),
       ...defined({ duration, speed: rate.current }),
@@ -104,7 +133,18 @@ export function useGate<T extends Element>(
       live.current = null;
       setGate(null);
     };
-  }, [autoStart, threshold, rootMargin, leaveGraceMs, motion, reducedPolicy, duration, hasOnFrame]);
+  }, [
+    ref,
+    element,
+    autoStart,
+    threshold,
+    rootMargin,
+    leaveGraceMs,
+    motion,
+    reducedPolicy,
+    duration,
+    hasOnFrame,
+  ]);
 
   // Declared after the gate effect, so a speed change in the same commit as a rebuild reaches the
   // new gate.

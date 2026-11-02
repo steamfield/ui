@@ -18,7 +18,7 @@ import {
   type Position,
   stateAt,
 } from "../../sequencer/view.ts";
-import { usePlayback } from "../playback/use-playback.ts";
+import { type PlaybackRef, usePlayback } from "../playback/use-playback.ts";
 
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
@@ -99,8 +99,8 @@ export interface UseAgentDemoResult<TData = unknown> {
   /** What to render now. */
   readonly view: DemoView<TData>;
   readonly controls: AgentDemoControls;
-  /** Attach to the element whose visibility gates playback. */
-  readonly ref: RefObject<HTMLDivElement | null>;
+  /** Attach to the element whose visibility gates playback; it may mount late or change. */
+  readonly ref: PlaybackRef<HTMLDivElement>;
   /** False on the server and the first client render. Show controls only once true. */
   readonly ready: boolean;
   /** `autoStart`, or `play()`, `toggle()` or `replay()` has been called. False until hydrated. */

@@ -1,3 +1,4 @@
+export { revealGateScript } from "./gate.ts";
 export type { MotionPreference, MotionSource, RevealOptions } from "./init.ts";
 export { initReveal } from "./init.ts";
 export type {

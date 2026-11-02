@@ -282,6 +282,19 @@ describe("llmsIndex", () => {
     expect(llmsIndex(config, [], site)).toContain("as in https://example.com/docs/index.md.");
   });
 
+  it("adds intro paragraphs right after the summary", () => {
+    const one = llmsIndex({ ...config, intro: "Run `acme help` first." }, entries, site);
+    expect(one.split("\n\n").slice(1, 3)).toEqual([
+      "> Acme does things.",
+      "Run `acme help` first.",
+    ]);
+    const many = llmsIndex({ ...config, intro: ["First.", "Second."] }, entries, site);
+    expect(many.split("\n\n").slice(1, 4)).toEqual(["> Acme does things.", "First.", "Second."]);
+    expect(llmsIndex({ ...config, intro: [] }, entries, site)).toBe(
+      llmsIndex(config, entries, site),
+    );
+  });
+
   it("points at llms-full.txt", () => {
     expect(llmsIndex(config, entries, site)).toContain("https://example.com/llms-full.txt has");
   });

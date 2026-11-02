@@ -41,8 +41,9 @@ const defaultDeferred = (el: Element): boolean =>
  * One-shot scroll reveals for `reveal/styles.css`. It sets `data-motion-ready` on `<html>` (the
  * CSS gate), then flips `data-revealed="true"` on each `[data-reveal]` container the first time it
  * enters the viewport or takes keyboard focus. Without IntersectionObserver, or when motion isn't
- * allowed, it does nothing and every section stays visible. If reduced motion turns on later, it
- * removes the gate and stops observing.
+ * allowed, it does nothing (and removes a gate `revealGateScript` set) so every section stays
+ * visible. If reduced motion turns on later, it removes the gate and stops observing. A gate that
+ * `revealGateScript` already set is taken over as is.
  *
  * Call it from a script in `<head>` (it waits for the DOM) or after the DOM is parsed. Returns a
  * disposer that disconnects everything and removes the gate, which leaves all content visible.
@@ -50,7 +51,11 @@ const defaultDeferred = (el: Element): boolean =>
 export function initReveal(options: RevealOptions = {}): () => void {
   const root = document.documentElement;
   const motion = motionSourceFor(options.motion ?? "auto", root);
-  if (typeof IntersectionObserver === "undefined" || !motion.get()) return noop;
+  if (typeof IntersectionObserver === "undefined" || !motion.get()) {
+    // `revealGateScript` may have set the gate before a site motion source could veto it.
+    delete root.dataset.motionReady;
+    return noop;
+  }
   const immediate = options.immediate ?? (() => false);
   const deferred = options.deferred ?? defaultDeferred;
   const readyEvent = options.readyEvent ?? "sf:reveal-ready";

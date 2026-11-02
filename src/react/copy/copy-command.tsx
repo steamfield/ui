@@ -7,7 +7,7 @@ export interface CopyButtonProps {
   readonly label?: string;
   /** The visible idle text. Default "Copy". */
   readonly children?: ReactNode;
-  readonly className?: string;
+  readonly className?: string | undefined;
   /** An icon rendered before the label, hidden from assistive tech. */
   readonly icon?: ReactNode;
 }
@@ -57,7 +57,14 @@ export interface CopyCommandProps {
   readonly prompt?: string | null;
   readonly label?: string;
   readonly buttonText?: ReactNode;
+  /** On the wrapper. */
   readonly className?: string;
+  /** On the copy button. */
+  readonly buttonClassName?: string;
+  /** On the prompt glyph. */
+  readonly promptClassName?: string;
+  /** On the command text. */
+  readonly commandClassName?: string;
   readonly icon?: ReactNode;
 }
 
@@ -70,20 +77,28 @@ export function CopyCommand({
   label = prose ? "Copy prompt" : "Copy command",
   buttonText,
   className,
+  buttonClassName,
+  promptClassName,
+  commandClassName,
   icon,
 }: CopyCommandProps): ReactElement {
   const Text = prose ? "div" : "code";
   return (
     <div className={className} data-part="copy-command" data-prose={prose ? "" : undefined}>
       {prompt && !prose ? (
-        <span aria-hidden="true" data-part="prompt" style={{ userSelect: "none" }}>
+        <span
+          aria-hidden="true"
+          data-part="prompt"
+          className={promptClassName}
+          style={{ userSelect: "none" }}
+        >
           {prompt}{" "}
         </span>
       ) : null}
-      <Text id={id} data-part="command">
+      <Text id={id} data-part="command" className={commandClassName}>
         {command}
       </Text>
-      <CopyButton controls={id} label={label} icon={icon}>
+      <CopyButton controls={id} label={label} icon={icon} className={buttonClassName}>
         {buttonText ?? "Copy"}
       </CopyButton>
     </div>

@@ -83,6 +83,11 @@ export interface AgentDemoGlyphs {
   readonly submit: string;
   /** Spinner frames for a running tool in the terminal layout, one per 80ms of demo time. */
   readonly spinner: readonly string[];
+  /**
+   * Between a tool's `server` and `name` in the terminal layout's header. Default " ". Unlike the
+   * other glyphs it is plain text, so a screen reader doesn't run the two words together.
+   */
+  readonly serverSeparator: string;
 }
 
 export const defaultGlyphs: AgentDemoGlyphs = Object.freeze({
@@ -94,6 +99,7 @@ export const defaultGlyphs: AgentDemoGlyphs = Object.freeze({
   fail: "✕",
   submit: "↵",
   spinner: Object.freeze(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+  serverSeparator: " ",
 });
 
 /** How one tool reads in the chat layout's card header. `TIcon` is the framework's node type. */

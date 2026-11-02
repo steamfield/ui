@@ -858,3 +858,33 @@ describe("completion, reduced motion and the play label", () => {
     expect(hidden).toContain("There are 54 rows");
   });
 });
+
+describe("terminal tool header", () => {
+  const script: DemoScript = {
+    steps: [
+      { kind: "tool-call", name: "query_sql", server: "db", args: "spec" },
+      { kind: "tool-call", name: "ls" },
+    ],
+  };
+  const parts = (root: ParentNode) =>
+    [...root.querySelectorAll('[data-part="tool-label"]')].map((label) => ({
+      text: label.textContent,
+      server: label.querySelector('[data-part="tool-server"]')?.textContent ?? null,
+      name: label.querySelector('[data-part="tool-name"]')?.textContent ?? null,
+    }));
+
+  test("renders server and name as separate parts, reading 'server name' by default", () => {
+    const { container } = render(<StaticTranscript script={script} layout="terminal" />);
+    expect(parts(container)).toEqual([
+      { text: "db query_sql", server: "db", name: "query_sql" },
+      { text: "ls", server: null, name: "ls" },
+    ]);
+  });
+
+  test("glyphs.serverSeparator sets the text between them", () => {
+    const { container } = render(
+      <StaticTranscript script={script} layout="terminal" glyphs={{ serverSeparator: " · " }} />,
+    );
+    expect(parts(container)[0]?.text).toBe("db · query_sql");
+  });
+});

@@ -4,7 +4,7 @@
 // and add each new subpath here.
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
-import { createHastPlugins, createShikiConfig } from "@steamfield/ui/markdown";
+import { createHastPlugins, createShikiConfig, type TablesOptions } from "@steamfield/ui/markdown";
 import { createPlaybackGate, type GateState } from "@steamfield/ui/playback";
 import {
   AgentDemo,
@@ -14,7 +14,7 @@ import {
 } from "@steamfield/ui/react/agent-demo";
 import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
 import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-tabs";
-import { useCountUp, usePlayback } from "@steamfield/ui/react/playback";
+import { type PlaybackRef, useCountUp, usePlayback } from "@steamfield/ui/react/playback";
 import { Tab, TabList, TabPanel, Tabs } from "@steamfield/ui/react/tabs";
 import { DemoWindow, type DemoWindowProps } from "@steamfield/ui/react/window";
 import {
@@ -22,6 +22,7 @@ import {
   type MotionPreference,
   type MotionSource,
   motionTokens,
+  revealGateScript,
 } from "@steamfield/ui/reveal";
 import {
   type DemoScript,
@@ -67,9 +68,16 @@ check(detail.ok, "CopyEventDetail type");
 check((await copyText("x")) === false, "copyText reports false without a clipboard or DOM");
 
 // react/copy: renders on the server with the button hidden until enhanced.
-const props: CopyCommandProps = { id: "cmd", command: "bun add @steamfield/ui" };
+const props: CopyCommandProps = {
+  id: "cmd",
+  command: "bun add @steamfield/ui",
+  buttonClassName: "btn",
+  promptClassName: "glyph",
+  commandClassName: "cmd",
+};
 const html = renderToStaticMarkup(createElement(CopyCommand, props));
 check(html.includes("bun add @steamfield/ui") && /<button[^>]*hidden/.test(html), "CopyCommand");
+check(html.includes('class="btn"') && html.includes('class="cmd"'), "CopyCommand part classes");
 check(typeof useCopy === "function", "useCopy export");
 
 // script + sequencer: pure, so they run on the server.
@@ -106,6 +114,18 @@ check(
   "StaticTranscript",
 );
 check(typeof useAgentDemo === "function", "useAgentDemo export");
+const toolScript: DemoScript = { steps: [{ kind: "tool-call", name: "query", server: "db" }] };
+const toolHtml = renderToStaticMarkup(
+  createElement(StaticTranscript, {
+    script: toolScript,
+    layout: "terminal",
+    glyphs: { serverSeparator: " · " },
+  }),
+);
+check(
+  toolHtml.includes('data-part="tool-server">db</span> · <span data-part="tool-name">query'),
+  "terminal tool header parts",
+);
 const windowProps: DemoWindowProps = { title: "session", label: "Example" };
 check(
   renderToStaticMarkup(createElement(DemoWindow, windowProps)).includes("session"),
@@ -118,6 +138,17 @@ const vueHtml = await renderToString(
   createSSRApp({ render: () => h(VueStaticTranscript, { script }) }),
 );
 check(vueHtml.includes("Hello there."), "Vue StaticTranscript SSR");
+const vueToolHtml = await renderToString(
+  createSSRApp({
+    render: () =>
+      h(VueStaticTranscript, {
+        script: toolScript,
+        layout: "terminal",
+        glyphs: { serverSeparator: " · " },
+      }),
+  }),
+);
+check(vueToolHtml.includes('data-part="tool-server"'), "Vue terminal tool header parts");
 const vueDemoHtml = await renderToString(createSSRApp({ render: () => h(VueAgentDemo, vueProps) }));
 check(vueDemoHtml.includes("data-sf-agent-demo"), "Vue AgentDemo SSR");
 check(typeof useVueAgentDemo === "function", "Vue useAgentDemo export");
@@ -128,9 +159,18 @@ const state: GateState = gate.getState();
 check(typeof state.elapsed === "number", "gate state");
 gate.destroy();
 check(typeof usePlayback === "function" && typeof useCountUp === "function", "react/playback");
+// The ref is a callback ref that also reads like a RefObject.
+const readCurrent = (ref: PlaybackRef<HTMLDivElement>): HTMLDivElement | null => ref.current;
+check(typeof readCurrent === "function", "PlaybackRef type");
 
 // reveal: the motion tokens are plain data; the motion types describe a site's own toggle.
 check(typeof initReveal === "function" && typeof motionTokens === "object", "reveal");
+// The pre-paint gate is a classic script string, safe to evaluate where there is no DOM.
+check(
+  typeof revealGateScript === "string" && revealGateScript.includes("data-motion-ready"),
+  "gate",
+);
+new Function(revealGateScript)();
 const revealMotion: MotionPreference | MotionSource = {
   get: () => true,
   subscribe: () => () => {},
@@ -154,7 +194,11 @@ const installHtml = renderToStaticMarkup(createElement(InstallTabs, { options: i
 check(installHtml.includes("npm i -g acme"), "react/install-tabs SSR");
 
 // markdown + docs: plugin factories and pure docs helpers.
-const hastPlugins = createHastPlugins();
+const tableOptions: TablesOptions = {
+  regionLabel: (_table, index, { heading }) => `${heading ?? "Data"} ${index + 1}`,
+};
+const hastPlugins = createHastPlugins({ tables: tableOptions });
+check(createHastPlugins({ tables: { regionLabel: false } }).length > 0, "regionLabel false");
 check(Array.isArray(hastPlugins) || typeof hastPlugins === "object", "markdown plugins");
 check(typeof createShikiConfig().theme === "string", "shiki config");
 const docsConfig: DocsConfig = {
@@ -163,7 +207,9 @@ const docsConfig: DocsConfig = {
   groups: ["Start"],
   trailingSlash: "never",
   optionalLinks: [],
+  intro: ["Start with the quickstart."],
 };
 const docs = createDocs(docsConfig);
+check(docs.llmsIndex([], "https://example.com").includes("Start with the quickstart."), "intro");
 check(typeof docs.llmsFull([], "https://example.com") === "string", "docs llmsFull");
 check(docPath("intro", "always").endsWith("/"), "docPath trailing slash");

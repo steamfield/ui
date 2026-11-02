@@ -19,6 +19,8 @@
      --sf-reveal-duration  --sf-reveal-ease  --sf-reveal-delay  --sf-reveal-step
      --sf-reveal-lift      (distance the entrance travels)
      --sf-reveal-scale     (start scale, for roles that scale)
+     --sf-reveal-blur      (start blur: 2px by default, 6px blur-in-soft, 10px blur-in, 0px for
+                           the rest; a wipe never blurs)
 
    Roles: (default) quiet card drop popover wipe
           lift-xs lift-sm lift-md lift-lg lift-xl lift-card blur-in-soft scale-in-media
@@ -45,7 +47,7 @@
       ) {
       opacity: 0;
       transform: translateY(var(--sf-reveal-lift, 12px)) scale(var(--sf-reveal-scale, 1));
-      filter: blur(2px);
+      filter: blur(var(--sf-reveal-blur, 2px));
       will-change: opacity, transform;
     }
 
@@ -98,7 +100,7 @@
         html[data-motion-ready] [data-reveal][data-motion="quiet"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 6px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- card: a larger lift with a slight scale, for demos and tables ---- */
@@ -115,7 +117,7 @@
         html[data-motion-ready] [data-reveal][data-motion="card"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 20px)) scale(var(--sf-reveal-scale, 0.985));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- drop: down from above, for a menu bar item ---- */
@@ -125,7 +127,7 @@
         html[data-motion-ready] [data-reveal][data-motion="drop"]:not([data-revealed])
       ) {
       transform: translateY(calc(-1 * var(--sf-reveal-lift, 10px)));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- popover: opens from its top edge ---- */
@@ -144,7 +146,7 @@
       ) {
       transform: translateY(calc(-1 * var(--sf-reveal-lift, 6px)))
         scale(var(--sf-reveal-scale, 0.94));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- wipe: uncovered left to right; the element keeps its own transform ---- */
@@ -249,7 +251,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-xs"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 6px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -257,7 +259,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-sm"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 8px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -265,7 +267,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-md"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 10px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -273,7 +275,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-lg"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 12px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -281,7 +283,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-xl"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 18px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -289,7 +291,7 @@
         html[data-motion-ready] [data-reveal][data-motion="lift-card"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 16px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* Reserved for page bookends: the hero and closing headlines. */
@@ -298,7 +300,7 @@
         html[data-motion-ready] [data-reveal][data-motion="blur-in-soft"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 12px));
-      filter: blur(6px);
+      filter: blur(var(--sf-reveal-blur, 6px));
     }
 
     /* Wide media: a 0.5% scale; the lift does the real work. */
@@ -307,7 +309,7 @@
         html[data-motion-ready] [data-reveal][data-motion="scale-in-media"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 10px)) scale(var(--sf-reveal-scale, 0.995));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -315,7 +317,7 @@
         html[data-motion-ready] [data-reveal][data-motion="slide-in-chip"]:not([data-revealed])
       ) {
       transform: translateX(calc(-1 * var(--sf-reveal-lift, 12px)));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- Older entrances, kept for existing markup: 480ms ---- */
@@ -325,7 +327,7 @@
         html[data-motion-ready] [data-reveal][data-motion="fade-up"]:not([data-revealed])
       ) {
       transform: translateY(var(--sf-reveal-lift, 30px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -333,7 +335,7 @@
         html[data-motion-ready] [data-reveal][data-motion="blur-in"]:not([data-revealed])
       ) {
       transform: scale(var(--sf-reveal-scale, 0.95));
-      filter: blur(10px);
+      filter: blur(var(--sf-reveal-blur, 10px));
     }
 
     :where(
@@ -341,7 +343,7 @@
         html[data-motion-ready] [data-reveal][data-motion="bounce-in"]:not([data-revealed])
       ) {
       transform: scale(var(--sf-reveal-scale, 0.8));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -349,7 +351,7 @@
         html[data-motion-ready] [data-reveal][data-motion="slide-left"]:not([data-revealed])
       ) {
       transform: translateX(calc(-1 * var(--sf-reveal-lift, 40px)));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     :where(
@@ -357,7 +359,7 @@
         html[data-motion-ready] [data-reveal][data-motion="slide-right"]:not([data-revealed])
       ) {
       transform: translateX(var(--sf-reveal-lift, 40px));
-      filter: none;
+      filter: blur(var(--sf-reveal-blur, 0px));
     }
 
     /* ---- Keyboard focus is never hidden behind an entrance ---- */

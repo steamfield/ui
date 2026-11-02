@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { MotionSource } from "../../playback/motion.ts";
@@ -105,6 +105,45 @@ function InViewCount() {
     easing: (t) => t,
   });
   return <span ref={ref}>{value}</span>;
+}
+
+/** Renders its gating element only once `show` is true, like an iframe behind a state flip. */
+function Late({ show }: { show: boolean }) {
+  const playback = usePlayback<HTMLElement>({ duration: DURATION });
+  return (
+    <>
+      <output data-testid="elapsed">{Math.round(playback.elapsed)}</output>
+      {show && <section title="late" ref={playback.ref} />}
+    </>
+  );
+}
+
+let seen: Element | null = null;
+
+/** Attaches the same ref to one of two elements, recording what `ref.current` reads. */
+function Swap({ which }: { which: "a" | "b" }) {
+  const playback = usePlayback<HTMLDivElement>({ duration: DURATION });
+  useEffect(() => {
+    seen = playback.ref.current;
+  });
+  return which === "a" ? (
+    <div key="a" data-testid="a" ref={playback.ref} />
+  ) : (
+    <div key="b" data-testid="b" ref={playback.ref} />
+  );
+}
+
+/** Merges the ref by hand through `current`, with a new inline callback every render. */
+function Manual() {
+  const playback = usePlayback<HTMLDivElement>({ duration: DURATION });
+  return (
+    <div
+      data-testid="manual"
+      ref={(node) => {
+        playback.ref.current = node;
+      }}
+    />
+  );
 }
 
 const elapsed = (): number => Number(screen.getByTestId("elapsed").textContent);
@@ -299,6 +338,40 @@ describe("usePlayback", () => {
     advance(1000);
     expect(elapsed()).toBeGreaterThan(900);
     expect(elapsed()).toBeLessThan(1100);
+  });
+
+  test("attaches to an element that mounts after the first render", () => {
+    const { rerender } = render(<Late show={false} />);
+    rerender(<Late show />);
+    const frame = screen.getByTitle("late");
+    expect(live()).toHaveLength(1);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([frame]);
+    // Observed, so it waits for the viewport rather than counting as in view.
+    advance(500);
+    expect(elapsed()).toBe(0);
+    scroll(true);
+    advance(500);
+    expect(elapsed()).toBeGreaterThan(400);
+  });
+
+  test("follows a swapped element, and ref.current reads the attached node", () => {
+    seen = null;
+    const { rerender } = render(<Swap which="a" />);
+    expect(seen).toBe(screen.getByTestId("a"));
+    rerender(<Swap which="b" />);
+    const b = screen.getByTestId("b");
+    expect(seen).toBe(b);
+    expect(live()).toHaveLength(1);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([b]);
+  });
+
+  test("a ref assigned through .current, as a RefObject, still gates", () => {
+    const { rerender } = render(<Manual />);
+    expect([...(live()[0]?.targets ?? [])]).toEqual([screen.getByTestId("manual")]);
+    // The inline callback detaches and reattaches the same node each commit: no rebuild.
+    rerender(<Manual />);
+    rerender(<Manual />);
+    expect(FakeObserver.instances).toHaveLength(1);
   });
 
   test("controls work through the hook and are no-ops before ready", () => {
