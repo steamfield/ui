@@ -458,3 +458,63 @@ describe("lifecycle", () => {
     expect(c.getState().view.entries).toHaveLength(script.steps.length);
   });
 });
+
+describe("review regressions", () => {
+  test("an inline function finalPolicy doesn't count as a change on every update", () => {
+    const c = make({ autoStart: false, finalPolicy: () => [0] });
+    const listener = vi.fn();
+    c.subscribe(listener);
+    for (let i = 0; i < 3; i++) {
+      c.update(script, { ...options, autoStart: false, finalPolicy: () => [0] });
+    }
+    expect(listener).not.toHaveBeenCalled();
+    expect(c.getState().view.entries).toHaveLength(1);
+    c.update(script, { ...options, autoStart: false, finalPolicy: () => [0, 1, 2, 3, 4] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(c.getState().view.entries).toHaveLength(script.steps.length);
+  });
+
+  test("a throwing onStepStart doesn't stop the clock or the view", () => {
+    let calls = 0;
+    const onStepStart = vi.fn((_index: number) => {
+      calls += 1;
+      if (calls === 2) throw new Error("boom");
+    });
+    const c = make({ onStepStart });
+    expect(() => advance(startOf(1) + 50)).toThrow("boom");
+    expect(c.getState().view.current).toBe(1);
+    advance(startOf(3) - startOf(1));
+    expect(c.getState()).toMatchObject({ playing: true, turn: 1 });
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3]);
+  });
+
+  test("onComplete calling replay plays again cleanly", () => {
+    const c = make();
+    const onComplete = vi.fn(() => c.getState().controls.replay());
+    c.update(script, { ...options, onComplete });
+    advance(TOTAL + 50);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(c.getState()).toMatchObject({ playing: true, complete: false });
+    expect(c.getState().view.elapsed).toBeLessThan(200);
+    advance(TOTAL + 50);
+    expect(onComplete).toHaveBeenCalledTimes(2);
+  });
+
+  test("a changed speed option replaces a setSpeed rate, also across a remount", () => {
+    const c = make();
+    c.getState().controls.setSpeed(3);
+    c.update(script, { ...options, speed: 5 });
+    expect(c.getState().speed).toBe(5);
+    c.destroy();
+    c.mount();
+    expect(c.getState().speed).toBe(5);
+  });
+
+  test("a setSpeed rate survives a remount when the option didn't change", () => {
+    const c = make({ speed: 2 });
+    c.getState().controls.setSpeed(3);
+    c.destroy();
+    c.mount();
+    expect(c.getState().speed).toBe(3);
+  });
+});

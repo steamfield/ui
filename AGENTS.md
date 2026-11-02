@@ -36,9 +36,13 @@ Run these from the repo root. Tests and scripts run on Node (`.node-version`); B
 src/
   script/         DemoScript types, validateScript, LibraryError (the only error the package throws)
   sequencer/      compile(script) -> timeline; pure stateAt(timeline, {ms}|{click}); finalState; presets
-  playback/       createPlaybackGate: in-view + tab-visible + motion gating, rAF clock
-  copy/ tabs/ reveal/ markdown/ docs/   framework-free cores (plain DOM or pure functions)
-  agent-demo/     no entry: styles.css (the data-part contract) and core.ts, the renderer core both bindings share
+  playback/       createPlaybackGate: in-view + tab-visible + motion gating, rAF clock;
+                  internal createBoundGate adds attach/configure (the element-binding rules)
+  copy/           copyText, enhanceCopyButtons; internal createCopyState and the markup constants
+  tabs/           createTabs; internal createTabsState (selection, hash, events) and key rules
+  reveal/ markdown/ docs/   framework-free cores (plain DOM or pure functions)
+  agent-demo/     no entry: controller.ts (createDemoController, the state machine both bindings
+                  adapt), core.ts (labels, glyphs, beat text) and styles.css (the data-part contract)
   react/          React wrappers: agent-demo, window, playback, copy, tabs, install-tabs
   vue/            Vue binding for the agent demo (decks)
   internal/       private helpers; never exported from an entry
@@ -52,6 +56,8 @@ docs/             SURVEY.md (why), API.md (design reference), MIGRATION.md (cons
 ```
 
 Every `src/**/index.ts(x)` is an entry and maps to one `exports` key. Data flows one way: script -> sequencer -> renderer; the playback gate drives the clock that picks the position.
+
+Stateful components follow one pattern: a framework-free controller in the core subpath (`getState`, `subscribe`, commands, `destroy`) owns every rule, and each binding only adapts it (React through `useSyncExternalStore`, Vue through a `shallowRef` fed by `subscribe`, the DOM enhancers by applying state to elements). A rule implemented in a binding is a bug: put it in the controller and test it there.
 
 ## Agent harness
 

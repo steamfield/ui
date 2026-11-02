@@ -141,11 +141,11 @@ createPlaybackGate(el: Element | null, {
 
 **Deviation:** `el` may be `null` (the proposal typed `Element`), so a gate can drive a clock with no element, such as a test or a headless counter.
 
-`usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts a fresh gate. `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
+`usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts over at 0. The hook holds one gate per mount; the gate follows its element and options itself (`attach`/`configure` on an internal `BoundGate`). `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
 
-**Deviation:** `ref` is a `PlaybackRef<T>`, a callback ref that also has a read/write `current`, not a `RefObject`. An element that mounts after the first render (an iframe behind a state flip) gets a fresh gate; before any element attaches, `autoStart` waits (explicit `play()` still runs, counted as in view). An element-to-element swap carries `elapsed`, `started`, `paused` and the rate; option changes still start at 0, and an option change plus a swap in one commit builds once. Detaching doesn't rebuild. `ref={ref}` and `ref.current` keep working. `useCountUp` and `useAgentDemo` return the same type.
+**Deviation:** `ref` is a `PlaybackRef<T>`, a callback ref that also has a read/write `current`, not a `RefObject`. An element that mounts after the first render (an iframe behind a state flip) starts fresh; before any element attaches, `autoStart` waits (explicit `play()` still runs, counted as in view). An element-to-element swap carries `elapsed`, `started`, `paused` and the rate; option changes still start at 0, and an option change plus a swap in one commit starts over once, with one new observer. Detaching keeps the state, which reads as out of view once the observer reports the element gone. `ref={ref}` and `ref.current` keep working. `useCountUp` and `useAgentDemo` return the same type.
 
-**Deviation:** `usePlayback` returns `speed` and `setSpeed`; the option is applied to the gate in place, and a gate rebuilt for a new `duration` or `motion` starts at the current rate. `useAgentDemo` drives its `speed` and `controls.setSpeed` through the same gate, so an invalid rate throws at the call.
+**Deviation:** `usePlayback` returns `speed` and `setSpeed`; the option is applied to the gate in place, and a restart for a new `duration` or `motion` keeps the current rate. A rate set with `setSpeed` holds until the `speed` option changes, including across a remount. `useAgentDemo` drives its `speed` and `controls.setSpeed` through the same gate, so an invalid rate throws at the call.
 
 ## react/agent-demo
 
@@ -218,7 +218,7 @@ useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<Us
 <StaticTranscript :script layout finalPolicy labels glyphs tools privacyClassName>  slots: toolCall, toolBody
 ```
 
-**Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. `el` follows React's element rules (autoStart waits for an element, a late element gets a fresh gate, a swap keeps progress, option changes reset), and a `playCount` bump on slide re-entry also resets. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).
+**Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. `el` follows React's element rules (autoStart waits for an element, a late element starts fresh, a swap keeps progress, option changes reset), and a `playCount` bump on slide re-entry also resets. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).
 
 ## react/window
 

@@ -176,3 +176,21 @@ export function stubAnimationFrame(): void {
   );
   vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
 }
+
+/**
+ * Gives `Response` a `bytes()` (happy-dom has none; shiki's inlined wasm needs it) and removes it
+ * when the test finishes. Call it from the test or a `beforeEach`.
+ */
+export function stubResponseBytes(): void {
+  if ("bytes" in Response.prototype) return;
+  Object.defineProperty(Response.prototype, "bytes", {
+    configurable: true,
+    writable: true,
+    async value(this: Response): Promise<Uint8Array> {
+      return new Uint8Array(await this.arrayBuffer());
+    },
+  });
+  onTestFinished(() => {
+    Reflect.deleteProperty(Response.prototype, "bytes");
+  });
+}

@@ -12,12 +12,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  isActivationKey,
-  keyTarget,
+  type TabKeyAction,
   type TabsActivation,
   type TabsHash,
   type TabsOrientation,
   tabEntries,
+  tabKeyAction,
   tabValue,
 } from "../../tabs/core.ts";
 import { createTabsState } from "../../tabs/state.ts";
@@ -35,7 +35,7 @@ interface TabsContextValue {
   /** The value the server rendered as selected; its panel is marked `data-default` for the CSS. */
   readonly initial: string | undefined;
   /** `keyboard` is an arrow-key move under auto activation, recorded with `replaceState`. */
-  readonly pick: (value: string, via: "keyboard" | "pointer") => void;
+  readonly pick: (value: string, via: NonNullable<TabKeyAction["via"]>) => void;
 }
 
 // Outside <Tabs> the parts render their static, pre-hydration markup rather than throwing.
@@ -121,7 +121,10 @@ export function Tabs({
   latest.current = { value, onValueChange, hash, eventName };
   const [state] = useState(() =>
     createTabsState({
-      tabs: () => (root.current ? tabEntries(root.current) : []),
+      tabs: () => {
+        const list = ownList(root.current);
+        return list ? tabEntries(list) : [];
+      },
       selected: value,
       defaultValue,
       controlled: () => latest.current.value,
@@ -136,7 +139,8 @@ export function Tabs({
     }),
   );
   const selected = useSyncExternalStore(state.subscribe, state.getState, state.getState);
-  const pick = (next: string, via: "keyboard" | "pointer"): void => state.select(next, { via });
+  const pick = (next: string, via: NonNullable<TabKeyAction["via"]>): void =>
+    state.select(next, { via });
 
   useEffect(() => {
     state.init();
@@ -171,6 +175,14 @@ export function Tabs({
   );
 }
 
+/** This set's own tablist, not one of a `Tabs` nested inside a panel. */
+function ownList(root: HTMLElement | null): HTMLElement | undefined {
+  if (!root) return undefined;
+  return [...root.querySelectorAll<HTMLElement>('[role="tablist"]')].find(
+    (list) => list.closest('[data-part="tabs"]') === root,
+  );
+}
+
 export interface TabListProps {
   readonly "aria-label"?: string;
   readonly "aria-labelledby"?: string;
@@ -178,7 +190,10 @@ export interface TabListProps {
   readonly children?: ReactNode;
 }
 
-/** The `role="tablist"` container. It owns arrow, Home and End navigation across its tabs. */
+/**
+ * The `role="tablist"` container. It owns the keys across its tabs: arrows, Home and End move
+ * focus, and Enter or Space select (`tabKeyAction`).
+ */
 export function TabList({
   "aria-label": label,
   "aria-labelledby": labelledBy,
@@ -187,12 +202,12 @@ export function TabList({
 }: TabListProps): ReactElement {
   const { orientation, activation, pick } = useContext(TabsContext);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const target = keyTarget(event.currentTarget, event.target as Element, event.key, orientation);
-    if (!target) return;
+    const action = tabKeyAction(event.currentTarget, event, { orientation, activation });
+    if (!action) return;
     event.preventDefault();
-    target.focus();
-    const next = tabValue(target);
-    if (activation === "auto" && next !== null) pick(next, "keyboard");
+    if (action.focus) action.tab.focus();
+    const next = tabValue(action.tab);
+    if (action.via && next !== null) pick(next, action.via);
   };
   return (
     <div
@@ -221,7 +236,7 @@ export interface TabProps {
 export function Tab({ value, disabled = false, className, children }: TabProps): ReactElement {
   const { base, selected, hydrated, asAnchors, pick } = useContext(TabsContext);
   const active = selected === value;
-  const activate = (event: MouseEvent | KeyboardEvent): void => {
+  const activate = (event: MouseEvent): void => {
     event.preventDefault();
     if (!disabled) pick(value, "pointer");
   };
@@ -236,9 +251,6 @@ export function Tab({ value, disabled = false, className, children }: TabProps):
     "data-value": value,
     "data-state": stateOf(hydrated, active),
     onClick: activate,
-    onKeyDown: (event: KeyboardEvent) => {
-      if (isActivationKey(event.key)) activate(event);
-    },
   } as const;
   if (asAnchors) {
     return (

@@ -67,6 +67,13 @@ test("a disabled tab's data-default panel falls back to the first enabled tab", 
   expect(visible()).toEqual(["p-a"]);
 });
 
+test("a disabled tab's data-default panel is skipped for a later enabled one", () => {
+  panel("p-c").setAttribute("data-default", "");
+  panel("p-d").setAttribute("data-default", "");
+  dispose = createTabs(root());
+  expect(visible()).toEqual(["p-d"]);
+});
+
 test("aria-selected wins over data-default", () => {
   panel("p-b").setAttribute("data-default", "");
   tab("D").setAttribute("aria-selected", "true");

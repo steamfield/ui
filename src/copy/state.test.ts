@@ -41,12 +41,24 @@ test("resetMs sets how long copied lasts", async () => {
   expect(state.getState()).toBe("idle");
 });
 
-test("a failure resolves false, stays failed and sets no timer", async () => {
+test("a failure resolves false and stays failed with no reset", async () => {
   fail();
   const state = createCopyState();
   expect(await state.copy("x")).toBe(false);
+  const listener = vi.fn();
+  state.subscribe(listener);
+  vi.advanceTimersByTime(5000);
   expect(state.getState()).toBe("failed");
-  expect(vi.getTimerCount()).toBe(0);
+  expect(listener).not.toHaveBeenCalled();
+});
+
+test("an attempt's resetMs overrides the controller's", async () => {
+  const state = createCopyState({ resetMs: 500 });
+  await state.copy("x", { resetMs: 1000 });
+  vi.advanceTimersByTime(999);
+  expect(state.getState()).toBe("copied");
+  vi.advanceTimersByTime(1);
+  expect(state.getState()).toBe("idle");
 });
 
 test("a failure after a success cancels the pending reset", async () => {
@@ -99,15 +111,15 @@ test("a result whose isCurrent no longer holds is dropped but still resolves", a
   release();
   expect(await copying).toBe(true);
   expect(state.getState()).toBe("idle");
+  vi.advanceTimersByTime(5000);
   expect(listener).not.toHaveBeenCalled();
-  expect(vi.getTimerCount()).toBe(0);
 });
 
 test("destroy cancels the pending reset", async () => {
   const state = createCopyState({ resetMs: 1000 });
   await state.copy("x");
   state.destroy();
-  expect(vi.getTimerCount()).toBe(0);
+  vi.advanceTimersByTime(5000);
   expect(state.getState()).toBe("copied");
 });
 
@@ -121,6 +133,6 @@ test("destroy ignores a copy still in flight", async () => {
   release();
   expect(await copying).toBe(true);
   expect(state.getState()).toBe("idle");
+  vi.advanceTimersByTime(5000);
   expect(listener).not.toHaveBeenCalled();
-  expect(vi.getTimerCount()).toBe(0);
 });

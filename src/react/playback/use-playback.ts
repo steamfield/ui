@@ -88,7 +88,6 @@ export function playbackRef<T extends Element>(
 ): PlaybackRef<T> {
   let current: T | null = null;
   const set = (node: T | null): void => {
-    if (node === current) return;
     current = node;
     attach(node);
   };
@@ -112,6 +111,8 @@ export function useGate<T extends Element>(
   const live = useRef<BoundGate | null>(null);
   // The last rate set with `setSpeed`, applied to each gate a mount creates.
   const pending = useRef<number | undefined>(undefined);
+  // The `speed` option last seen, to tell when it changes.
+  const option = useRef(options.speed);
   const [ref] = useState(() => playbackRef<T>((node) => live.current?.attach(node)));
   const latest = useRef(options);
   latest.current = options;
@@ -131,6 +132,11 @@ export function useGate<T extends Element>(
 
   // Every commit: the gate compares the options itself, restarting only for a real change.
   useEffect(() => {
+    // A changed `speed` option replaces a `setSpeed` rate, here and in gates later mounts create.
+    if (options.speed !== undefined && !Object.is(options.speed, option.current)) {
+      pending.current = undefined;
+    }
+    option.current = options.speed;
     live.current?.configure(options);
   });
 

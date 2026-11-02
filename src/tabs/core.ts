@@ -66,16 +66,47 @@ export function tabEntries(scope: ParentNode): TabEntry[] {
   }));
 }
 
-/** True for the keys that select the focused tab under manual activation. */
-export function isActivationKey(key: string): boolean {
-  return key === "Enter" || key === " ";
+/**
+ * How a selection came about. `keyboard` is an arrow, Home or End move under auto activation;
+ * `pointer` is a deliberate pick (click, Enter or Space). Both count as the reader picking: the
+ * hash is written and the event fires. `hash` is a read of `location.hash`, which only reports
+ * through `onValueChange`.
+ */
+export type TabsVia = "keyboard" | "pointer" | "hash";
+
+/** What a key press in a tab list does. */
+export interface TabKeyAction {
+  readonly tab: HTMLElement;
+  /** Move focus to `tab` (arrows, Home, End). */
+  readonly focus: boolean;
+  /** Select `tab` this way, or null to only move focus (arrows under manual activation). */
+  readonly via: "keyboard" | "pointer" | null;
+}
+
+/**
+ * The one key rule for both bindings: Enter and Space select the focused tab as a pick; arrows,
+ * Home and End move focus and, under auto activation only, select as a keyboard move. Null when
+ * the key does nothing here; otherwise the caller prevents the default.
+ */
+export function tabKeyAction(
+  list: HTMLElement,
+  { target, key }: { readonly target: EventTarget | null; readonly key: string },
+  mode: { readonly orientation: TabsOrientation; readonly activation: TabsActivation },
+): TabKeyAction | null {
+  const from = target as Element;
+  if (key === "Enter" || key === " ") {
+    const tab = from.closest<HTMLElement>(TAB);
+    return tab && list.contains(tab) ? { tab, focus: false, via: "pointer" } : null;
+  }
+  const tab = keyTarget(list, from, key, mode.orientation);
+  return tab ? { tab, focus: true, via: mode.activation === "auto" ? "keyboard" : null } : null;
 }
 
 /**
  * The tab a key press should move focus to, or null when the key isn't a tab key. Arrows follow
  * `orientation` and wrap; Home and End jump to the ends. Disabled tabs are skipped.
  */
-export function keyTarget(
+function keyTarget(
   list: ParentNode,
   from: Element,
   key: string,

@@ -103,7 +103,7 @@ const IDLE: GateState = {
 };
 
 /** A position as a comparable value, so an inline `{ click: n }` doesn't count as a change. */
-const positionKey = (position: Position | undefined): string | undefined => {
+export const positionKey = (position: Position | undefined): string | undefined => {
   if (position === undefined) return undefined;
   return "ms" in position ? `ms:${position.ms}` : `click:${position.click}`;
 };
@@ -214,7 +214,8 @@ export function createDemoController<TData = unknown>(
       gs,
       gate !== null,
       positionKey(position),
-      finalPolicy,
+      // By source text, like `timing`: an inline function is new on every render.
+      typeof finalPolicy === "function" ? String(finalPolicy) : finalPolicy,
       reducedPolicy,
       speed,
       ended,
@@ -254,48 +255,64 @@ export function createDemoController<TData = unknown>(
     };
   };
 
-  /** Calls `onStepStart` once per step as `elapsed` passes its start, again after a rewind. */
-  const fireStepStarts = (gs: GateState, live: boolean): void => {
+  /**
+   * The steps whose start `elapsed` has passed since last time, once each in order; a rewind
+   * forgets the steps after it, so they fire again.
+   */
+  const passedSteps = (gs: GateState, live: boolean): number[] => {
     const steps = timeline.steps;
     const t = gs.elapsed;
     if (t < lastElapsed) firedUpTo = steps.filter((s) => s.start < t).length - 1;
     lastElapsed = t;
-    if (!live || (!gs.playing && t === 0)) return;
+    const passed: number[] = [];
+    if (!live || (!gs.playing && t === 0)) return passed;
     while ((steps[firedUpTo + 1]?.start ?? Number.POSITIVE_INFINITY) <= t) {
       firedUpTo += 1;
-      const step = timeline.script.steps[firedUpTo];
-      if (step) options.onStepStart?.(firedUpTo, step);
+      passed.push(firedUpTo);
     }
+    return passed;
   };
 
   /**
-   * The end counts only when the clock plays across it (calling `onComplete`), or a seek or
-   * cancel lands on it; never the jump reduced motion makes.
+   * Whether the clock just played across the end. The end counts only then (which calls
+   * `onComplete`), or when a seek or cancel lands on it; never the jump reduced motion makes.
    */
-  const detectEnd = (gs: GateState, live: boolean): void => {
+  const reachedEnd = (gs: GateState, live: boolean): boolean => {
     const { duration } = timeline;
+    const reached = gs.elapsed >= duration && live && wasPlaying && from < duration;
     if (gs.elapsed < duration) ended = false;
-    else if (live && wasPlaying && from < duration) {
-      ended = true;
-      options.onComplete?.();
-    }
+    else if (reached) ended = true;
     from = gs.elapsed;
     wasPlaying = gs.playing;
+    return reached;
   };
 
-  // Gate notifications and updates inside `batch` settle once, at the end.
+  // Gate notifications and updates inside `batch` settle once, at the end. Settling runs in four
+  // steps: compute the bookkeeping, commit the new state, notify subscribers, and only then call
+  // the user's callbacks. So a callback that throws can't leave the state half-written, and one
+  // that calls a control (`replay()` from `onComplete`) settles again from a consistent state.
   let depth = 0;
   const settle = (): void => {
     if (depth > 0) return;
     const gs = gate?.getState() ?? IDLE;
     const { live } = clockMode(gs, gate !== null, options.position !== undefined, undefined);
-    fireStepStarts(gs, live);
-    detectEnd(gs, live);
+    const passed = passedSteps(gs, live);
+    const completed = reachedEnd(gs, live);
+    if (commit()) for (const listener of [...listeners]) listener();
+    const { onStepStart, onComplete } = options;
+    for (const index of passed) {
+      const step = timeline.script.steps[index];
+      if (step) onStepStart?.(index, step);
+    }
+    if (completed) onComplete?.();
+  };
+  /** Derives a new state when an input changed; returns whether it did. */
+  const commit = (): boolean => {
     const next = inputsNow();
-    if (next.every((value, i) => Object.is(value, inputs[i]))) return;
+    if (next.every((value, i) => Object.is(value, inputs[i]))) return false;
     inputs = next;
     state = derive();
-    for (const listener of [...listeners]) listener();
+    return true;
   };
   const batch = (run: () => void): void => {
     depth += 1;
@@ -348,6 +365,8 @@ export function createDemoController<TData = unknown>(
     },
     update(script, next) {
       batch(() => {
+        // A changed `speed` option replaces a `setSpeed` rate, here and on later mounts.
+        if (next.speed !== undefined && !Object.is(next.speed, options.speed)) pending = undefined;
         options = next;
         const restart = compileFor(script);
         gate?.configure(gateOptions());

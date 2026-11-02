@@ -14,6 +14,8 @@ export interface CopyAttemptOptions {
    * was pointed at other text while the copy was in flight.
    */
   readonly isCurrent?: () => boolean;
+  /** How long this attempt's `copied` lasts, overriding the controller's `resetMs`. */
+  readonly resetMs?: number;
 }
 
 export interface CopyState {
@@ -56,11 +58,11 @@ export function createCopyState(options: CopyStateOptions = {}): CopyState {
         listeners.delete(callback);
       };
     },
-    async copy(text, { isCurrent } = {}) {
+    async copy(text, attempt = {}) {
       const ok = await copyText(text);
-      if (destroyed || (isCurrent && !isCurrent())) return ok;
+      if (destroyed || (attempt.isCurrent && !attempt.isCurrent())) return ok;
       clearTimeout(timer);
-      timer = ok ? setTimeout(() => set("idle"), resetMs) : undefined;
+      timer = ok ? setTimeout(() => set("idle"), attempt.resetMs ?? resetMs) : undefined;
       set(ok ? "copied" : "failed");
       return ok;
     },

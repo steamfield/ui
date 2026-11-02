@@ -184,9 +184,13 @@ function build(
     frame = undefined;
     const step = last === undefined ? 0 : Math.min(Math.max(time - last, 0), MAX_STEP_MS);
     last = time;
-    setElapsed(elapsed + step * speed);
-    update();
-    if (running && frame === undefined) frame = requestFrame(tick);
+    // Rescheduled whatever `onFrame` or a listener does, so a throwing callback can't stall it.
+    try {
+      setElapsed(elapsed + step * speed);
+      update();
+    } finally {
+      if (running && frame === undefined) frame = requestFrame(tick);
+    }
   };
 
   const syncClock = (): void => {

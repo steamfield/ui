@@ -11,7 +11,11 @@ import {
   toValue,
   watch,
 } from "vue";
-import { createDemoController, type DemoControllerOptions } from "../../agent-demo/controller.ts";
+import {
+  createDemoController,
+  type DemoControllerOptions,
+  positionKey,
+} from "../../agent-demo/controller.ts";
 import type { ToolRegistry } from "../../agent-demo/core.ts";
 import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
@@ -171,15 +175,32 @@ export function useAgentDemo<TData = unknown>(
       { ...opts, timing: toRaw(opts.timing), position: toValue(opts.position) },
     ];
   };
-  const controller = createDemoController(...read());
+  // What the controller was last given, so `clickMode` agrees with the view.
+  const applied = shallowRef(read());
+  const apply = (next: [DemoScript<TData>, DemoControllerOptions<TData>]): void => {
+    applied.value = next;
+    controller.update(...next);
+  };
+  const controller = createDemoController(...applied.value);
   const state = shallowRef(controller.getState());
   const unsubscribe = controller.subscribe(() => {
     state.value = controller.getState();
   });
   // Runs whenever a reactive source the props read changes; the controller compares the rest.
-  watch(read, (next) => controller.update(...next));
+  // It runs before the next render, so the props a parent sets one by one arrive together.
+  watch(read, apply);
+  // A position (a deck's click) applies at once, so the view reads right after it changes. Only
+  // the position changes, so props half-way through an update are never read.
+  watch(
+    () => positionKey(toValue(toValue(options).position)),
+    () => {
+      const [current, opts] = applied.value;
+      apply([current, { ...opts, position: toValue(toValue(options).position) }]);
+    },
+    { flush: "sync" },
+  );
 
-  const clickMode = computed(() => toValue(toValue(options).position) !== undefined);
+  const clickMode = computed(() => applied.value[1].position !== undefined);
   const playCount = ref(0);
   let wasActive = false;
   watch(

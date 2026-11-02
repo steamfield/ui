@@ -574,3 +574,31 @@ describe("bound gate (the bindings' element and option rules)", () => {
     expect(g.getState()).toMatchObject({ inView: true, playing: true });
   });
 });
+
+describe("listeners that throw", () => {
+  test("the clock keeps running when a listener throws", () => {
+    const g = make();
+    observer().fire(true);
+    let thrown = 0;
+    g.subscribe(() => {
+      if (thrown++ < 2) throw new Error("listener");
+    });
+    expect(() => advance(200)).toThrow("listener");
+    advance(500);
+    expect(g.getState().playing).toBe(true);
+    expect(g.getState().elapsed).toBeGreaterThan(400);
+  });
+
+  test("the clock keeps running when onFrame throws", () => {
+    let calls = 0;
+    const g = make({
+      onFrame: () => {
+        if (calls++ === 1) throw new Error("frame");
+      },
+    });
+    observer().fire(true);
+    expect(() => advance(200)).toThrow("frame");
+    advance(500);
+    expect(g.getState().elapsed).toBeGreaterThan(400);
+  });
+});

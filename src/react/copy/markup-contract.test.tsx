@@ -2,8 +2,8 @@
 // is what `enhanceCopyButtons` wires, and each button reports into its own result region.
 import { createSatteriMarkdownProcessor } from "@astrojs/markdown-satteri";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { stubClipboard, stubExecCommand } from "../../../tests/helpers/dom.ts";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { stubClipboard, stubExecCommand, stubResponseBytes } from "../../../tests/helpers/dom.ts";
 import { enhanceCopyButtons } from "../../copy/enhance.ts";
 import { codeBlocks } from "../../markdown/code-blocks.ts";
 import { createShikiConfig } from "../../markdown/plugins.ts";
@@ -14,22 +14,7 @@ const writeText = vi.fn<(text: string) => Promise<void>>();
 beforeEach(() => {
   writeText.mockReset().mockResolvedValue(undefined);
   stubClipboard(writeText);
-});
-
-// shiki's inlined wasm reads `Response.bytes`, which happy-dom lacks (markdown's own tests run on
-// Node for that reason). This test needs the DOM, so it adds the method for its own run.
-const hadBytes = "bytes" in Response.prototype;
-beforeAll(() => {
-  if (hadBytes) return;
-  Object.defineProperty(Response.prototype, "bytes", {
-    configurable: true,
-    async value(this: Response) {
-      return new Uint8Array(await this.arrayBuffer());
-    },
-  });
-});
-afterAll(() => {
-  if (!hadBytes) Reflect.deleteProperty(Response.prototype, "bytes");
+  stubResponseBytes();
 });
 
 async function markdownHtml(): Promise<string> {
@@ -59,6 +44,19 @@ describe.each([
   const results = (): string[] =>
     [...document.querySelectorAll("[data-copy-result]")].map((node) => node.textContent ?? "");
 
+  /**
+   * Loads the markup with each button wrapped in one more element, as a consumer's styling might.
+   * The button's parent then holds no result region, so only the `data-copy-root` scope finds it.
+   */
+  async function load(): Promise<void> {
+    document.body.innerHTML = await html();
+    for (const button of document.querySelectorAll("[data-copy-command]")) {
+      const wrap = document.createElement("span");
+      button.replaceWith(wrap);
+      wrap.append(button);
+    }
+  }
+
   async function clickSecond(): Promise<HTMLButtonElement> {
     const button = document.querySelectorAll<HTMLButtonElement>("[data-copy-command]")[1];
     if (!button) throw new Error("no second button");
@@ -68,7 +66,7 @@ describe.each([
   }
 
   test("a successful copy updates that button's own result region", async () => {
-    document.body.innerHTML = await html();
+    await load();
     enhanceCopyButtons(document);
     const button = await clickSecond();
     expect(button.dataset.state).toBe("copied");
@@ -78,7 +76,7 @@ describe.each([
   test("a failed copy updates that button's own result region", async () => {
     writeText.mockRejectedValue(new Error("denied"));
     stubExecCommand(() => false);
-    document.body.innerHTML = await html();
+    await load();
     enhanceCopyButtons(document);
     const button = await clickSecond();
     expect(button.dataset.state).toBe("failed");

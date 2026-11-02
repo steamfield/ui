@@ -1,16 +1,15 @@
-import { announce, decodeHash, type TabEntry, type TabsHash, writeHash } from "./core.ts";
+import {
+  announce,
+  decodeHash,
+  type TabEntry,
+  type TabsHash,
+  type TabsVia,
+  writeHash,
+} from "./core.ts";
 
 // The selection state machine behind `createTabs` and the React `Tabs`. It knows nothing about
 // elements or React: each binding describes its tabs as `TabEntry`s (`tabEntries` in `core.ts`)
 // and applies `getState()`.
-
-/**
- * How a selection came about. `keyboard` is an arrow, Home or End move under auto activation;
- * `pointer` is a deliberate pick (click, Enter or Space). Both count as the reader picking: the
- * hash is written and the event fires. `hash` is a read of `location.hash`, which only reports
- * through `onValueChange`.
- */
-export type TabsVia = "keyboard" | "pointer" | "hash";
 
 /** The minimal window the controller reads the hash from. */
 export type HashSource = Pick<Window, "location" | "addEventListener" | "removeEventListener">;

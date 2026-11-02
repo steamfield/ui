@@ -1,11 +1,11 @@
 import {
-  isActivationKey,
-  keyTarget,
+  isTabDisabled,
   panelIdOf,
   type TabsActivation,
   type TabsHash,
   type TabsOrientation,
   tabEntries,
+  tabKeyAction,
   tabsIn,
   tabValue,
 } from "./core.ts";
@@ -79,19 +79,11 @@ export function createTabs(root: HTMLElement, options: CreateTabsOptions = {}): 
     state.select(valueOfTab(tab), { via: "pointer" });
   };
   const onKeyDown = (event: KeyboardEvent): void => {
-    const from = event.target as Element;
-    if (isActivationKey(event.key)) {
-      const tab = from.closest<HTMLElement>('[role="tab"]');
-      if (!tab) return;
-      event.preventDefault();
-      state.select(valueOfTab(tab), { via: "pointer" });
-      return;
-    }
-    const target = keyTarget(list, from, event.key, orientation);
-    if (!target) return;
+    const action = tabKeyAction(list, event, { orientation, activation });
+    if (!action) return;
     event.preventDefault();
-    target.focus();
-    if (activation === "auto") state.select(valueOfTab(target), { via: "keyboard" });
+    if (action.focus) action.tab.focus();
+    if (action.via) state.select(valueOfTab(action.tab), { via: action.via });
   };
 
   list.addEventListener("click", onClick);
@@ -132,11 +124,12 @@ function snapshot(root: HTMLElement, list: HTMLElement): () => void {
   };
 }
 
-/** The value of the first tab whose panel carries `data-default`, the one the no-JS CSS shows. */
+/** The value of the enabled tab whose panel carries `data-default`, the one the no-JS CSS shows. */
 function defaultValue(list: HTMLElement): string | undefined {
   const tab = tabsIn(list).find((tab) => {
     const id = panelIdOf(tab);
-    return id !== null && list.ownerDocument.getElementById(id)?.hasAttribute("data-default");
+    const panel = id ? list.ownerDocument.getElementById(id) : null;
+    return !isTabDisabled(tab) && panel?.hasAttribute("data-default") === true;
   });
   return tab ? valueOfTab(tab) : undefined;
 }

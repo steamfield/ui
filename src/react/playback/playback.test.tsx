@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { StrictMode, useEffect } from "react";
+import { Activity, StrictMode, useEffect } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
@@ -619,5 +619,72 @@ describe("useCountUp", () => {
     expect(Number(container.textContent)).toBeGreaterThan(40);
     advance(1000);
     expect(container.textContent).toBe("100");
+  });
+});
+
+let latestDiv: UsePlaybackResult<HTMLDivElement> | undefined;
+
+/** Sets the rate from a child effect, which runs before the parent's gate exists. */
+function Child({ speed }: { speed: (rate: number) => void }): null {
+  useEffect(() => speed(3), [speed]);
+  return null;
+}
+function Parent() {
+  const playback = usePlayback<HTMLDivElement>({ duration: DURATION });
+  latestDiv = playback;
+  return (
+    <div ref={playback.ref}>
+      <Child speed={playback.setSpeed} />
+    </div>
+  );
+}
+
+/** `Carry` inside an Activity, whose hiding unmounts its effects. */
+function Hideable({ mode, speed }: { mode: "visible" | "hidden"; speed: number }) {
+  return (
+    <Activity mode={mode}>
+      <Carry which="a" speed={speed} />
+    </Activity>
+  );
+}
+
+describe("review regressions", () => {
+  test("setSpeed before the gate exists applies to the gate once it does", () => {
+    render(<Parent />);
+    expect(latestDiv).toMatchObject({ ready: true, speed: 3 });
+  });
+
+  test("a speed option change replaces a setSpeed rate, also across a remount", () => {
+    const { rerender } = render(<Hideable mode="visible" speed={1} />);
+    act(() => hook().setSpeed(3));
+    rerender(<Hideable mode="visible" speed={5} />);
+    expect(hook().speed).toBe(5);
+    rerender(<Hideable mode="hidden" speed={5} />);
+    rerender(<Hideable mode="visible" speed={5} />);
+    expect(hook()).toMatchObject({ ready: true, speed: 5 });
+  });
+
+  test("a setSpeed rate survives a remount while the option holds", () => {
+    const { rerender } = render(<Hideable mode="visible" speed={1} />);
+    act(() => hook().setSpeed(3));
+    rerender(<Hideable mode="hidden" speed={1} />);
+    rerender(<Hideable mode="visible" speed={1} />);
+    expect(hook()).toMatchObject({ ready: true, speed: 3 });
+  });
+
+  test("StrictMode after an option change keeps one live gate at the new rate", () => {
+    const { rerender } = render(
+      <StrictMode>
+        <Carry which="a" speed={1} />
+      </StrictMode>,
+    );
+    act(() => hook().setSpeed(3));
+    rerender(
+      <StrictMode>
+        <Carry which="a" speed={2} threshold={0.5} />
+      </StrictMode>,
+    );
+    expect(live()).toHaveLength(1);
+    expect(hook()).toMatchObject({ speed: 2, elapsed: 0 });
   });
 });

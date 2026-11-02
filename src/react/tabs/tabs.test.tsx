@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, StrictMode, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { Tab, TabList, TabPanel, Tabs, type TabsProps } from "./tabs.tsx";
@@ -292,4 +292,51 @@ test("parts outside Tabs render static markup instead of throwing", () => {
   render(<Tab value="x">X</Tab>);
   tab("X").click();
   expect(tab("X").hasAttribute("aria-selected")).toBe(false);
+});
+
+test("a hash naming a nested set's panel switches only the nested set", () => {
+  history.replaceState(null, "", "#inner-y");
+  render(
+    <Tabs id="outer" hash>
+      <TabPanel value="a">
+        <Tabs id="inner" hash>
+          <TabList aria-label="Inner">
+            <Tab value="x">X</Tab>
+            <Tab value="y">Y</Tab>
+          </TabList>
+          <TabPanel value="x">inner x</TabPanel>
+          <TabPanel value="y">inner y</TabPanel>
+        </Tabs>
+      </TabPanel>
+      <TabPanel value="b">outer b</TabPanel>
+      <TabList aria-label="Outer">
+        <Tab value="a">A</Tab>
+        <Tab value="b">B</Tab>
+      </TabList>
+    </Tabs>,
+  );
+  expect(tab("A").getAttribute("aria-selected")).toBe("true");
+  expect((document.getElementById("outer-a") as HTMLElement).hidden).toBe(false);
+  expect(tab("Y").getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByText("inner y").hidden).toBe(false);
+});
+
+test("StrictMode reads the hash once and keeps one hashchange listener", () => {
+  history.replaceState(null, "", "#t-b");
+  const onValueChange = vi.fn();
+  render(
+    <StrictMode>
+      <Four hash onValueChange={onValueChange} />
+    </StrictMode>,
+  );
+  expect(shownPanel().textContent).toBe("panel b");
+  expect(onValueChange.mock.calls).toEqual([["b"]]);
+  history.replaceState(null, "", "#t-d");
+  act(() => {
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  });
+  expect(shownPanel().textContent).toBe("panel d");
+  expect(onValueChange.mock.calls).toEqual([["b"], ["d"]]);
+  tab("A").click();
+  expect(onValueChange.mock.calls).toEqual([["b"], ["d"], ["a"]]);
 });
