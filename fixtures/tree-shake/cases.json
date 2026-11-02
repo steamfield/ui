@@ -1,0 +1,7 @@
+[
+  {
+    "entry": "copy-only.tsx",
+    "present": ["data-copy-command"],
+    "absent": ["sf-agent-demo", "sf-tabs", "data-motion-ready"]
+  }
+]

@@ -1,0 +1,84 @@
+@layer sf, playground;
+
+@import "@steamfield/ui/copy/styles.css";
+
+@layer playground {
+  :root {
+    color-scheme: light dark;
+    --sf-bg: #ffffff;
+    --sf-surface: #f4f4f5;
+    --sf-fg: #18181b;
+    --sf-muted: #52525b;
+    --sf-faint: #a1a1aa;
+    --sf-accent: #0e7490;
+    --sf-border: #d4d4d8;
+    --sf-ok: #15803d;
+    --sf-fail: #b91c1c;
+    --sf-warn: #a16207;
+    --sf-info: #1d4ed8;
+    --sf-radius: 0.5rem;
+    --sf-font: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  :root[data-theme="dark"] {
+    --sf-bg: #09090b;
+    --sf-surface: #18181b;
+    --sf-fg: #fafafa;
+    --sf-muted: #a1a1aa;
+    --sf-faint: #71717a;
+    --sf-accent: #67e8f9;
+    --sf-border: #3f3f46;
+    --sf-ok: #4ade80;
+    --sf-fail: #f87171;
+    --sf-warn: #facc15;
+    --sf-info: #93c5fd;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: var(--sf-bg);
+    color: var(--sf-fg);
+  }
+
+  .pg-shell {
+    display: grid;
+    grid-template-columns: 14rem 1fr;
+    min-height: 100vh;
+  }
+
+  .pg-nav {
+    border-right: 1px solid var(--sf-border);
+    padding: 1rem;
+  }
+
+  .pg-nav a {
+    display: block;
+    padding: 0.25rem 0;
+    color: var(--sf-fg);
+  }
+
+  .pg-nav a[aria-current="page"] {
+    font-weight: 600;
+    color: var(--sf-accent);
+  }
+
+  .pg-main {
+    padding: 1.5rem 2rem;
+    max-width: 60rem;
+  }
+
+  .pg-section {
+    margin-block: 2rem;
+  }
+
+  @media (max-width: 40rem) {
+    .pg-shell {
+      grid-template-columns: 1fr;
+    }
+    .pg-nav {
+      border-right: 0;
+      border-bottom: 1px solid var(--sf-border);
+    }
+  }
+}

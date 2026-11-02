@@ -1,0 +1,21 @@
+[
+  {
+    "name": "copy",
+    "path": "dist/copy/index.js",
+    "import": "{ enhanceCopyButtons, copyText }",
+    "limit": "1.5 kB"
+  },
+  {
+    "name": "react/copy",
+    "path": "dist/react/copy/index.js",
+    "import": "{ CopyCommand, useCopy }",
+    "ignore": ["react", "react-dom"],
+    "limit": "1.5 kB"
+  },
+  {
+    "name": "script",
+    "path": "dist/script/index.js",
+    "import": "{ LibraryError, isLibraryError }",
+    "limit": "1 kB"
+  }
+]

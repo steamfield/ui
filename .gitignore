@@ -8,6 +8,9 @@ node_modules/
 # Test output
 coverage/
 *.tsbuildinfo
+test-results/
+playwright-report/
+fixtures/tree-shake/out/
 
 # Environment
 .env

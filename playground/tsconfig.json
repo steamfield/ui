@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "isolatedDeclarations": false,
+    "types": [],
+    "paths": {
+      "@steamfield/ui/*": ["../src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../src/**/*.ts", "../src/**/*.tsx"],
+  "exclude": ["dist", "vite.config.ts", "../src/**/*.test.ts", "../src/**/*.test.tsx"]
+}
