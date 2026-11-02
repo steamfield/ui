@@ -1,26 +1,29 @@
-# Proposed API
+# API
 
-Status: draft for review, 2026-11-02. Derived from [SURVEY.md](SURVEY.md). Names are working names.
+Status: reflects the built code as of 2026-11-02. Originally a proposal derived from [SURVEY.md](SURVEY.md); where the build differs from that proposal the text says **Deviation** and gives the reason. The consumer-facing reference with every prop and default is the package [README](../README.md); this file is the design-level view.
 
-Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `vue/*` comes after React. Each subpath imports only what is shown in its "depends on" line; an import-graph test enforces this.
+Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `vue/*` follows React and is in progress. Each subpath imports only what is shown in its "depends on" line; an import-graph test enforces this.
 
 | Subpath | Contents | Depends on |
 |---|---|---|
-| `script` | `DemoScript` types, `validateScript` | none |
-| `sequencer` | `compile`, `stateAt`, `finalState`, `clickCount`, timing presets, `transcriptText` | `script` |
+| `script` | `DemoScript` types, `validateScript`, `LibraryError`, `isLibraryError` | none |
+| `sequencer` | `compile`, `stateAt`, `finalState`, `clickCount`, `presets`, `transcriptText` | `script` |
 | `playback` | `createPlaybackGate` | none |
-| `copy` | `copyText`, `enhanceCopyButtons` | none |
+| `copy` | `copyText`, `enhanceCopyButtons`, `copy/styles.css` | none |
 | `tabs` | `createTabs` (DOM controller), `tabs/styles.css` (`:target` fallback) | none |
-| `reveal` | `initReveal`, `reveal/styles.css` | none |
-| `markdown` | Sätteri hast plugin factories | optional peers `satteri`, `shiki`, `github-slugger` |
-| `docs` | `createDocs(config)`, `spyToc`, llms and `.md` route helpers | none |
+| `reveal` | `initReveal`, `motionTokens`, `reveal/styles.css` | none |
+| `markdown` | Sätteri hast plugin factories, `createShikiConfig`, `markdown/styles.css` | optional peers `satteri`, `github-slugger` (and `shiki` for types) |
+| `docs` | `createDocs(config)`, the unbound helpers, `spyToc` | none |
 | `react/playback` | `usePlayback`, `useCountUp` | `playback` |
 | `react/copy` | `useCopy`, `CopyCommand`, `CopyButton` | `copy` |
-| `react/tabs` | `Tabs`, `TabList`, `Tab`, `TabPanel` | `tabs` |
-| `react/install-tabs` | `InstallTabs` | `react/tabs`, `react/copy` |
-| `react/window` | `DemoWindow` (optional chrome) | none |
-| `react/agent-demo` | `useAgentDemo`, `AgentDemo`, `StaticTranscript`, `agent-demo/styles.css` | `sequencer`, `playback` |
-| `vue/agent-demo` | `useAgentDemo` composable, `AgentDemo` component | `sequencer`, `playback` |
+| `react/tabs` | `Tabs`, `TabList`, `Tab`, `TabPanel` | `tabs` (shared core) |
+| `react/install-tabs` | `InstallTabs`, `react/install-tabs/styles.css` | `react/tabs`, `react/copy` |
+| `react/window` | `DemoWindow` (optional chrome), `react/window/styles.css` | none |
+| `react/agent-demo` | `useAgentDemo`, `AgentDemo`, `StaticTranscript` | `sequencer`, `playback`, `react/playback`, `react/window` |
+| `agent-demo/styles.css` | CSS only; the `data-part` contract shared by every framework renderer | none |
+| `vue/agent-demo` | `useAgentDemo` composable, `AgentDemo` component (in progress) | `sequencer`, `playback` |
+
+**Deviation:** `react/agent-demo` also depends on `react/playback` (it is `usePlayback` underneath) and `react/window` (the `chrome` prop). `tabs` and `react/tabs` share a `core.ts` for keyboard, hash and event logic rather than the React tabs wrapping `createTabs`, so the two cannot disagree. `markdown` uses `shiki` for types only; at runtime it needs `satteri` and `github-slugger`. `docs` also exports `spyToc`, the one browser-touching function there.
 
 ## script
 
@@ -28,6 +31,7 @@ Framework-free code lives at top-level subpaths and React at `react/*`. Vue at `
 type Tone = "default" | "ok" | "fail" | "warn" | "muted"
 type Line = string | { text: string; tone?: Tone }
 type At = { at?: number }                      // Slidev click index; optional everywhere
+type ToolStatus = "running" | "done" | "error" | "retried" | (string & {})
 
 type Step<TData = unknown> = At & (
   | { kind: "user"; text: string; preTyped?: string; composer?: boolean }
@@ -38,144 +42,267 @@ type Step<TData = unknown> = At & (
   | { kind: "command"; text: string }
   | { kind: "output"; lines: Line[]; more?: number }
   | { kind: "tool-call"; id?: string; name: string; server?: string; args?: string
-      status?: "running" | "done" | "error" | "retried" | (string & {})
-      meta?: string; output?: Line[] & At; more?: number; body?: ToolBody<TData> }
+      status?: ToolStatus; meta?: string
+      output?: Line[]; outputAt?: number; more?: number; body?: ToolBody<TData> }
 )
-type ToolBody<TData> =
-  | { kind: "lines"; lines: Line[]; more?: number } & At
-  | { kind: "code"; lang?: string; code: string; collapsed?: boolean } & At
-  | { kind: "steps"; steps: string[] } & At
-  | { kind: "error"; summary: string } & At
-  | { kind: "custom"; data: TData } & At       // rendered by the consumer's body slot
+type ToolBody<TData> = At & (
+  | { kind: "lines"; lines: Line[]; more?: number }
+  | { kind: "code"; lang?: string; code: string; collapsed?: boolean }
+  | { kind: "steps"; steps: string[] }
+  | { kind: "error"; summary: string }
+  | { kind: "custom"; data: TData }             // rendered by the consumer's renderToolBody
+)
 
 type DemoScript<TData = unknown> = { id?: string; steps: Step<TData>[] }
 
-validateScript(script, { kinds?: Step["kind"][] }): void   // throws LibraryError with step index
+validateScript(script, { kinds?: StepKind[] }): asserts script is DemoScript
 ```
+
+`validateScript` throws `LibraryError` naming the first bad field (`steps[3].text`). `invalid_script` covers malformed shape, a duplicate tool-call `id` and a `preTyped` that is not a prefix of `text`. `unsupported_step` covers an unknown step or body kind, or one outside `kinds`. `invalid_option` covers a bad `kinds` value or an unknown option key. A step without `at` reveals with the step before it.
+
+**Deviation:** `outputAt` replaces the proposed `output: Line[] & At`. An array already has an `at` method, so an intersection with `At` collided; `outputAt` is a sibling field that carries the click the output reveals at.
+
+**Deviation:** `status` is typed as `ToolStatus` (an exported named type) with the open `(string & {})` tail; the value is unchanged from the proposal. While a call is still running in time-paced playback, the view reports `"running"`, then the step's `status` or `"done"`.
 
 OpenData keeps its `Turn` type and converts with an adapter in `@opendata/shared`. Its search, info and chart turns become `tool-call` steps with `body: { kind: "custom", data }`. stacks-api's `command` turn (call plus output, `excerpt` flag) becomes `tool-call` with `output` and an explicit `more` count. Talks beats map one to one, with `at` preserved.
 
 ## sequencer
 
 ```ts
+type Span = number | [min: number, max: number]   // a range is sampled from the seeded PRNG
+
 type Timing = {
-  startDelay: number
-  typeMsPerChar: number | ((step) => number)    // MCD: max(18, typingMs / n)
-  jitter: number                                // ± ms, from a seeded PRNG
+  startDelay: Span
+  typeMsPerChar: number | ((step) => number)
+  jitter: number                                   // ± ms, from a seeded PRNG
+  preTypedHoldMs: Span; submitHoldMs: Span; flashMs: number
+  thinkingAfterUser: Span | false; thinkingMs: Span
   streamUnit: "char" | "word" | "line"
-  wordMs: number; punctuationMs: number
-  toolMs: (step) => number                      // MCD: clamp(timeMs + 200, 800, 1800)
-  gapMs: number; thinkingAfterUser: number | false
+  streamLeadMs: number
+  wordMs: Span; punctuationMs: Span; readMs: Span
+  lineMs: number; revealCapMs: number
+  toolMs: (step) => number
+  gapMs: Span
 }
 const presets: { chat: Timing; terminal: Timing; instant: Timing }
 
-compile(script, { timing?: Partial<Timing>, seed?: string }): Timeline
+compile(script, { timing?: Partial<Timing>, seed?: string, composer?: boolean }): Timeline
 stateAt(timeline, pos: { ms: number } | { click: number }): DemoView
 finalState(timeline, { policy?: "all" | "last" | ((steps) => number[]) }): DemoView
 clickCount(script): number
-transcriptText(script): string                  // plain text for noscript / sr / llms
+transcriptText(script): string                    // plain text for noscript / sr / llms
 
 type DemoView = {
-  entries: Array<{ key: string; step: Step; index: number
-                   phase: "typing" | "submitted" | "thinking" | "revealing" | "holding" | "done"
-                   progress: number; visibleText?: string; visibleLines?: Line[] }>
+  entries: Array<{ key: string; index: number; step: Step
+                   phase: "typing" | "submitted" | "thinking" | "revealing" | "holding" | "running" | "done"
+                   progress: number
+                   visibleText?: string; visibleLines?: Line[]
+                   status?: ToolStatus; bodyVisible?: boolean; more?: number }>
   composer: { text: string; flash: boolean } | null
   current: number; complete: boolean; elapsed: number; duration: number
   turnStarts: number[]; turnEnds: number[]
 }
 ```
 
-`stateAt` is pure and deterministic for a given seed, so SSR, the first client render, tests and screenshots agree. Keys are step indices (or `id`), never text.
+`stateAt` is pure and deterministic for a given seed, so SSR, the first client render, tests and screenshots agree. Keys are the step `id` (tool calls) or the step index, never text. `compile` starts from the `chat` preset and applies `timing` over it; an unknown timing key is `invalid_option`. `presets.chat` reproduces the OpenData chat demo, `presets.terminal` rr's terminal player, and `presets.instant` takes 0ms everywhere.
+
+**Deviation:** the `Timing` shape grew from the proposal's eight fields to the full set above. The survey's chat and terminal players each had phases (pre-typed hold, submit hold, flash, read pause, per-line reveal and its cap) that the proposal had no field for, and presets could not reproduce them without those fields.
+
+**Deviation:** durations that varied in the originals are a `Span` (a fixed ms or a `[min, max]` range) rather than a single number plus a global `jitter`. `jitter` stays only for per-character typing. The proposal listed `wordMs` and `punctuationMs` as numbers.
+
+**Deviation:** the `chat` preset's `toolMs` is a flat 1000ms. The proposal gave MCD's `clamp(timeMs + 200, 800, 1800)`; scripts have no recorded tool time, so a consumer passes that function in `timing.toolMs` if it wants it.
+
+**Deviation:** `Phase` gained `"running"` (a tool call before it resolves). The proposal's `"holding"` stays for `pause` steps; the proposal's `"done"` is the settled state. Tool calls therefore go `running`, `revealing` (output lines arrive), `done`.
+
+**Deviation:** `DemoEntry` gained `status`, `bodyVisible` and `more`; the last is present only once the step is done, so a "… +N lines" row appears after the lines, not before.
+
+**Deviation:** `compile` takes a `composer` option (default false): whether user steps without their own `composer` flag type into the composer. The proposal only had the per-step flag.
+
+**Deviation:** `Timeline` exposes `steps` (key, index, start, end, at), `duration`, `clickCount`, `turnStarts` and `turnEnds`; the per-step tracks that `stateAt` reads are private.
 
 ## playback
 
 ```ts
-createPlaybackGate(el: Element, {
-  autoStart?: boolean                           // default true
-  threshold?: number; rootMargin?: string       // default 0.15
-  leaveGraceMs?: number                         // default 0; kelvo 5000
+createPlaybackGate(el: Element | null, {
+  autoStart?: boolean                              // default true
+  threshold?: number; rootMargin?: string          // default 0.15, "0px"
+  leaveGraceMs?: number                            // default 0; kelvo 5000
   motion?: "auto" | "reduce" | "full" | { get(): boolean; subscribe(cb): () => void }
-  reducedPolicy?: "end" | "hold"
-  duration?: number; speed?: number             // enables the rAF clock (100ms step cap)
+  reducedPolicy?: "end" | "hold"                   // default "end"
+  duration?: number; speed?: number                // enables the rAF clock (100ms step cap)
   onFrame?(elapsed: number): void
-}): { play(); pause(); toggle(); replay(); seek(ms); reset(); destroy()
+}): { play(); pause(); toggle(); replay(); seek(ms); reset(); setSpeed(n); destroy()
       getState(): GateState; subscribe(cb): () => void }
 ```
 
-`usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, toggle, replay, seek }` and is SSR-safe: everything starts false and `ready` flips in an effect. `useCountUp(end, opts)` builds on the gate.
+`GateState` is `{ started, inView, tabVisible, paused, reduced, complete, playing, elapsed }`. `playing` is `started && inView && tabVisible && !paused && !reduced && !complete`. With a `null` element, or without `IntersectionObserver`, the demo counts as in view. A `MotionSource.get()` returns true while motion is allowed.
+
+**Deviation:** the gate gained `setSpeed(n)`, used by the hook's speed toggle. The proposal only had `speed` as an option.
+
+**Deviation:** `el` may be `null` (the proposal typed `Element`), so a gate can drive a clock with no element, such as a test or a headless counter.
+
+`usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts a fresh gate. `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
+
+**Deviation:** `usePlayback` has no `speed` in its result; the option is applied to the gate in place. `useAgentDemo` keeps `speed` state of its own and exposes `setSpeed`.
 
 ## react/agent-demo
 
 ```tsx
 const demo = useAgentDemo(script, {
-  scriptKey?: string                            // reset only when this changes
-  timing?, seed?, finalPolicy?, autoStart?, speed?, motion?
+  scriptKey?: string                               // reset only when this changes
+  timing?, seed?, composer?, finalPolicy?, position?
+  autoStart?, threshold?, rootMargin?, leaveGraceMs?, motion?, speed?
   onStepStart?(i, step), onComplete?()
-}) // => { view: DemoView, controls: { play, pause, toggle, replay, seek, cancel }, ref, ... }
+}) // => { view, controls, ref, ready, playing, paused, reduced, complete, animating, mode, speed, turn, timeline }
+   // controls: { play, pause, toggle, replay, seek, cancel, setSpeed }
 
 <AgentDemo
   script={script}
-  layout="chat" | "terminal"
-  labels={{ play, pause, replay, completeStatus, idleStatus, you, agent, running, done, placeholder }}
-  glyphs={{ prompt: "$", user: "❯", agent: "●", output: "⎿", spinner: ["⠋", ...] }}
-  tools={{ [name]: { label, runningLabel, icon?, accent? } }}  // consumer registry
-  renderToolCall?={(ctx) => ReactNode}          // whole card
-  renderToolBody?={(ctx) => ReactNode}          // body only; ctx: { step, index, loading, mode: "static" | "live" }
-  stage?={(view) => ReactNode}                  // e.g. OpenChart's live chart pane
-  controls?="inline" | "none" | ((c) => ReactNode)
-  composer?: boolean
-  announce?="status" | "beats" | "none"         // default "status": one sr-only role=status, no live region on playing content
-  className?, style?, privacyClassName?         // e.g. "ph-no-capture"
-  {...playback and sequencer options}
+  layout="chat" | "terminal"                       // default "chat"
+  labels={{ play, pause, replay, completeStatus, idleStatus, you, agent, running, done,
+            failed, thinking, placeholder, next, speed, jumpToTurn, transcript, showCode, more }}
+  glyphs={{ prompt, user, agent, output, ok, fail, submit, spinner }}
+  tools={{ [name]: { label, runningLabel, icon?, accent? } }}   // consumer registry
+  renderToolCall?={(ctx) => ReactNode | undefined}              // whole card
+  renderToolBody?={(ctx) => ReactNode | undefined}              // body only; ctx: { step, entry, index, loading, mode: "static" | "live" }
+  stage?={(view) => ReactNode}                                  // e.g. OpenChart's live chart pane
+  controls?="inline" | "full" | "none" | ((demo) => ReactNode)  // default "inline"
+  header?={node}  chrome?={boolean | { title?, dots? }}
+  composer?: boolean                                            // default: layout === "chat"
+  announce?="status" | "beats" | "none"            // default "status": one sr-only role=status, no live region on playing content
+  className?, style?, privacyClassName?            // e.g. "ph-no-capture"
+  {...useAgentDemo options}
 />
 
-<StaticTranscript script={script} layout="terminal" />   // server-safe; place outside a client:only island
+<StaticTranscript script={script} layout="terminal" />   // server-safe; place outside a client-only island
 ```
 
-The server and pre-hydration render are `finalState`. Entrance CSS only applies under `[data-sf-animating]`, which is set after hydration, so the final state is visible without JS. Height comes from `--sf-demo-height`, and a consumer `className` overrides it because the CSS is layered.
+The server and pre-hydration render are `finalState(finalPolicy)`. Entrance CSS only applies under `[data-sf-animating]`, which is set after hydration, so the final state is visible without JS. Height comes from `--sf-demo-height`, and a consumer `className` overrides it because the CSS is layered. `position` pins the view to `stateAt` (for click-paced decks), runs no clock and shows no controls.
+
+**Deviation:** `controls="full"` was added: the play button plus turn-jump buttons (one per turn), Next, and a 1x/2x speed toggle. The proposal had `inline`, `none` or a function.
+
+**Deviation:** `controls.cancel()` seeks to the end (`gateSeek(duration)`) and shows the finished transcript, like skipping. It does not tear down the gate or restore the pre-play state; the proposal did not say.
+
+**Deviation:** `controls` gained `setSpeed`, and the hook exposes `speed`, `turn`, `animating`, `mode` and `timeline`. `animating` is what renderers set `data-sf-animating` from; `mode` feeds `renderToolCall`'s `ctx.mode`.
+
+**Deviation:** `composer` is a hook option (default false) and `AgentDemo` defaults it to `true` for the chat layout only. The proposal had it only on the component.
+
+**Deviation:** `position` and `finalPolicy` are options of the hook itself, so a Slidev wrapper uses the same hook as a page. The proposal had no click-paced hook path.
+
+**Deviation:** `renderToolCall` and `renderToolBody` may return `undefined` to keep the built-in rendering, and the context carries `entry` and `index` (not only `step`).
+
+**Deviation:** `tools` entries only affect the chat layout's card header (label, running label and icon; `accent` sets `--sf-tool-accent`). The terminal layout prints the raw tool `name` (with `server` before it) and ignores the registry.
+
+**Deviation:** `labels` gained `failed`, `thinking`, `next`, `speed`, `jumpToTurn`, `transcript`, `showCode` and `more`, and `glyphs` gained `ok`, `fail` and `submit`, each needed by a part the proposal's lists did not name. `glyphs.spinner` is ten braille frames advanced every 80ms of demo time.
+
+**Deviation:** `onStepStart` also fires, in order, for steps a `seek` skips over, and again when a stretch is replayed. `onComplete` never fires under reduced motion.
+
+**Deviation:** `chrome` wraps the transcript in `DemoWindow` and moves the controls into the title bar; `header` renders above the controls. `data-part="header"` is a flex strip either way.
+
+**Deviation:** `StaticTranscript` takes no timing, seed or composer: it compiles with the defaults and renders `finalState`. It sets `data-static` on the root instead of `data-sf-animating`.
+
+The agent demo's `data-part` values, `data-layout`, `data-from`, `data-status`, `data-tone`, `data-phase` and the `--sf-demo-*` and `--sf-tool-accent` variables live in `agent-demo/styles.css`, so a Vue renderer shares them.
 
 ## react/window
 
 `<DemoWindow title? dots?={true} controls?={node} label?>` provides traffic lights, a title and a controls slot. It renders no heading element; the consumer supplies one.
+
+**Deviation:** `label` makes the window a `<section aria-label>` region; without it the root is a plain `div`. `className` and `style` were added. `--sf-window-dot` and `--sf-window-dot-1/2/3` colour the dots.
 
 ## copy
 
 ```ts
 copyText(text: string): Promise<boolean>
 enhanceCopyButtons(root: ParentNode, {
-  copiedMs?: number                             // 2000
-  subjects?: Record<string, string>             // aria-label -> subject for messages
-  messages?: { copied?: string; failed?: (subject, { hidden }) => string }
+  copiedMs?: number                                // 2000
+  subjects?: Record<string, string>                // aria-label -> subject for messages
+  messages?: { copied?: string; copiedLabel?: string; failed?: (subject, { hidden }) => string }
   onCopy?(e: { id: string; label: string; ok: boolean }): void   // also dispatches "sf:copy"
 }): () => void
-useCopy({ resetMs?, onCopy? }): { copied: boolean; copy(text): Promise<boolean> }
-<CopyCommand id command prose? label? emphasis? prompt?="$" />
+useCopy({ resetMs?, onCopy?(ok) }): { copied: boolean; failed: boolean; copy(text): Promise<boolean> }
+<CopyCommand id command prose? prompt?="$" label? buttonText? className? icon? />
+<CopyButton controls label? children? className? icon? />
 ```
+
+**Deviation:** `messages.copiedLabel` (the visible button text on success) was added alongside `messages.copied` (the announcement). Default subjects cover `Copy command`, `Copy prompt`, `Copy code` and `Copy page`.
+
+**Deviation:** `useCopy` returns `failed` as well as `copied`, and `onCopy` receives the boolean `ok`, not an event object. The `sf:copy` event and the `onCopy` of `enhanceCopyButtons` carry the `{ id, label, ok }` detail.
+
+**Deviation:** `CopyCommand` has `buttonText` and `icon` and no `emphasis`. `CopyButton` was added as its own export for markup that supplies its own target. Both render `hidden` buttons for server rendering and rely on `enhanceCopyButtons`; `useCopy` is the hydrated alternative.
 
 ## tabs and install-tabs
 
 ```ts
 createTabs(root, { activation?: "auto" | "manual", orientation?, hash?: boolean | "replace",
-                   onChange?(id), eventName?: string }): () => void
+                   onValueChange?(value), eventName?: string }): () => void
 ```
 
-React `Tabs` takes `value`/`defaultValue`/`onValueChange`, plus `activation`, `orientation`, `keepMounted` (default true), `asAnchors` (default true) and `hash`. `<InstallTabs options={[{ id, label, command, note? }]} onCopy?(id) labels? />`.
+React `Tabs` takes `value`/`defaultValue`/`onValueChange`, plus `activation`, `orientation`, `keepMounted` (default true), `asAnchors` (default true), `hash`, `eventName` and `id`. `<InstallTabs options={[{ id, label, command, note? }]} onCopy?(id, ok) labels? resetMs? defaultValue? onValueChange? activation? hash? eventName? id? className? />`.
+
+**Deviation:** `createTabs` calls its callback `onValueChange`, matching the React component, not the proposal's `onChange`. It receives the new value on a click, key or hash change.
+
+**Deviation:** `onCopy` on `InstallTabs` takes `(id, ok)` (the proposal gave `(id)`), so analytics can record failures.
+
+**Deviation:** `InstallTabs` is uncontrolled (`defaultValue`, no `value`) and does not forward `orientation`, `keepMounted` or `asAnchors`. It always uses the default of each; it has its own `labels.prompt`, `labels.copied`, `labels.copiedMessage` and `labels.failed`.
 
 ## reveal
 
 ```ts
 initReveal({ rootMargin?, threshold?, immediate?: (el) => boolean,
-             motionAllowed?: () => boolean, readyEvent?: string }): () => void
+             motionAllowed?: () => boolean, deferred?: (el) => boolean,
+             readyEvent?: string }): () => void
+motionTokens: { easings, durations, springs, animationTypes, motionRoles }
 ```
 
-Markup contract: `[data-reveal]` containers, `[data-motion="<role>"]` children, `[data-motion-part]` staggered parts, and `html[data-motion-ready]` as the root gate. Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-reveal-lift`, `--sf-reveal-scale`, `--sf-reveal-delay`.
+Markup contract: `[data-reveal]` containers (`"quiet"` for the quiet entrance), `[data-motion="<role>"]` children (or the container itself), `[data-motion-part]` staggered parts, `data-revealed` set by the script, and `html[data-motion-ready]` as the root gate.
+
+Tokens: `--sf-reveal-duration`, `--sf-reveal-step`, `--sf-reveal-ease`, `--sf-reveal-lift`, `--sf-reveal-scale`, `--sf-reveal-delay`.
+
+**Deviation:** the proposal's `readyEvent` became the way late-hydrating islands opt in, and `deferred` was added to define which containers wait for it. The default `deferred` matches `[data-reveal-defer]` that does not yet contain `[data-reveal-hydrated]`, the same rule the CSS uses to keep such content visible if hydration never happens. `readyEvent` defaults to `"sf:reveal-ready"`.
+
+**Deviation:** the six reveal tokens have no value set in CSS by default; each role keeps its own timing and the token is a fallback `var(--sf-reveal-x, <role default>)`. Set a token to override every role below it. The proposal implied one global default.
+
+**Deviation:** `motionTokens` was added as plain data (`easings`, `durations` in seconds, `springs`, `animationTypes`, role timings) so JS animation code shares numbers with the CSS. The CSS role timings run a little shorter than the JS durations, by design.
+
+**Deviation:** the role vocabulary is wider than the proposal's tokens: `quiet`, `card`, `drop`, `popover`, `wipe`, the `lift-*` family, `blur-in-soft`, `scale-in-media`, `slide-in-chip`, and the older `fade-up`, `blur-in`, `bounce-in`, `slide-left`, `slide-right` kept for existing markup.
+
+## markdown
+
+`createHastPlugins(options?)` returns the factories for `codeBlocks`, `codeGroups`, `callouts`, `headingAnchors` and `tables`; each is also exported alone. `createShikiConfig()` returns `{ theme: "css-variables", transformers: [codeMeta()] }`. Options: `codeBlocks: { copyLabel, copyText, idPrefix }`, `callouts: { titles }`, `headingAnchors: { label }`, `tables: { regionLabel }`. `parseFenceMeta` and `codeMeta` read `title="…"` and `group="…"` from the fence.
+
+**Deviation:** the proposal said only "Sätteri hast plugin factories". The built set also carries a Shiki config because Sätteri swaps the fence for Shiki's output before any hast plugin runs, so fence meta has to be carried on the `<pre>` by a Shiki transformer. The code-block plugin recognises Astro's `astro-code` class, so the plugins target Astro's pipeline.
+
+## docs
+
+```ts
+createDocs(config: DocsConfig): Docs
+// config: { name, summary, groups, trailingSlash: "always" | "never", optionalLinks,
+//           rewriteLink?, exampleId?, featured? }
+// Docs: { config, docPath, markdownPath, docsNav, pageLinks, featuredDocs,
+//         pageMarkdown, llmsIndex, llmsFull }
+spyToc(root, { linkSelector?, current?, rootMargin? }): () => void
+```
+
+The unbound helpers (`docPath`, `markdownPath`, `docsNav`, `pageLinks`, `featuredDocs`, `pageMarkdown`, `llmsIndex`, `llmsFull`, `absoluteLinks`) are exported too. Nothing here touches Astro: route files pass entries from the site's own `getCollection`. Pages live at `/docs/<id>` and ship as Markdown at `/docs/<id>.md`.
+
+**Deviation:** `docs` ships `spyToc`, which touches the DOM, so "depends on: none" holds but "pure" does not apply to that one function. `rewriteLink` and `absoluteLinks` rewrite site-relative links in exported bodies (docs links point at the page's `.md`).
+
+## Errors
+
+`LibraryError` and `isLibraryError` live in `script` (re-exported by nothing else, because every subpath that throws depends on `script`). `LibraryErrorCode` is `"invalid_script" | "unsupported_step" | "invalid_option"`. `error.field` names the argument or option at fault, never its value.
+
+**Deviation:** the proposal did not name codes. There are three, and an unknown option key anywhere an options object is checked is `invalid_option` rather than silently ignored.
 
 ## CSS contract
 
 Every stylesheet is wrapped in `@layer sf` and uses `:where()` selectors. Consumers declare `@layer sf, …` ahead of their utilities so Tailwind classes win.
 
-Base tokens: `--sf-bg`, `--sf-surface`, `--sf-fg`, `--sf-muted`, `--sf-faint`, `--sf-accent`, `--sf-border`, `--sf-radius`, `--sf-font`, `--sf-font-size`, `--sf-ok`, `--sf-fail`, `--sf-warn`, `--sf-info`, `--sf-demo-height`. Component tokens extend these where the survey showed real need, for example the MCD card surfaces.
+Base tokens read by the stylesheets: `--sf-bg`, `--sf-surface`, `--sf-fg`, `--sf-muted`, `--sf-faint`, `--sf-accent`, `--sf-border`, `--sf-radius`, `--sf-font`, `--sf-font-size`, `--sf-ok`, `--sf-fail`, `--sf-warn`, `--sf-focus`, `--sf-demo-height`. Component tokens extend these where the survey showed real need: `--sf-demo-*` and `--sf-tool-accent` (agent demo), `--sf-window-dot*` (window), `--sf-reveal-*` (reveal).
 
-There's no built-in dark mode: each consumer maps its light/dark tokens in its own theme file. `[data-sf-motion="reduce"]` on any ancestor disables animation, alongside the media query.
+**Deviation:** `--sf-focus` (the table scroll region's outline in `markdown/styles.css`) is in the set; the proposal did not list it. `--sf-info` is named in the agent-demo stylesheet's header comment but no rule reads it, and `--sf-demo-hover` is named there as well but unused.
+
+There's no built-in dark mode: each consumer maps its light/dark tokens in its own theme file. `[data-sf-motion="reduce"]` on any ancestor disables animation in `agent-demo/styles.css` and `reveal/styles.css`, alongside the media query.
+
+**Deviation:** `[data-sf-motion="reduce"]` is CSS only. The playback gate follows `prefers-reduced-motion` or a `motion` source you pass; it does not read the attribute.
 
 `data-part` values and `--sf-*` names are snapshot-tested as public API. While on 0.x, a minor version is breaking and consumers pin `~0.x`.
