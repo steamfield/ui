@@ -15,6 +15,7 @@
       "!coverage",
       "!node_modules",
       "!.stacks",
+      "!.claude/worktrees",
       "!**/dist"
     ]
   },
