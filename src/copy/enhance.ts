@@ -51,7 +51,12 @@ const READY = "data-copy-ready";
  * text with no dead button. A sibling `[data-copy-result]` live region announces the outcome, and
  * on failure the text is selected (opening any enclosing `<details>`) for a manual copy.
  *
- * Returns a function that removes the listeners and pending timers.
+ * Each wired button gets `data-copy-ready`. A later call skips buttons that already have it, so
+ * it wires only new buttons and its options don't apply to the old ones; to re-wire a button with
+ * new options, call the first disposer, then call again.
+ *
+ * Returns a function that removes the listeners and pending timers, and hides the buttons it
+ * wired again (removing `data-copy-ready`), since a button with no listener would be dead.
  */
 export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions = {}): () => void {
   const config: Config = {

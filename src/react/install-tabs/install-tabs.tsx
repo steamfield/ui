@@ -1,4 +1,5 @@
 import { type ReactElement, useEffect, useRef, useState } from "react";
+import { defined } from "../../internal/options.ts";
 import type { TabsActivation, TabsHash, TabsOrientation } from "../../tabs/core.ts";
 import { useCopy } from "../copy/use-copy.ts";
 import { Tab, TabList, TabPanel, Tabs } from "../tabs/tabs.tsx";
@@ -62,15 +63,6 @@ const DEFAULT_LABELS: Required<InstallTabsLabels> = {
   failed: "Copy failed. Select the command and copy it manually.",
 };
 
-/** Drops undefined entries so optional props pass through under exactOptionalPropertyTypes. */
-function withoutUndefined<T extends object>(
-  props: T,
-): { [K in keyof T]?: Exclude<T[K], undefined> } {
-  return Object.fromEntries(Object.entries(props).filter(([, v]) => v !== undefined)) as {
-    [K in keyof T]?: Exclude<T[K], undefined>;
-  };
-}
-
 /**
  * Install commands in tabs, one per package manager or platform, each with a copy button.
  * Without JavaScript every command is in the HTML and reachable through the tab links; the copy
@@ -124,7 +116,7 @@ export function InstallTabs({
   const current = options.find((option) => option.id === active) ?? options[0];
   activeRef.current = current?.id;
   const result = current ? state(current) : undefined;
-  const optional = withoutUndefined({
+  const optional = defined({
     activation,
     orientation,
     keepMounted,

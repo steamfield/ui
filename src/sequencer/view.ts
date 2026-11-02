@@ -279,7 +279,8 @@ function pick(policy: FinalPolicy, steps: readonly Step<unknown>[]): Set<number>
 /**
  * The finished view, for SSR, no-JS and reduced motion. "all" (the default) equals
  * `stateAt(timeline, { ms: duration })`. "last" keeps only the last agent-text and the last
- * tool-call, in script order; a script with neither keeps its last command and last output. A function gets the steps and returns the indices to keep.
+ * tool-call, in script order; a script with neither keeps its last command and last output. A
+ * function gets the steps and returns the indices to keep.
  */
 export function finalState<TData>(
   timeline: Timeline<TData>,

@@ -54,6 +54,26 @@ test("setup marks the root live and applies ARIA, the roving tabindex and hidden
   expect(visible()).toEqual(["p-a"]);
 });
 
+test("with nothing selected, setup picks the enabled tab whose panel is data-default", () => {
+  panel("p-b").setAttribute("data-default", "");
+  dispose = createTabs(root());
+  expect(tab("B").getAttribute("aria-selected")).toBe("true");
+  expect(visible()).toEqual(["p-b"]);
+});
+
+test("a disabled tab's data-default panel falls back to the first enabled tab", () => {
+  panel("p-c").setAttribute("data-default", "");
+  dispose = createTabs(root());
+  expect(visible()).toEqual(["p-a"]);
+});
+
+test("aria-selected wins over data-default", () => {
+  panel("p-b").setAttribute("data-default", "");
+  tab("D").setAttribute("aria-selected", "true");
+  dispose = createTabs(root());
+  expect(visible()).toEqual(["p-d"]);
+});
+
 test("a click selects without following the link, and reports the change", () => {
   const onValueChange = vi.fn();
   dispose = createTabs(root(), { onValueChange });

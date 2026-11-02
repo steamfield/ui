@@ -10,8 +10,15 @@ import {
   toValue,
   watch,
 } from "vue";
-import { countAt, defined, signature } from "../../internal/agent-demo.ts";
 import {
+  countAt,
+  hiddenToolNames,
+  signature,
+  type ToolRegistry,
+} from "../../internal/agent-demo.ts";
+import { defined } from "../../internal/options.ts";
+import {
+  checkSpeed,
   createPlaybackGate,
   type GateState,
   type PlaybackGate,
@@ -45,6 +52,11 @@ export interface UseAgentDemoOptions<TData = unknown> {
   readonly seed?: string | undefined;
   /** Whether user steps type into the composer by default. Default false. */
   readonly composer?: boolean | undefined;
+  /**
+   * The tool registry. Only `hidden` is read here: hidden tools' calls take no time, so leaving
+   * them out of the transcript leaves no silent gap. `AgentDemo` passes its `tools` prop.
+   */
+  readonly tools?: ToolRegistry | undefined;
   /** What the server, the pre-mount render and reduced motion show. Default "all". */
   readonly finalPolicy?: FinalPolicy | undefined;
   /**
@@ -97,7 +109,10 @@ export interface AgentDemoControls {
   readonly seek: (ms: number) => void;
   /** Stops playback and shows the finished transcript, like skipping to the end. */
   readonly cancel: () => void;
-  /** Clock rate, greater than 0. */
+  /**
+   * Clock rate. Throws `invalid_option` on `speed` unless it's finite and greater than 0. Holds
+   * until the `speed` option changes.
+   */
   readonly setSpeed: (speed: number) => void;
 }
 
@@ -183,19 +198,24 @@ export function useAgentDemo<TData = unknown>(
     // Raw, so steps handed to callbacks are the caller's objects and not reactive proxies.
     const value = toRaw(toValue(script));
     const { scriptKey, timing, seed, composer } = opts.value;
+    const names = hiddenToolNames(opts.value.tools);
+    // Joined into a string, so an inline registry rebuilt every render compares by its names.
+    const hidden = names.join("\n");
     // The content signature is recomputed only when an input is a new object.
-    let key: unknown = `key:${scriptKey}`;
+    let key: unknown = `key:${scriptKey}\n${hidden}`;
     if (scriptKey === undefined) {
-      const inputs = [value, toRaw(timing), seed, composer];
+      const inputs = [value, toRaw(timing), seed, composer, hidden];
       let last = content;
       if (last === null || inputs.some((input, i) => !Object.is(input, last?.inputs[i]))) {
-        last = { inputs, key: signature({ script: value, timing, seed, composer }) ?? value };
+        const sig = signature({ script: value, timing, seed, composer, hidden });
+        last = { inputs, key: sig ?? value };
         content = last;
       }
       key = last.key;
     }
     if (cache === null || !Object.is(cache.key, key)) {
-      cache = { key, timeline: compile(value, defined({ timing, seed, composer })) };
+      const hiddenTools = names.length === 0 ? undefined : names;
+      cache = { key, timeline: compile(value, defined({ timing, seed, composer, hiddenTools })) };
     }
     return cache;
   });
@@ -220,14 +240,18 @@ export function useAgentDemo<TData = unknown>(
   });
   const gate = shallowRef<PlaybackGate | null>(null);
   const state = shallowRef<GateState>(IDLE);
-  const speed = ref(opts.value.speed ?? 1);
+  // The rate a new gate starts at: the last one set by the `speed` option or `setSpeed`, so a
+  // rebuilt gate keeps it.
+  let rate = opts.value.speed;
   const autoStart = computed(() => opts.value.autoStart ?? true);
   const reducedPolicy = computed(() => opts.value.reducedPolicy ?? "end");
 
   watch(
     () => opts.value.speed,
     (next) => {
-      if (next !== undefined) speed.value = next;
+      if (next === undefined) return;
+      rate = next;
+      gate.value?.setSpeed(next);
     },
   );
 
@@ -265,9 +289,8 @@ export function useAgentDemo<TData = unknown>(
       const next = createPlaybackGate(element, {
         duration,
         autoStart: gateAutoStart,
-        speed: speed.value,
         reducedPolicy: policy,
-        ...defined({ threshold, rootMargin, leaveGraceMs, motion }),
+        ...defined({ speed: rate, threshold, rootMargin, leaveGraceMs, motion }),
       });
       gate.value = next;
       state.value = next.getState();
@@ -283,8 +306,6 @@ export function useAgentDemo<TData = unknown>(
     },
     { immediate: true, flush: "post" },
   );
-
-  watch(speed, (next) => gate.value?.setSpeed(next));
 
   // A new script (by key) starts over.
   watch(key, () => {
@@ -345,7 +366,9 @@ export function useAgentDemo<TData = unknown>(
     seek,
     cancel: () => seek(timeline.value.duration),
     setSpeed: (next: number) => {
-      speed.value = next;
+      if (gate.value) gate.value.setSpeed(next);
+      else checkSpeed(next);
+      rate = next;
     },
   };
 
@@ -369,7 +392,7 @@ export function useAgentDemo<TData = unknown>(
       () => live.value || (clickMode.value && ready.value && !state.value.reduced),
     ),
     mode: computed(() => (ready.value ? "live" : "static")),
-    speed: computed(() => speed.value),
+    speed: computed(() => (gate.value ? state.value.speed : (opts.value.speed ?? 1))),
     turn: computed(() => {
       const show = live.value && (elapsed.value > 0 || state.value.playing);
       return show ? countAt(timeline.value.turnStarts, elapsed.value) - 1 : -1;

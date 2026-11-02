@@ -125,6 +125,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+let earlySpeedError: unknown;
+
+/** Calls setSpeed with a bad rate before the gate exists (the server render). */
+function EarlySpeed(): null {
+  const playback = usePlayback();
+  if (!playback.ready) {
+    try {
+      playback.setSpeed(-1);
+    } catch (error) {
+      earlySpeedError = error;
+    }
+  }
+  return null;
+}
+
 describe("usePlayback", () => {
   test("server render reads no browser state and reports not ready", () => {
     vi.stubGlobal("matchMedia", () => {
@@ -315,6 +330,25 @@ describe("usePlayback", () => {
     const at = result.current.elapsed;
     advance(1000);
     expect(result.current.elapsed).toBeGreaterThan(at + 2500);
+  });
+
+  test("a rate set with setSpeed survives a rebuilt gate", () => {
+    const { result, rerender } = renderHook(
+      (duration: number) => usePlayback({ duration, autoStart: false, speed: 1 }),
+      { initialProps: 10_000 },
+    );
+    act(() => result.current.setSpeed(3));
+    rerender(20_000);
+    expect(result.current.speed).toBe(3);
+  });
+
+  test("setSpeed throws invalid_option for a bad rate, before and after ready", () => {
+    const bad = expect.objectContaining({ code: "invalid_option", field: "speed" });
+    renderToString(<EarlySpeed />);
+    expect(earlySpeedError).toEqual(bad);
+    const { result } = renderHook(() => usePlayback({ duration: 1000 }));
+    expect(() => result.current.setSpeed(Number.NaN)).toThrow(bad);
+    expect(result.current.speed).toBe(1);
   });
 });
 

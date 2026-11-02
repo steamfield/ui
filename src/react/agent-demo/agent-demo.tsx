@@ -46,7 +46,7 @@ export interface AgentDemoProps<TData = unknown> extends UseAgentDemoOptions<TDa
   readonly glyphs?: Partial<AgentDemoGlyphs>;
   /** Labels, icons and accents per tool name, for the chat layout's card headers. */
   readonly tools?: ToolRegistry;
-  /** Replaces a whole tool card. Return undefined to keep the default card. */
+  /** Replaces a whole tool card. Return undefined, null or false to keep the default card. */
   readonly renderToolCall?: ToolRenderer<TData>;
   /** Renders a tool body (`custom` bodies, or any kind you want to override). */
   readonly renderToolBody?: ToolRenderer<TData>;

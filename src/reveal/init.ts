@@ -1,5 +1,8 @@
 import { type MotionPreference, type MotionSource, motionSourceFor } from "../internal/motion.ts";
 
+// The motion contract lives in `internal`; reveal re-exports its types for the `motion` option.
+export type { MotionPreference, MotionSource };
+
 export interface RevealOptions {
   /** IntersectionObserver rootMargin. Default `"0px 0px -12% 0px"`. */
   readonly rootMargin?: string;
@@ -96,12 +99,6 @@ export function initReveal(options: RevealOptions = {}): () => void {
     if (!motion.get()) dispose();
   };
 
-  const start = (): void => observe(document, false);
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
   // Containers added later (client-side navigation, late renders) need arming too.
   const mutations =
     typeof MutationObserver === "undefined"
@@ -113,7 +110,17 @@ export function initReveal(options: RevealOptions = {}): () => void {
             }
           }
         });
-  mutations?.observe(document.body ?? root, { childList: true, subtree: true });
+  // Watching starts after the first pass, once the document is parsed: a call from <head> must not
+  // arm elements the parser is still adding children to.
+  const start = (): void => {
+    observe(document, false);
+    mutations?.observe(document.body ?? root, { childList: true, subtree: true });
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
   document.addEventListener(readyEvent, onReady);
   document.addEventListener("focusin", onFocus);
   const unsubscribeMotion = motion.subscribe(onMotionChange);

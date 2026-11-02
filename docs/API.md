@@ -143,7 +143,7 @@ createPlaybackGate(el: Element | null, {
 
 `usePlayback(opts)` returns `{ ref, elapsed, playing, paused, reduced, complete, ready, play, pause, toggle, replay, seek, reset }` and is SSR-safe: everything starts false and `ready` flips in an effect. Changing `duration`, `motion` or an observer option starts a fresh gate. `useCountUp(end, opts)` builds on the gate, returns `end` on the server and under reduced motion, and floors intermediate values.
 
-**Deviation:** `usePlayback` has no `speed` in its result; the option is applied to the gate in place. `useAgentDemo` keeps `speed` state of its own and exposes `setSpeed`.
+**Deviation:** `usePlayback` returns `speed` and `setSpeed`; the option is applied to the gate in place, and a gate rebuilt for a new `duration` or `motion` starts at the current rate. `useAgentDemo` drives its `speed` and `controls.setSpeed` through the same gate, so an invalid rate throws at the call.
 
 ## react/agent-demo
 

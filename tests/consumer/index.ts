@@ -17,7 +17,12 @@ import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-ta
 import { useCountUp, usePlayback } from "@steamfield/ui/react/playback";
 import { Tab, TabList, TabPanel, Tabs } from "@steamfield/ui/react/tabs";
 import { DemoWindow, type DemoWindowProps } from "@steamfield/ui/react/window";
-import { initReveal, motionTokens } from "@steamfield/ui/reveal";
+import {
+  initReveal,
+  type MotionPreference,
+  type MotionSource,
+  motionTokens,
+} from "@steamfield/ui/reveal";
 import {
   type DemoScript,
   isLibraryError,
@@ -124,8 +129,13 @@ check(typeof state.elapsed === "number", "gate state");
 gate.destroy();
 check(typeof usePlayback === "function" && typeof useCountUp === "function", "react/playback");
 
-// reveal: the motion tokens are plain data.
+// reveal: the motion tokens are plain data; the motion types describe a site's own toggle.
 check(typeof initReveal === "function" && typeof motionTokens === "object", "reveal");
+const revealMotion: MotionPreference | MotionSource = {
+  get: () => true,
+  subscribe: () => () => {},
+};
+check(typeof revealMotion === "object", "reveal motion types");
 
 // tabs: the DOM controller exists; React tabs and install tabs render on the server.
 const tabOptions: CreateTabsOptions = { activation: "manual", hash: "replace" };

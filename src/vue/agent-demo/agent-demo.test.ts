@@ -639,6 +639,25 @@ describe("useAgentDemo", () => {
     expect(demo?.view.value.complete).toBe(true);
   });
 
+  test("setSpeed rejects an invalid rate at the call site and keeps the current one", async () => {
+    let demo: UseAgentDemoResult | undefined;
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(terminalScript, { autoStart: false });
+      demo = result;
+      return () => h("div", { ref: result.el });
+    });
+    wrappers.push(mount(Probe));
+    await nextTick();
+    expect(() => demo?.controls.setSpeed(0)).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "speed" }),
+    );
+    await nextTick();
+    expect(demo?.speed.value).toBe(1);
+    demo?.controls.play();
+    await advance(200);
+    expect(demo?.playing.value).toBe(true);
+  });
+
   test("follows a changed speed option and keeps a script it can't serialize", async () => {
     const data: { self?: unknown } = {};
     data.self = data;
@@ -658,6 +677,47 @@ describe("useAgentDemo", () => {
     await nextTick();
     expect(demo?.speed.value).toBe(3);
     expect(demo?.timeline.value).toBe(first);
+  });
+
+  test("setSpeed before the gate exists checks the rate and seeds the gate", async () => {
+    let demo: UseAgentDemoResult | undefined;
+    let early: unknown;
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(terminalScript, { autoStart: false });
+      try {
+        result.controls.setSpeed(0);
+      } catch (error) {
+        early = error;
+      }
+      result.controls.setSpeed(2);
+      demo = result;
+      return () => h("div", { ref: result.el });
+    });
+    wrappers.push(mount(Probe));
+    expect(early).toEqual(expect.objectContaining({ code: "invalid_option", field: "speed" }));
+    await nextTick();
+    expect(demo?.ready.value).toBe(true);
+    expect(demo?.speed.value).toBe(2);
+  });
+
+  test("hidden tools in the registry take no time", async () => {
+    const hidden = ref(false);
+    let demo: UseAgentDemoResult | undefined;
+    const Probe = defineComponent(() => {
+      const result = useAgentDemo(terminalScript, () => ({
+        timing: presets.terminal,
+        tools: { Bash: { hidden: hidden.value } },
+      }));
+      demo = result;
+      return () => h("div", { ref: result.el });
+    });
+    wrappers.push(mount(Probe));
+    const shown = demo?.timeline.value;
+    hidden.value = true;
+    await nextTick();
+    const bash = demo?.timeline.value.steps[1];
+    expect(bash?.end).toBe(bash?.start);
+    expect(demo?.timeline.value.duration ?? 0).toBeLessThan(shown?.duration ?? 0);
   });
 });
 

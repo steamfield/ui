@@ -282,6 +282,20 @@ describe("containers added after init", () => {
     expect(observer().targets.has(byId("late"))).toBe(false);
   });
 
+  test("while the document is loading, nothing the parser adds is armed until it's parsed", async () => {
+    const state = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    dispose = initReveal();
+    document.body.insertAdjacentHTML("beforeend", '<section id="parsing" data-reveal></section>');
+    await flush();
+    expect(observer().targets.has(byId("parsing"))).toBe(false);
+    state.mockReturnValue("interactive");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    expect(observer().targets.has(byId("parsing"))).toBe(true);
+    document.body.insertAdjacentHTML("beforeend", '<section id="late" data-reveal></section>');
+    await flush();
+    expect(observer().targets.has(byId("late"))).toBe(true);
+  });
+
   test("the disposer disconnects the mutation observer", async () => {
     dispose = initReveal();
     dispose();

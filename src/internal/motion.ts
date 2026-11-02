@@ -30,8 +30,10 @@ function fixed(allowed: boolean): MotionSource {
 /**
  * The `"auto"` source: motion is allowed unless `prefers-reduced-motion: reduce` matches or `el`
  * sits inside a `[data-sf-motion="reduce"]` element. Both stay live: the media query through its
- * change event, the attribute through a MutationObserver on the document. Without `matchMedia`
- * only the attribute counts; without an element only the media query does.
+ * change event, the attribute through a MutationObserver on the document that watches only
+ * `data-sf-motion` attribute changes. Moving `el` into or out of a `[data-sf-motion="reduce"]`
+ * subtree is not seen until the next attribute change or media query change. Without
+ * `matchMedia` only the attribute counts; without an element only the media query does.
  */
 export function autoMotionSource(el: Element | null = null): MotionSource {
   const query = typeof matchMedia === "function" ? matchMedia(REDUCE_QUERY) : undefined;

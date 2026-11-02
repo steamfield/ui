@@ -286,6 +286,33 @@ describe("tool calls", () => {
     expect(run(1)).toBe(800);
     expect(run(4)).toBe(1800);
   });
+
+  test("hiddenTools calls take no time, so they leave no gap", () => {
+    const shown = compile(chatScript, { seed: "x" });
+    const hidden = compile(chatScript, { seed: "x", hiddenTools: ["search"] });
+    const search = hidden.steps[1];
+    expect(search?.end).toBe(search?.start);
+    expect(hidden.steps[2]?.start).toBe(search?.start);
+    expect(hidden.duration).toBeLessThan(shown.duration);
+    expect(hidden.turnStarts).toHaveLength(shown.turnStarts.length);
+    // The other tool call keeps its time.
+    expect((hidden.steps[4]?.end ?? 0) - (hidden.steps[4]?.start ?? 0)).toBeGreaterThan(0);
+  });
+
+  test("a hidden call that ends a turn doesn't move the turn's end", () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "Go" },
+        { kind: "agent-text", text: "Done." },
+        { kind: "tool-call", name: "log" },
+      ],
+    };
+    const shown = compile(script, { hiddenTools: [] });
+    const hidden = compile(script, { hiddenTools: ["log"] });
+    const agent = compile({ steps: script.steps.slice(0, 2) });
+    expect(hidden.turnEnds).toEqual(agent.turnEnds);
+    expect(shown.turnEnds[0]).toBeGreaterThan(agent.turnEnds[0] ?? 0);
+  });
 });
 
 describe("output steps", () => {
@@ -541,6 +568,8 @@ describe("options", () => {
     ["a non-object timing", { timing: 3 }, "timing"],
     ["a non-string seed", { seed: 3 }, "seed"],
     ["a non-boolean composer", { composer: "yes" }, "composer"],
+    ["a non-array hiddenTools", { hiddenTools: "search" }, "hiddenTools"],
+    ["a non-string hidden tool", { hiddenTools: [1] }, "hiddenTools"],
     ["an unknown option", { speed: 2 }, "speed"],
     ["a toolMs that returns NaN", { timing: { toolMs: () => Number.NaN } }, "timing.toolMs"],
     [

@@ -37,10 +37,13 @@ export interface ToolCallContext<TData = unknown> {
 }
 
 /**
- * Replaces a whole tool card, or a tool card's body. Return `undefined` or `null` to fall back to
- * the built-in rendering; to leave a tool's calls out, set `hidden` in the tool registry.
+ * Replaces a whole tool card, or a tool card's body. Return `undefined`, `null` or `false` to fall
+ * back to the built-in rendering; to leave a tool's calls out, set `hidden` in the tool registry.
  */
 export type ToolRenderer<TData = unknown> = (ctx: ToolCallContext<TData>) => ReactNode | undefined;
+
+/** `undefined`, `null` and `false` from a `ToolRenderer` all mean "use the built-in rendering". */
+const fallsBack = (node: ReactNode | undefined): boolean => node == null || node === false;
 
 /** Everything the parts need besides the view. */
 export interface PartsConfig<TData> {
@@ -293,7 +296,7 @@ function ToolBodyContent<TData>({
   body,
 }: Omit<ToolPartProps<TData>, "frame"> & { readonly body: ToolBody<TData> }): ReactNode {
   const custom = config.renderToolBody?.(ctx);
-  if (custom != null) return custom;
+  if (!fallsBack(custom)) return custom;
   return <BuiltInBody body={body} labels={config.labels} />;
 }
 
@@ -367,7 +370,7 @@ function ToolCall<TData>({
     mode: config.mode,
   };
   const replaced = config.renderToolCall?.(ctx);
-  if (replaced != null) return replaced;
+  if (!fallsBack(replaced)) return replaced;
   return <ToolCard ctx={ctx} config={config} frame={frame} />;
 }
 

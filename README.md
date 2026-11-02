@@ -177,6 +177,7 @@ The headless hook: compiles the script, gates playback and returns the view to r
 | `timing` | `Partial<Timing>` | the `chat` preset | Fields to change from the `chat` preset, such as `presets.terminal` |
 | `seed` | `string` | the script's `id`, then `""` | Seeds the timing jitter |
 | `composer` | `boolean` | `false` in the hook; `AgentDemo` uses `true` for `layout="chat"` | Whether user steps type into the composer instead of the transcript (a step's own `composer` overrides it) |
+| `tools` | `ToolRegistry` | none | Only `hidden` is read: a hidden tool's calls take no time, so leaving them out leaves no silent gap. `AgentDemo` passes its `tools` prop. A change to the hidden set recompiles and restarts playback |
 | `finalPolicy` | `"all" \| "last" \| (steps) => number[]` | `"all"` | What the server, the pre-hydration render and reduced motion show |
 | `position` | `{ ms } \| { click }` | none | Pin the view to a position, such as `{ click }` from a Slidev deck. No clock runs and no controls show |
 | `autoStart` | `boolean` | `true` | Start when in view. When false the final transcript shows until `play()` |
@@ -194,7 +195,7 @@ Result:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `view` | `DemoView` | What to render now |
-| `controls` | `AgentDemoControls` | `play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`. `cancel` stops and shows the finished transcript |
+| `controls` | `AgentDemoControls` | `play`, `pause`, `toggle`, `replay`, `seek(ms)`, `cancel`, `setSpeed(n)`. `cancel` stops and shows the finished transcript. `setSpeed` throws `invalid_option` on `speed` unless the rate is finite and greater than 0 |
 | `ref` | `RefObject<HTMLDivElement>` | Attach to the element whose visibility gates playback |
 | `ready` | `boolean` | False on the server and first client render |
 | `started` | `boolean` | `autoStart`, or `play`, `toggle` or `replay` was called. A `seek` or `cancel` before play leaves it false. Label a play button from `!started \|\| paused` |
@@ -216,8 +217,8 @@ All hook options plus:
 | `layout` | `"chat" \| "terminal"` | `"chat"` | The two looks over one set of parts |
 | `labels` | `Partial<AgentDemoLabels>` | see below | Overrides for any default string |
 | `glyphs` | `Partial<AgentDemoGlyphs>` | see below | Overrides for the decorative glyphs |
-| `tools` | `ToolRegistry` | none | Per tool `name`: `label`, `runningLabel`, `icon`, `accent` (any CSS color, sets `--sf-tool-accent`), `hidden` (leave its calls out). A tool without an entry gets its name humanized ("query_sql" reads "Query sql"). The terminal layout ignores the labels and shows `server name` |
-| `renderToolCall` | `(ctx) => ReactNode \| undefined` | none | Replaces a whole tool card. Return `undefined` or `null` for the default |
+| `tools` | `ToolRegistry` | none | Per tool `name`: `label`, `runningLabel`, `icon`, `accent` (any CSS color, sets `--sf-tool-accent`), `hidden` (leave its calls out; they take no playback time either). A tool without an entry gets its name humanized ("query_sql" reads "Query sql"). The terminal layout ignores the labels and shows `server name` |
+| `renderToolCall` | `(ctx) => ReactNode \| undefined` | none | Replaces a whole tool card. Return `undefined`, `null` or `false` for the default |
 | `renderToolBody` | `(ctx) => ReactNode \| undefined` | none | Renders a tool body (`custom` bodies, or any kind you override) |
 | `stage` | `(view) => ReactNode` | none | Content beside the transcript that follows the view, such as a live chart |
 | `controls` | `"inline" \| "full" \| "none" \| (demo) => ReactNode` | `"inline"` | `"inline"` is one play/pause/replay button; `"full"` adds turn jumps, Next and a 1x/2x speed toggle; a function renders your own |
@@ -227,7 +228,7 @@ All hook options plus:
 | `className`, `style` | | none | On the root |
 | `privacyClassName` | `string` | none | Appended to the root class, for session-recording opt-outs such as `"ph-no-capture"` |
 
-Custom tool rendering follows one rule in React and Vue: a `renderToolCall` or `renderToolBody` that returns `undefined` or `null` (in Vue, a `toolCall` or `toolBody` slot that renders nothing, or only comments) keeps the built-in rendering. To render nothing for a tool, set `hidden: true` on its `tools` entry; its calls then leave the transcript and the `"beats"` announcements in both layouts. A tool call's beat announces the same name its header shows: the registry label in the chat layout, `server name` in the terminal layout.
+Custom tool rendering follows one rule in React and Vue: a `renderToolCall` or `renderToolBody` that returns `undefined`, `null` or `false` (in Vue, a `toolCall` or `toolBody` slot that renders nothing, or only comments) keeps the built-in rendering. To render nothing for a tool, set `hidden: true` on its `tools` entry; its calls then leave the transcript and the `"beats"` announcements in both layouts. A tool call's beat announces the same name its header shows: the registry label in the chat layout, `server name` in the terminal layout.
 
 `ToolCallContext` (what the render props receive): `step`, `entry`, `index`, `loading` (still running, or the body has not revealed), `mode` (`"static"` on the server, before hydration and in `StaticTranscript`; `"live"` once hydrated). Render something server-safe for `"static"`.
 
@@ -322,6 +323,7 @@ Validates and returns a frozen `Timeline` (`script`, `steps` with `key`/`index`/
 | `timing` | `Partial<Timing>` | the `chat` preset | Fields to change; an unknown key is `invalid_option` |
 | `seed` | `string` | the script's `id`, then `""` | Seeds the jitter |
 | `composer` | `boolean` | `false` | Whether user steps without their own `composer` flag type into the composer |
+| `hiddenTools` | `readonly string[]` | none | Tool names whose calls take no time (their steps start and end where the next step starts), for tools a renderer leaves out. Not an array of strings is `invalid_option` |
 
 ### `Timing` and `presets`
 
@@ -403,7 +405,7 @@ Create it in the browser (an effect), never during server rendering. With a `nul
 | `threshold` | `number` | `0.15` | In-view threshold |
 | `rootMargin` | `string` | `"0px"` | In-view root margin |
 | `leaveGraceMs` | `number` | `0` | How long out of view before pausing. Coming back inside resumes at once |
-| `motion` | `"auto" \| "reduce" \| "full" \| { get, subscribe }` | `"auto"` | `"auto"` follows `prefers-reduced-motion` and any `[data-sf-motion="reduce"]` ancestor of the element, live. A source's `get()` returns true while motion is allowed |
+| `motion` | `"auto" \| "reduce" \| "full" \| { get, subscribe }` | `"auto"` | `"auto"` follows `prefers-reduced-motion` and any `[data-sf-motion="reduce"]` ancestor of the element, live. Only changes to the `data-sf-motion` attribute are watched: moving the element into or out of such a subtree is picked up at the next attribute or media query change. A source's `get()` returns true while motion is allowed |
 | `reducedPolicy` | `"end" \| "hold"` | `"end"` | When motion is not allowed: jump to the end, or hold where it is |
 | `duration` | `number` | `Infinity` | Total demo time in ms; `complete` turns true at it |
 | `speed` | `number` | `1` | Clock rate, finite and greater than 0, else `invalid_option` on `speed` |
@@ -427,9 +429,9 @@ import { usePlayback, useCountUp } from "@steamfield/ui/react/playback";
 
 ### `usePlayback(options?)`
 
-React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts a fresh gate at 0; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
+React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts a fresh gate at 0 that keeps the current rate; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
 
-Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` holds until the `speed` option changes. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
+Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a rebuilt gate. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
 
 ### `useCountUp(end, options?)`
 
@@ -482,7 +484,7 @@ import type { CopyEventDetail, CopyMessages, EnhanceCopyOptions } from "@steamfi
 
 `copyText(text)` copies to the clipboard and resolves to whether it worked. It tries the async Clipboard API, then a hidden textarea with `execCommand("copy")`. It never throws; without a clipboard or DOM it resolves `false`.
 
-`enhanceCopyButtons(root, options?)` activates every `[data-copy-command]` button under `root` and returns a function that removes the listeners and timers. Markup contract:
+`enhanceCopyButtons(root, options?)` activates every `[data-copy-command]` button under `root` and marks it `data-copy-ready`. It returns a disposer that removes the listeners and timers and hides those buttons again (removing the marker), so no dead button is left. Calling it again, say after a client-side navigation, wires only buttons without `data-copy-ready`; buttons the first call wired keep the first call's options. To re-wire them with new options, call the first disposer, then `enhanceCopyButtons` again. Markup contract:
 
 ```html
 <span data-copy-root>
@@ -573,7 +575,7 @@ import type { CreateTabsOptions, TabsActivation, TabsChangeDetail, TabsHash, Tab
 </div>
 ```
 
-On setup the root gets `data-live`, which turns off the CSS fallback. The controller then owns `aria-selected`, the roving `tabindex`, `data-state` (`active|inactive`) and each panel's `hidden`. A tab's value is its `data-value`, or its panel id. The initial tab is the one with `aria-selected="true"`, else the first enabled tab. Without a `[role="tablist"]` it does nothing. The returned function removes the listeners and restores what setup touched (`data-live`, `aria-selected`, `tabindex`, `data-state`, `aria-controls`, panels' `hidden` and `data-state`).
+On setup the root gets `data-live`, which turns off the CSS fallback. The controller then owns `aria-selected`, the roving `tabindex`, `data-state` (`active|inactive`) and each panel's `hidden`. A tab's value is its `data-value`, or its panel id. The initial tab is the enabled one with `aria-selected="true"`, else the enabled tab whose panel has `data-default` (the panel the no-JS CSS shows), else the first enabled tab. Without a `[role="tablist"]` it does nothing. The returned function removes the listeners and restores what setup touched (`data-live`, `aria-selected`, `tabindex`, `data-state`, `aria-controls`, panels' `hidden` and `data-state`).
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -589,7 +591,7 @@ Hooks: `data-part` values `tabs` (`data-live`, `data-orientation` from React), `
 
 ### Without JavaScript
 
-With anchor tabs and `tabs/styles.css`, the first panel shows (or the one marked `data-default`; React's `defaultValue` sets it), or the panel the URL fragment targets (`:target`), so every panel is reachable by deep link. Panels are in the HTML. Put `display` styles on an element inside a panel, because the fallback hides panels with `display: none` and a `display` utility on the panel would defeat it (utilities beat `@layer sf`). Reduced motion has no effect.
+With anchor tabs and `tabs/styles.css`, the first panel shows (or the one marked `data-default`; React's `defaultValue` sets it), or the panel the URL fragment targets (`:target`), so every panel is reachable by deep link. A set's panels must be siblings; a tab set nested inside a panel (an `InstallTabs`, say) is its own set and doesn't change which outer panel shows. Panels are in the HTML. Put `display` styles on an element inside a panel, because the fallback hides panels with `display: none` and a `display` utility on the panel would defeat it (utilities beat `@layer sf`). Reduced motion has no effect.
 
 ## react/tabs
 
@@ -700,7 +702,7 @@ One-shot scroll entrances. `initReveal(options?)` sets `data-motion-ready="true"
 | `rootMargin` | `string` | `"0px 0px -12% 0px"` | IntersectionObserver root margin |
 | `threshold` | `number` | `0` | IntersectionObserver threshold |
 | `immediate` | `(el) => boolean` | none | Reveal this container at once: a deep-link target, an above-the-fold section |
-| `motion` | `"auto" \| "reduce" \| "full" \| MotionSource` | `"auto"` | Same contract as the playback gate. `"auto"` follows `prefers-reduced-motion` and `[data-sf-motion="reduce"]` on `<html>`; a `MotionSource` (`{ get, subscribe }`, type from `@steamfield/ui/playback`) follows a site's saved toggle. When motion turns off later, the gate is removed and everything shows |
+| `motion` | `"auto" \| "reduce" \| "full" \| MotionSource` | `"auto"` | Same contract as the playback gate. `"auto"` follows `prefers-reduced-motion` and `[data-sf-motion="reduce"]` on `<html>`; a `MotionSource` (`{ get, subscribe }`; `MotionSource` and `MotionPreference` are exported as types from `@steamfield/ui/reveal` and `@steamfield/ui/playback`) follows a site's saved toggle. When motion turns off later, the gate is removed and everything shows |
 | `deferred` | `(el) => boolean` | inside `[data-reveal-defer]` and not inside `[data-reveal-hydrated]` | A late-hydrating container that is skipped until `readyEvent` fires from inside it |
 | `readyEvent` | `string` | `"sf:reveal-ready"` | Bubbling event a hydrated island dispatches to be observed |
 

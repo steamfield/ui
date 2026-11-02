@@ -31,7 +31,7 @@ const copyIcon = (): Element =>
 
 // The markup `enhanceCopyButtons` (@steamfield/ui/copy) activates: hidden until it runs, with the
 // live result region beside the button and `aria-controls` naming the code's `<pre>`.
-export function copyControl(id: string, label: string, visible: string): Element {
+function copyControl(id: string, label: string, visible: string): Element {
   return element("span", { dataCodeCopy: "" }, [
     element(
       "button",

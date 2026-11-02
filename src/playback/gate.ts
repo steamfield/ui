@@ -272,7 +272,7 @@ interface Config {
 }
 
 /** A clock rate, finite and greater than 0, or `invalid_option`. */
-function checkSpeed(speed: number): number {
+export function checkSpeed(speed: number): number {
   if (!Number.isFinite(speed) || speed <= 0) {
     throw new LibraryError("invalid_option", { field: "speed" });
   }

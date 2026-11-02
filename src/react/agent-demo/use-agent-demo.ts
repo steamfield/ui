@@ -1,5 +1,11 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { countAt, defined, signature } from "../../internal/agent-demo.ts";
+import {
+  countAt,
+  hiddenToolNames,
+  signature,
+  type ToolRegistry,
+} from "../../internal/agent-demo.ts";
+import { defined } from "../../internal/options.ts";
 import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
 import type { DemoScript, Step } from "../../script/types.ts";
@@ -31,6 +37,11 @@ export interface UseAgentDemoOptions<TData = unknown> {
   readonly seed?: string;
   /** Whether user steps type into the composer by default. Default false. */
   readonly composer?: boolean;
+  /**
+   * The tool registry. Only `hidden` is read here: hidden tools' calls take no time, so leaving
+   * them out of the transcript leaves no silent gap. `AgentDemo` passes its `tools` prop.
+   */
+  readonly tools?: ToolRegistry;
   /** What the server, the pre-hydration render and reduced motion show. Default "all". */
   readonly finalPolicy?: FinalPolicy;
   /**
@@ -77,7 +88,10 @@ export interface AgentDemoControls {
   readonly seek: (ms: number) => void;
   /** Stops playback and shows the finished transcript, like skipping to the end. */
   readonly cancel: () => void;
-  /** Clock rate, greater than 0. */
+  /**
+   * Clock rate. Throws `invalid_option` on `speed` unless it's finite and greater than 0. Holds
+   * until the `speed` option changes.
+   */
   readonly setSpeed: (speed: number) => void;
 }
 
@@ -117,14 +131,18 @@ function useTimeline<TData>(
   options: UseAgentDemoOptions<TData>,
 ): { timeline: Timeline<TData>; key: unknown } {
   const { scriptKey, timing, seed, composer } = options;
+  const hiddenTools = hiddenToolNames(options.tools);
+  // Joined into a string, so an inline registry rebuilt every render compares by its names.
+  const hidden = hiddenTools.join("\n");
   // The content signature is recomputed only when an input is a new object, not every frame.
   const content = useRef<{ inputs: readonly unknown[]; key: unknown } | null>(null);
-  let key: unknown = `key:${scriptKey}`;
+  let key: unknown = `key:${scriptKey}\n${hidden}`;
   if (scriptKey === undefined) {
-    const inputs = [script, timing, seed, composer];
+    const inputs = [script, timing, seed, composer, hidden];
     const last = content.current;
     if (last === null || inputs.some((input, i) => !Object.is(input, last.inputs[i]))) {
-      content.current = { inputs, key: signature({ script, timing, seed, composer }) ?? script };
+      const sig = signature({ script, timing, seed, composer, hidden });
+      content.current = { inputs, key: sig ?? script };
     }
     key = content.current?.key;
   }
@@ -134,6 +152,7 @@ function useTimeline<TData>(
       ...(timing === undefined ? {} : { timing }),
       ...(seed === undefined ? {} : { seed }),
       ...(composer === undefined ? {} : { composer }),
+      ...(hiddenTools.length === 0 ? {} : { hiddenTools }),
     };
     cache.current = { key, timeline: compile(script, compileOptions) };
   }
@@ -261,18 +280,12 @@ export function useAgentDemo<TData = unknown>(
   const { timeline, key } = useTimeline(script, options);
   const { position, finalPolicy = "all", autoStart = true, reducedPolicy = "end" } = options;
   const clickMode = position !== undefined;
-  const [speed, setSpeed] = useState(options.speed ?? 1);
-
-  useEffect(() => {
-    if (options.speed !== undefined) setSpeed(options.speed);
-  }, [options.speed]);
-
   const playback = usePlayback<HTMLDivElement>({
     duration: timeline.duration,
     autoStart: clickMode ? false : autoStart,
-    speed,
     reducedPolicy,
     ...defined({
+      speed: options.speed,
       threshold: options.threshold,
       rootMargin: options.rootMargin,
       leaveGraceMs: options.leaveGraceMs,
@@ -313,6 +326,7 @@ export function useAgentDemo<TData = unknown>(
     toggle: gateToggle,
     replay: gateReplay,
     seek: gateSeek,
+    setSpeed,
   } = playback;
   const controls = useMemo<AgentDemoControls>(() => {
     const seek = (ms: number): void => {
@@ -328,7 +342,7 @@ export function useAgentDemo<TData = unknown>(
       cancel: () => seek(duration),
       setSpeed,
     };
-  }, [gatePlay, pause, gateToggle, gateReplay, gateSeek, seeked, duration]);
+  }, [gatePlay, pause, gateToggle, gateReplay, gateSeek, setSpeed, seeked, duration]);
 
   const clockPosition = live || clock.held ? { ms: elapsed } : undefined;
   const view = viewAt(timeline, position ?? clockPosition, finalPolicy);
@@ -346,7 +360,7 @@ export function useAgentDemo<TData = unknown>(
     complete: clickMode ? view.complete : live && ended,
     animating: clock.animating,
     mode: playback.ready ? "live" : "static",
-    speed,
+    speed: playback.speed,
     turn: showTurn ? countAt(timeline.turnStarts, elapsed) - 1 : -1,
     timeline,
   };

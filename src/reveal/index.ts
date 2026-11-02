@@ -1,4 +1,4 @@
-export type { RevealOptions } from "./init.ts";
+export type { MotionPreference, MotionSource, RevealOptions } from "./init.ts";
 export { initReveal } from "./init.ts";
 export type {
   AnimationName,

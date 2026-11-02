@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
+import { InstallTabs } from "../../src/react/install-tabs/index.ts";
 import { Tab, TabList, TabPanel, Tabs } from "../../src/react/tabs/index.ts";
 
 const h = '[aria-label="Horizontal sections"]';
@@ -130,5 +131,74 @@ test.describe("JavaScript disabled", () => {
         await expect(page.locator(`#ssr-${other}`)).toBeHidden();
       }
     }
+  });
+
+  // A nested set always has a data-default panel (InstallTabs) or none (Tabs); neither may change
+  // which outer panel shows, and the outer set's state must not reach the inner one.
+  test("nested tab sets keep their own fallback", async ({ page, request }) => {
+    const index = await (await request.get("/")).text();
+    const css = /href="([^"]+\.css)"/.exec(index)?.[1] ?? "";
+    const set = (
+      id: string,
+      names: string[],
+      inner: (n: string) => unknown,
+      defaultValue?: string,
+    ) =>
+      createElement(
+        Tabs,
+        defaultValue ? { id, defaultValue } : { id },
+        createElement(
+          TabList,
+          { "aria-label": id },
+          ...names.map((n) => createElement(Tab, { key: n, value: n }, n)),
+        ),
+        ...names.map((n) => createElement(TabPanel, { key: n, value: n }, inner(n) as never)),
+      );
+    const install = (n: string) =>
+      createElement(InstallTabs, {
+        id: `in-${n}`,
+        defaultValue: "pnpm",
+        options: [
+          { id: "npm", label: "npm", command: `npm i ${n}` },
+          { id: "pnpm", label: "pnpm", command: `pnpm add ${n}` },
+        ],
+      });
+    const plain = (n: string) => set(`pl-${n}`, ["x", "y"], (m) => `Inner ${n} ${m}`);
+    const markup = renderToString(
+      createElement(
+        "div",
+        null,
+        set("out", ["a", "b"], install),
+        set("dout", ["a", "b"], plain, "b"),
+      ),
+    );
+    await page.route("**/static-nested.html", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html><head><link rel="stylesheet" href="${css}"></head><body>${markup}</body></html>`,
+      }),
+    );
+    await page.goto("/static-nested.html");
+    // No outer default, inner InstallTabs with a default: the first outer panel shows.
+    await expect(page.locator("#out-a")).toBeVisible();
+    await expect(page.locator("#out-b")).toBeHidden();
+    await expect(page.locator("#in-a-pnpm")).toBeVisible();
+    await expect(page.locator("#in-a-npm")).toBeHidden();
+    // Outer default, inner Tabs without one: the outer default shows and the inner set its first.
+    await expect(page.locator("#dout-b")).toBeVisible();
+    await expect(page.locator("#dout-a")).toBeHidden();
+    await expect(page.locator("#pl-b-x")).toBeVisible();
+    await expect(page.locator("#pl-b-y")).toBeHidden();
+    // Targeting an inner panel switches only the inner set.
+    await page.goto("/static-nested.html#pl-b-y");
+    await expect(page.locator("#dout-b")).toBeVisible();
+    await expect(page.locator("#pl-b-y")).toBeVisible();
+    await expect(page.locator("#pl-b-x")).toBeHidden();
+    // Targeting an outer panel switches the outer set and leaves the inner default alone.
+    await page.goto("/static-nested.html#out-b");
+    await expect(page.locator("#out-b")).toBeVisible();
+    await expect(page.locator("#out-a")).toBeHidden();
+    await expect(page.locator("#in-b-pnpm")).toBeVisible();
+    await expect(page.locator("#in-b-npm")).toBeHidden();
   });
 });

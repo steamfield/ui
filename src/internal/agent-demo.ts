@@ -157,6 +157,13 @@ export function toolHidden(tools: ToolRegistry | undefined, name: string): boole
   return tools?.[name]?.hidden === true;
 }
 
+/** The registry's hidden tool names, sorted, for `compile`'s `hiddenTools`. */
+export function hiddenToolNames(tools: ToolRegistry | undefined): string[] {
+  return Object.keys(tools ?? {})
+    .filter((name) => toolHidden(tools, name))
+    .sort();
+}
+
 /** Demo time per spinner frame. */
 export const SPINNER_FRAME_MS = 80;
 
@@ -247,12 +254,3 @@ export function signature(value: unknown): string | undefined {
 /** How many of `times` are at or before `t`. */
 export const countAt = (times: readonly number[], t: number): number =>
   times.filter((time) => time <= t).length;
-
-/** Drops undefined values, which `exactOptionalPropertyTypes` won't pass as "absent". */
-export function defined<O extends object>(
-  values: O,
-): { [K in keyof O]?: Exclude<O[K], undefined> } {
-  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined)) as {
-    [K in keyof O]?: Exclude<O[K], undefined>;
-  };
-}

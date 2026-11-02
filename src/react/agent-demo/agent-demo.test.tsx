@@ -388,6 +388,24 @@ describe("render props", () => {
     expect(calls.at(-1)).toEqual({ mode: "live", index: 1 });
   });
 
+  test("false from renderToolCall or renderToolBody falls back like null and undefined", () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "Show it" },
+        { kind: "tool-call", name: "list", body: { kind: "lines", lines: ["built-in line"] } },
+      ],
+    };
+    const { container } = render(
+      <StaticTranscript
+        script={script}
+        renderToolCall={() => false}
+        renderToolBody={() => false}
+      />,
+    );
+    expect(container.querySelector('[data-part="tool-call"]')).toBeTruthy();
+    expect(screen.getByText("built-in line")).toBeTruthy();
+  });
+
   test("stage receives the current view", () => {
     render(
       <Terminal stage={(view) => <output data-testid="stage">{view.entries.length}</output>} />,
@@ -615,6 +633,35 @@ describe("useAgentDemo", () => {
     act(() => result.current.controls.cancel());
     expect(result.current.complete).toBe(true);
     expect(result.current.view.complete).toBe(true);
+  });
+
+  test("setSpeed rejects an invalid rate at the call site and keeps the current one", () => {
+    const { result } = renderHook(() => useAgentDemo(terminalScript, { autoStart: false }));
+    expect(() => result.current.controls.setSpeed(0)).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "speed" }),
+    );
+    expect(result.current.speed).toBe(1);
+    act(() => result.current.controls.play());
+    advance(200);
+    expect(result.current.playing).toBe(true);
+  });
+
+  test("hidden tools in the registry take no time", () => {
+    const { result, rerender } = renderHook(
+      (hidden: boolean) =>
+        useAgentDemo(terminalScript, {
+          timing: presets.terminal,
+          tools: { Bash: { hidden } },
+        }),
+      { initialProps: false },
+    );
+    const shown = result.current.timeline;
+    rerender(false);
+    expect(result.current.timeline).toBe(shown);
+    rerender(true);
+    const bash = result.current.timeline.steps[1];
+    expect(bash?.end).toBe(bash?.start);
+    expect(result.current.timeline.duration).toBeLessThan(shown.duration);
   });
 
   test("follows a changed speed option", () => {

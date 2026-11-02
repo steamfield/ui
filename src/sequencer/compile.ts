@@ -12,6 +12,12 @@ export interface CompileOptions<TData = unknown> {
   readonly seed?: string;
   /** Whether user steps without their own `composer` flag type into the composer. Default false. */
   readonly composer?: boolean;
+  /**
+   * Tool names whose calls take no time, for tools a renderer leaves out (`hidden` in a tool
+   * registry), so they don't leave a silent gap. Their steps still exist, at the time the next
+   * step starts.
+   */
+  readonly hiddenTools?: readonly string[];
 }
 
 /** When one step plays, in ms from the start, and the click it reveals at. */
@@ -260,16 +266,31 @@ function buildStep<TData>(
   }
 }
 
-function turns(tracks: readonly Track[]): { starts: number[]; ends: number[] } {
+function turns(
+  tracks: readonly Track[],
+  hidden: (step: Step<unknown>) => boolean,
+): { starts: number[]; ends: number[] } {
   const starts: number[] = [];
   const ends: number[] = [];
   for (const track of tracks) {
     // The first turn starts at 0, so jumping to it replays the start delay too.
     if (starts.length === 0) starts.push(0);
     else if (track.step.kind === "user") starts.push(track.start);
-    ends[starts.length - 1] = track.settle;
+    // A hidden call shows nothing, so it can't be what a turn ends on.
+    if (!hidden(track.step) || ends[starts.length - 1] === undefined) {
+      ends[starts.length - 1] = track.settle;
+    }
   }
   return { starts, ends };
+}
+
+function hiddenToolsOption(value: unknown): (step: Step<unknown>) => boolean {
+  if (value === undefined) return () => false;
+  if (!Array.isArray(value) || value.some((name) => typeof name !== "string")) {
+    throw new LibraryError("invalid_option", { field: "hiddenTools" });
+  }
+  const names = new Set<unknown>(value);
+  return (step) => step.kind === "tool-call" && names.has(step.name);
 }
 
 /** The click each step reveals at: its own `at`, else the previous step's, else 0. */
@@ -315,13 +336,14 @@ export function compile<TData>(
   options: CompileOptions<TData> = {},
 ): Timeline<TData> {
   validateScript(script);
-  const badOption = unknownOption(options, ["timing", "seed", "composer"]);
+  const badOption = unknownOption(options, ["timing", "seed", "composer", "hiddenTools"]);
   if (badOption) throw new LibraryError("invalid_option", { field: badOption });
   const { seed = script.id ?? "", composer = false } = options;
   if (typeof seed !== "string") throw new LibraryError("invalid_option", { field: "seed" });
   if (typeof composer !== "boolean") {
     throw new LibraryError("invalid_option", { field: "composer" });
   }
+  const hidden = hiddenToolsOption(options.hiddenTools);
   const b = new Builder<TData>(resolveTiming<TData>(options.timing), seed);
   const ats = effectiveAts(script.steps);
   const tracks = script.steps.map((step, index) => {
@@ -329,11 +351,11 @@ export function compile<TData>(
     track.at = ats[index] ?? 0;
     Object.assign(track, gates(step, track.at));
     track.composer = step.kind === "user" && (step.composer ?? composer);
-    buildStep(b, track, script.steps[index + 1]);
+    if (!hidden(step)) buildStep(b, track, script.steps[index + 1]);
     track.end = b.t;
     return track as Track<TData>;
   });
-  const { starts, ends } = turns(tracks);
+  const { starts, ends } = turns(tracks, hidden);
   const timeline: Timeline<TData> = Object.freeze({
     script,
     steps: Object.freeze(
