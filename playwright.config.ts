@@ -9,11 +9,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: "http://localhost:5199", trace: "retain-on-failure" },
+  use: { baseURL: "http://localhost:5200", trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "bun run build && bun run playground:build && bun run playground:preview",
-    url: "http://localhost:5199",
+    // vite preview's port (playground/vite.config.ts), apart from the dev server's 5199.
+    url: "http://localhost:5200",
     env: { PLAYGROUND_DIST: "1" },
     // A server already on the port may be serving a stale build, so always start a fresh one.
     reuseExistingServer: false,

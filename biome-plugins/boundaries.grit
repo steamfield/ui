@@ -38,7 +38,7 @@ or {
     `new $cls($args)`,
     `$cls($args)`
   } as $t where {
-    $cls <: r"(?:(?:[A-Z][A-Za-z]*)?Error|DOMException)",
+    $cls <: r"(?:(?:globalThis|window|self)\.)?(?:(?:[A-Z][A-Za-z]*)?Error|DOMException)",
     $cls <: not "LibraryError",
     $filename <: r".*/src/.*",
     $filename <: not r".*\.test\.tsx?",

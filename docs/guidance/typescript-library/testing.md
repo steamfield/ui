@@ -18,7 +18,7 @@ Vitest runs two projects from `vitest.config.ts`. Never `bun test` or `--bun`.
 
 ## Habits
 
-- Fake timers and rAF the way `src/react/playback/playback.test.tsx` does. Globals are off, so React tests call `cleanup()` in `afterEach`.
+- `tests/helpers/library-setup.ts` runs for every library test: it unmounts React and Vue trees and restores real timers, and Vitest restores mocks and stubbed globals, so tests need no teardown of their own. Fake browser APIs with the shared helpers in `tests/helpers/dom.ts` (`stubIntersectionObserver`, `stubReducedMotion`, `setTabHidden`, `stubClipboard`, `stubExecCommand`, `stubAnimationFrame`) instead of writing a local copy.
 - When you strengthen a guard, prove it can fail: add a reject row, or add the violating code, watch the guard fail, then remove it.
 - Coverage thresholds (95/95/90/95) live in `vitest.config.ts` (`bun run coverage`). Cover a branch through the public function rather than lowering a threshold.
 - Scope a run with `bun run test <file>` or `bun run test -t "<name>"`, and read the counts: a filter that matches nothing passes with every test skipped.

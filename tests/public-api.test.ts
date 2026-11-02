@@ -1,6 +1,7 @@
 // Pins the public API: the runtime names and the type names each subpath entry exports. A change
-// here is a release decision (a new export is minor, a removed or renamed one is breaking; on 0.x both bump the
-// minor), so update the README section for that subpath and add a changeset in the same change.
+// here is a release decision (a new export is minor, a removed or renamed one is breaking; on 0.x
+// both bump the minor), so update the README section for that subpath and add a changeset in the
+// same change.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";

@@ -969,7 +969,7 @@ The package is on 0.x: a minor version is a breaking change, and a patch is anyt
 
 ## Development
 
-Requirements: Bun at the version in `packageManager` (`bun@1.4.2`) and Node at the version in `.node-version` (`26.13.0`). `engines.node` is `>=22`.
+Requirements: Bun at the version in `packageManager` (`bun@1.4.2`) and Node at the version in `.node-version` (`26.13.0`). `engines.node` is `>=22.18`.
 
 ```sh
 bun install

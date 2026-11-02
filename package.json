@@ -82,7 +82,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "build": "tsdown",

@@ -9,7 +9,7 @@ import { markdownSample } from "./markdown-plugin.ts";
 // the targets in package.json `exports`, so the browser suite checks the built package.
 const root = join(import.meta.dirname, "..");
 const fromDist = process.env.PLAYGROUND_DIST === "1";
-type Target = string | { readonly default?: string; readonly import?: string };
+type Target = string | { readonly default?: string };
 const { exports } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
   exports: Record<string, Target>;
 };
@@ -18,7 +18,7 @@ function targetOf(key: string): string {
   const sub = key.slice(2);
   if (!fromDist) return join(root, sub.endsWith(".css") ? `src/${sub}` : `src/${sub}/index.ts`);
   const target = exports[key];
-  const file = typeof target === "string" ? target : (target?.default ?? target?.import);
+  const file = typeof target === "string" ? target : target?.default;
   if (!file) throw new Error(`package.json exports["${key}"] has no default target`);
   return join(root, file);
 }
@@ -39,5 +39,6 @@ export default defineConfig({
     __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
   },
   server: { port: 5199, strictPort: true },
-  preview: { port: 5199, strictPort: true },
+  // The browser suite previews on its own port, so it never collides with a running dev server.
+  preview: { port: 5200, strictPort: true },
 });

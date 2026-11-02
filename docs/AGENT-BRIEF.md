@@ -44,8 +44,11 @@ comments, how tests are written, `data-part` hooks, `@layer sf` + `:where()` CSS
 - Accessibility baseline: keyboard operable, no `aria-live` on content that is still playing,
   `prefers-reduced-motion` renders the final state, deterministic final state for SSR/no-JS,
   nothing flashes more than 3 times a second.
-- Tests: Vitest + happy-dom for `src/`, Testing Library for React (call `cleanup()` in
-  `afterEach`; globals are off). Port the behavior tests from the source repos named in your task
+- Tests: Vitest + happy-dom for `src/`, Testing Library for React. `tests/helpers/library-setup.ts`
+  handles teardown (React/Vue unmount, real timers) for every library test; fake browser APIs
+  with the shared helpers in `tests/helpers/dom.ts` (`stubIntersectionObserver`,
+  `stubReducedMotion`, `setTabHidden`, `stubClipboard`, `stubExecCommand`,
+  `stubAnimationFrame`). Port the behavior tests from the source repos named in your task
   and adapt them to the shared API. Test behavior, not implementation. Keep coverage of your files
   at or above 95% statements/lines/functions and 90% branches.
 - Fix the bugs SURVEY.md lists for your component rather than porting them.

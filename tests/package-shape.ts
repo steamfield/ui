@@ -34,8 +34,6 @@ export function subpathOf(file: string): string {
 export interface ModuleImport {
   /** The specifier, or the argument's source text when a dynamic import isn't a fixed string. */
   readonly spec: string;
-  /** `import type`, `export type`, or `import("x").T` in a type position: gone from the JS. */
-  readonly typeOnly: boolean;
 }
 
 /** A fixed string argument (quoted, or a template literal without `${}`) without its quotes. */
@@ -53,7 +51,7 @@ function typeImports(node: unknown, found: ModuleImport[]): void {
   const record = node as Record<string, unknown>;
   if (record.type === "TSImportType") {
     const source = record.source as { value: unknown };
-    found.push({ spec: String(source.value), typeOnly: true });
+    found.push({ spec: String(source.value) });
   }
   for (const [key, child] of Object.entries(record)) {
     if (key !== "parent") typeImports(child, found);
@@ -71,19 +69,15 @@ export function importsOf(filename: string, text: string): ModuleImport[] {
   }
   const { staticImports, staticExports, dynamicImports } = parsed.module;
   const found: ModuleImport[] = [];
-  for (const { moduleRequest, entries: names } of staticImports) {
-    const typeOnly = names.length > 0 && names.every((name) => name.isType);
-    found.push({ spec: moduleRequest.value, typeOnly });
-  }
+  for (const { moduleRequest } of staticImports) found.push({ spec: moduleRequest.value });
   for (const statement of staticExports) {
     for (const entry of statement.entries) {
-      if (entry.moduleRequest)
-        found.push({ spec: entry.moduleRequest.value, typeOnly: entry.isType });
+      if (entry.moduleRequest) found.push({ spec: entry.moduleRequest.value });
     }
   }
   for (const { moduleRequest } of dynamicImports) {
     const source = text.slice(moduleRequest.start, moduleRequest.end);
-    found.push({ spec: literal(source) ?? source, typeOnly: false });
+    found.push({ spec: literal(source) ?? source });
   }
   typeImports(parsed.program, found);
   return found;

@@ -52,7 +52,9 @@ function run(command: string, args: string[], cwd: string): void {
   }
 }
 
-/** Installs the tarball (plus `deps`) into a copy of `fixture`, then typechecks and runs `files`. */
+/**
+ * Installs the tarball (plus `deps`) into a copy of `fixture`, then typechecks and runs `files`.
+ */
 function consume(
   tarball: string,
   fixture: string,

@@ -22,8 +22,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # changeset status compares the branch with origin/main.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
@@ -36,11 +34,33 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - name: Changeset present
-        if: github.event_name == 'pull_request'
-        run: bunx changeset status --since=origin/main
       # The same chain as local `bun run check`, so the two can't drift.
       - run: bun run check
+
+  # Its own job, so a missing changeset never hides the lint and test results in `checks`. It
+  # always runs (ci-ok requires it); the check itself only applies to pull requests that a person
+  # opened, since Dependabot's update PRs carry no changeset.
+  changeset:
+    name: Changeset present
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        with:
+          persist-credentials: false
+          # changeset status compares the branch with the base branch, so it needs the history.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        with:
+          bun-version-file: package.json
+      - if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        run: bun install --frozen-lockfile
+      - if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bunx changeset status --since="origin/$BASE_REF"
 
   consumer:
     name: Consumer on Node ${{ matrix.node }}
@@ -49,8 +69,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The engines floor. The .node-version leg runs inside `bun run check` in the checks job.
-        node: ["22"]
+        # The engines floor (engines.node in package.json): 22.18 is the first 22.x that strips
+        # types by default, which `node index.ts` needs. The .node-version leg runs inside
+        # `bun run check` in the checks job.
+        node: ["22.18.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,7 +124,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [checks, consumer, browser]
+    needs: [checks, changeset, consumer, browser]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

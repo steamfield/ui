@@ -1,7 +1,7 @@
 // A TypeScript user of the published package. scripts/consumer.ts installs the packed tarball
-// (plus the peers listed in CONSUMER_PEERS; tests/consumer-no-peers/ covers a consumer with none) next to this file, typechecks it under strict NodeNext
-// resolution, then runs it with Node. Keep it importing by package name, one block per subpath,
-// and add each new subpath here.
+// (plus the peers listed in CONSUMER_PEERS; tests/consumer-no-peers/ covers a consumer with
+// none) next to this file, typechecks it under strict NodeNext resolution, then runs it with
+// Node. Keep it importing by package name, one block per subpath, and add each new subpath here.
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
 import { createHastPlugins, createShikiConfig, type TablesOptions } from "@steamfield/ui/markdown";

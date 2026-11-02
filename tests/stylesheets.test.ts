@@ -20,6 +20,23 @@ const inKeyframes = (rule: Rule): boolean => {
   return false;
 };
 
+/**
+ * Whether the whole selector is one `:where(...)`, optionally followed by a pseudo-element (which
+ * can't sit inside it). Finds the paren that closes the opening `:where(`, skipping quoted
+ * attribute values, so `:where(.a) .b:is(.c)` is rejected.
+ */
+function wrappedInWhere(selector: string): boolean {
+  // Quoted attribute values may hold parens; blank them before counting.
+  const text = selector.trim().replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '""');
+  if (!text.startsWith(":where(")) return false;
+  let depth = 0;
+  for (let i = ":where".length; i < text.length; i++) {
+    if (text[i] === "(") depth++;
+    else if (text[i] === ")" && --depth === 0) return /^(::[a-z-]+)?$/.test(text.slice(i + 1));
+  }
+  return false;
+}
+
 /** Every `var(--name ...)` in `value`, with whether a fallback follows the name. */
 function varUses(value: string): { name: string; fallback: boolean }[] {
   return [...value.matchAll(/var\(\s*(--[\w-]+)\s*([,)])/g)].map((match) => ({
@@ -27,6 +44,19 @@ function varUses(value: string): { name: string; fallback: boolean }[] {
     fallback: match[2] === ",",
   }));
 }
+
+test.each([
+  [':where([data-part="tab"])', true],
+  [":where([data-heading-anchor])::before", true],
+  [":where(a:not(.x), b:is(.y))", true],
+  [':where([data-x=")"]) ', true],
+  [':where([data-part="tabs"]) button:not(.x)', false],
+  [":where(.a) .b:is(.c)", false],
+  [":where(.a):hover", false],
+  [".a", false],
+])("wrappedInWhere(%s) is %s", (selector, expected) => {
+  expect(wrappedInWhere(selector)).toBe(expected);
+});
 
 test("there are stylesheets to check", () => {
   expect(sheets.length).toBeGreaterThanOrEqual(7);
@@ -52,8 +82,7 @@ describe.each(sheets)("src/%s", (file) => {
     root.walkRules((rule) => {
       if (inKeyframes(rule)) return;
       for (const selector of rule.selectors) {
-        // A pseudo-element can't sit inside :where(), so it may follow it.
-        if (!/^:where\(.*\)(::[a-z-]+)?$/s.test(selector.trim())) bare.push(selector);
+        if (!wrappedInWhere(selector)) bare.push(selector);
       }
     });
     expect(bare).toEqual([]);
