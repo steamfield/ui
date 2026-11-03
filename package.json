@@ -1,6 +1,6 @@
 {
   "name": "@steamfield/ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tree-shakeable demo, copy, tabs and reveal components shared across the Steamfield landing and docs sites.",
   "license": "MIT",
   "type": "module",
