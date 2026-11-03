@@ -5,7 +5,12 @@ export type {
 } from "./agent-demo.tsx";
 export { AgentDemo } from "./agent-demo.tsx";
 export type { AgentDemoGlyphs, AgentDemoLabels, ToolInfo, ToolRegistry } from "./labels.ts";
-export type { AgentDemoLayout, ToolCallContext, ToolRenderer } from "./parts.tsx";
+export type {
+  AgentDemoLayout,
+  AgentDemoTranscript,
+  ToolCallContext,
+  ToolRenderer,
+} from "./parts.tsx";
 export type { StaticTranscriptProps } from "./static-transcript.tsx";
 export { StaticTranscript } from "./static-transcript.tsx";
 export type {

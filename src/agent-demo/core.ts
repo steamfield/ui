@@ -45,6 +45,11 @@ export interface AgentDemoLabels {
   readonly showCode: string;
   /** The count of left-out lines. Default `… +N lines`. */
   readonly more: (count: number) => string;
+  /**
+   * Shown under a running tool call in the terminal layout, behind the output glyph, such as
+   * "Running…". No default: unset, a running call shows nothing under its header.
+   */
+  readonly working?: string;
 }
 
 export const defaultLabels: AgentDemoLabels = Object.freeze({
@@ -124,6 +129,40 @@ export type ToolRegistry<TIcon = unknown> = Readonly<Record<string, ToolInfo<TIc
 
 /** The two looks over one set of parts. */
 export type AgentDemoLayout = "chat" | "terminal";
+
+/**
+ * The transcript's element. `as: "group"` (the default) is a `div` with `role="group"`, which isn't
+ * a landmark, so two demos on a page don't repeat one; `"region"` is a `<section>` landmark.
+ * Either carries the `transcript` label. `focusable` (default true) puts the scroller in the tab
+ * order, so keyboard users can scroll it.
+ */
+export interface AgentDemoTranscript {
+  readonly as?: "group" | "region";
+  readonly focusable?: boolean;
+}
+
+/** How the transcript element renders for `options`. */
+export function transcriptElement(options: AgentDemoTranscript | undefined): {
+  readonly tag: "div" | "section";
+  readonly role: "group" | undefined;
+  readonly tabIndex: 0 | undefined;
+} {
+  const region = options?.as === "region";
+  return {
+    tag: region ? "section" : "div",
+    role: region ? undefined : "group",
+    tabIndex: options?.focusable === false ? undefined : 0,
+  };
+}
+
+/** The text under a running tool call: `labels.working`, in the terminal layout only. */
+export function workingText(
+  labels: AgentDemoLabels,
+  layout: AgentDemoLayout,
+  running: boolean,
+): string | undefined {
+  return running && layout === "terminal" ? labels.working : undefined;
+}
 
 /** What the screen reader hears: one status message, that plus each finished beat, or nothing. */
 export type AnnounceMode = "status" | "beats" | "none";

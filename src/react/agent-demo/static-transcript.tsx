@@ -9,7 +9,12 @@ import {
   defaultLabels,
   type ToolRegistry,
 } from "./labels.ts";
-import { type AgentDemoLayout, type ToolRenderer, Transcript } from "./parts.tsx";
+import {
+  type AgentDemoLayout,
+  type AgentDemoTranscript,
+  type ToolRenderer,
+  Transcript,
+} from "./parts.tsx";
 
 export interface StaticTranscriptProps<TData = unknown> {
   readonly script: DemoScript<TData>;
@@ -24,6 +29,10 @@ export interface StaticTranscriptProps<TData = unknown> {
   readonly renderToolCall?: ToolRenderer<TData>;
   /** Called with `mode: "static"`. */
   readonly renderToolBody?: ToolRenderer<TData>;
+  /** As `AgentDemo`'s: each built-in tool card is an open `<details>`. Default false. */
+  readonly collapsible?: boolean;
+  /** As `AgentDemo`'s. Default a focusable `role="group"`. */
+  readonly transcript?: AgentDemoTranscript;
   readonly className?: string;
   readonly style?: CSSProperties;
   readonly privacyClassName?: string;
@@ -41,6 +50,8 @@ export function StaticTranscript<TData = unknown>({
   tools,
   renderToolCall,
   renderToolBody,
+  collapsible = false,
+  transcript,
   className,
   style,
   privacyClassName,
@@ -70,6 +81,8 @@ export function StaticTranscript<TData = unknown>({
           renderToolBody,
           mode: "static",
           steps: script.steps,
+          collapsible,
+          transcript,
         }}
       />
     </div>

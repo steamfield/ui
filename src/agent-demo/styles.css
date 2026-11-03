@@ -316,6 +316,26 @@
     padding-inline-start: 1ch;
   }
 
+  /* `labels.working` under a running call (terminal layout). */
+  :where([data-part="agent-demo"] [data-part="tool-working"]) {
+    color: var(--sf-muted, inherit);
+  }
+
+  /* `collapsible`: the header is the <details>' <summary>, laid out like the plain header. */
+  :where([data-part="agent-demo"] summary[data-part="tool-header"]) {
+    cursor: pointer;
+    list-style: none;
+  }
+
+  :where([data-part="agent-demo"] summary[data-part="tool-header"])::-webkit-details-marker {
+    display: none;
+  }
+
+  :where([data-part="agent-demo"] summary[data-part="tool-header"]:focus-visible) {
+    outline: 2px solid var(--sf-accent, Highlight);
+    outline-offset: 2px;
+  }
+
   /* Chat cards */
   :where([data-part="agent-demo"][data-layout="chat"] [data-part="tool-call"]) {
     overflow: hidden;
@@ -610,6 +630,13 @@
     }
 
     :where(
+        [data-sf-animating]:not([data-sf-motion="reduce"], [data-sf-motion="reduce"] *)
+          [data-part="tool-working"]
+      ) {
+      animation: sf-agent-demo-working 1.6s ease-in-out infinite;
+    }
+
+    :where(
         [data-sf-animating][data-layout="chat"]:not(
             [data-sf-motion="reduce"],
             [data-sf-motion="reduce"] *
@@ -668,6 +695,17 @@
     }
     50% {
       opacity: 0.9;
+    }
+  }
+
+  /* A gentle pulse for text, which stays readable at its faintest. */
+  @keyframes sf-agent-demo-working {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
     }
   }
 

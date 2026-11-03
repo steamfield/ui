@@ -148,6 +148,51 @@ describe.each([
   });
 });
 
+describe.each(["chat", "terminal"] as const)("extension points, %s layout", (layout) => {
+  const options = {
+    collapsible: true,
+    transcript: { as: "region", focusable: false },
+    labels: { working: "Running…" },
+  } as const;
+
+  test("StaticTranscript and AgentDemo's server render match React", async () => {
+    const statics = { script: everyKind, layout, tools, ...options };
+    const react = parse(renderToStaticMarkup(createElement(ReactStaticTranscript, statics)));
+    const vue = parse(
+      await renderToString(createSSRApp({ render: () => h(StaticTranscript, statics) })),
+    );
+    expect(outline(vue)).toEqual(outline(react));
+    expect(vue.querySelector('section[data-part="transcript"]')).not.toBeNull();
+    expect(vue.querySelectorAll('details[data-part="tool-call"]').length).toBeGreaterThan(3);
+    const props = { ...statics, chrome: { title: "session", className: "hero" } };
+    const reactDemo = parse(renderToStaticMarkup(createElement(ReactAgentDemo, props)));
+    const vueDemo = parse(
+      await renderToString(createSSRApp({ render: () => h(AgentDemo, props) })),
+    );
+    expect(outline(vueDemo)).toEqual(outline(reactDemo));
+    expect(vueDemo.querySelector('[data-part="window"]')?.getAttribute("class")).toBe("hero");
+  });
+
+  test("time mode matches React frame by frame, working line included", async () => {
+    stubAnimationFrame();
+    const props = { script: everyKind, layout, timing: presets.terminal, tools, ...options };
+    const react = renderReact(createElement(ReactAgentDemo, props));
+    const vue = mount(AgentDemo, { props });
+    await nextTick();
+    const duration = compile(everyKind, { timing: presets.terminal }).duration;
+    let working = false;
+    for (let t = 0; t <= duration + 400; t += 100) {
+      expect(outline(vue.element.parentElement as Element)).toEqual(outline(react.container));
+      working ||= vue.find('[data-part="tool-working"]').exists();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      await nextTick();
+    }
+    expect(working).toBe(layout === "terminal");
+  });
+});
+
 describe("live markup", () => {
   test("click mode matches React at every click, both ways", async () => {
     const clicks = compile(mcpBet).clickCount;

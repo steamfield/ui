@@ -12,6 +12,7 @@ import {
 } from "./labels.ts";
 import {
   type AgentDemoLayout,
+  type AgentDemoTranscript,
   Composer,
   type PartsConfig,
   srOnly,
@@ -56,8 +57,20 @@ export interface AgentDemoProps<TData = unknown> extends UseAgentDemoOptions<TDa
   readonly controls?: AgentDemoControlsProp<TData>;
   /** Content at the top of the demo, before the controls. */
   readonly header?: ReactNode;
-  /** Wraps the transcript in `DemoWindow` chrome, with the controls in its title bar. */
-  readonly chrome?: boolean | { readonly title?: ReactNode; readonly dots?: boolean };
+  /**
+   * Wraps the transcript in `DemoWindow` chrome, with the controls in its title bar. `className`
+   * goes on the window root, to size or shadow it.
+   */
+  readonly chrome?:
+    | boolean
+    | { readonly title?: ReactNode; readonly dots?: boolean; readonly className?: string };
+  /**
+   * Renders each built-in tool card as an open `<details>` with its header as the `<summary>`, so
+   * a reader can hide a call's output. Default false.
+   */
+  readonly collapsible?: boolean;
+  /** The transcript's landmark and tab stop. Default a focusable `role="group"`. */
+  readonly transcript?: AgentDemoTranscript;
   /** Default "status". */
   readonly announce?: AnnounceMode;
   readonly className?: string;
@@ -176,11 +189,12 @@ function Frame({
   readonly children: ReactNode;
 }): ReactElement {
   if (chrome) {
-    const { title, dots } = typeof chrome === "object" ? chrome : {};
+    const { title, dots, className } = typeof chrome === "object" ? chrome : {};
     return (
       <DemoWindow
         {...(title === undefined ? {} : { title })}
         {...(dots === undefined ? {} : { dots })}
+        {...(className === undefined ? {} : { className })}
         controls={controls}
       >
         {header !== undefined ? <div data-part="header">{header}</div> : null}
@@ -222,6 +236,8 @@ export function AgentDemo<TData = unknown>(props: AgentDemoProps<TData>): ReactE
     renderToolBody: props.renderToolBody,
     mode: demo.mode,
     steps: demo.timeline.script.steps,
+    collapsible: props.collapsible === true,
+    transcript: props.transcript,
   };
   const { view } = demo;
 

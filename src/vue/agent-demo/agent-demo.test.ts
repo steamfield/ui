@@ -1028,3 +1028,97 @@ describe("useAgentDemo element rules", () => {
     expect(hook().playing.value).toBe(true);
   });
 });
+
+describe("extension points", () => {
+  const running = (w: VueWrapper) => w.find('[data-part="tool-call"][data-status="running"]');
+
+  test("labels.working shows the output glyph and the text under a running call", async () => {
+    const w = await mountDemo({ labels: { working: "Running…" } });
+    await advance(startOf(1) + 100);
+    const body = running(w).find('[data-part="tool-body"]');
+    expect(body.find('[data-part="glyph"]').text()).toBe("⎿");
+    expect(body.find('[data-part="tool-working"]').text()).toBe("Running…");
+    await advance(TOTAL);
+    expect(w.find('[data-part="tool-working"]').exists()).toBe(false);
+    expect(region(w)).toContain('{"type":"result","status":"success"}');
+  });
+
+  test("without labels.working, and in the chat layout, a running call shows no working line", async () => {
+    const plain = await mountDemo();
+    await advance(startOf(1) + 100);
+    expect(running(plain).exists()).toBe(true);
+    expect(running(plain).find('[data-part="tool-body"]').exists()).toBe(false);
+    plain.unmount();
+    const chat = await mountDemo({
+      layout: "chat",
+      composer: false,
+      labels: { working: "Running…" },
+    });
+    await advance(startOf(1) + 100);
+    expect(running(chat).exists()).toBe(true);
+    expect(chat.find('[data-part="tool-working"]').exists()).toBe(false);
+  });
+
+  test("the terminal header wraps the args' parens in tool-paren parts, text unchanged", () => {
+    const script: DemoScript = { steps: [{ kind: "tool-call", name: "q", args: "select 1" }] };
+    const w = mount(StaticTranscript, { props: { script, layout: "terminal" } });
+    const args = w.find('[data-part="tool-args"]');
+    expect(args.text()).toBe("(select 1)");
+    expect(args.findAll('[data-part="tool-paren"]').map((p) => p.text())).toEqual(["(", ")"]);
+    const chat = mount(StaticTranscript, { props: { script } });
+    expect(chat.find('[data-part="tool-args"]').element.innerHTML).toBe("select 1");
+  });
+
+  test("collapsible renders each tool call as an open details with the header as its summary", async () => {
+    const html = await renderToString(
+      createSSRApp({
+        render: () =>
+          h(StaticTranscript, { script: terminalScript, layout: "terminal", collapsible: true }),
+      }),
+    );
+    expect(html).toMatch(/<details data-part="tool-call"[^>]* open/);
+    expect(html).toContain('<summary data-part="tool-header">');
+    const plain = await renderToString(
+      createSSRApp({ render: () => h(StaticTranscript, { script: terminalScript }) }),
+    );
+    expect(plain).not.toContain("<details");
+    expect(plain).not.toContain("<summary");
+  });
+
+  test("a collapsed tool call stays collapsed while playback re-renders it", async () => {
+    const w = await mountDemo({ collapsible: true });
+    await advance(startOf(1) + 100);
+    const details = w.find("details").element as HTMLDetailsElement;
+    expect(details.open).toBe(true);
+    expect(details.querySelector("summary")?.getAttribute("data-part")).toBe("tool-header");
+    details.open = false;
+    await advance(TOTAL);
+    expect(w.find("details").element).toBe(details);
+    expect(details.open).toBe(false);
+    expect(details.getAttribute("data-status")).toBe("done");
+  });
+
+  test("transcript picks the landmark and the focusability, defaulting to a focusable group", async () => {
+    const w = await mountDemo();
+    const el = () => w.find('[data-part="transcript"]');
+    expect(el().element.tagName).toBe("DIV");
+    expect(el().attributes("role")).toBe("group");
+    expect(el().attributes("tabindex")).toBe("0");
+    await w.setProps({ transcript: { as: "region" } });
+    expect(el().element.tagName).toBe("SECTION");
+    expect(el().attributes("role")).toBeUndefined();
+    expect(el().attributes("aria-label")).toBe("Demo transcript");
+    expect(el().attributes("tabindex")).toBe("0");
+    await w.setProps({ transcript: { focusable: false } });
+    expect(el().attributes("tabindex")).toBeUndefined();
+    const s = mount(StaticTranscript, {
+      props: { script: terminalScript, transcript: { as: "region" } },
+    });
+    expect(s.find('[data-part="transcript"]').element.tagName).toBe("SECTION");
+  });
+
+  test("chrome.className lands on the window root", async () => {
+    const w = await mountDemo({ chrome: { className: "hero-window" } });
+    expect(w.find('[data-part="window"]').classes()).toEqual(["hero-window"]);
+  });
+});

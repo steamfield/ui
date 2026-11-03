@@ -172,6 +172,12 @@
     margin-bottom: 0.75rem;
   }
 
+  /* chrome.className: a consumer sizing and shadowing the built-in window. */
+  .pg-hero-window {
+    max-width: 40rem;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  }
+
   @media (max-width: 40rem) {
     .pg-shell {
       grid-template-columns: minmax(0, 1fr);

@@ -168,6 +168,18 @@ export function AgentDemoPage(): ReactElement {
           }
         />
       </section>
+      <section className="pg-section" aria-labelledby="ad-extensions">
+        <h2 id="ad-extensions">Working line, collapsible calls, region transcript</h2>
+        <AgentDemo
+          script={terminal}
+          layout="terminal"
+          timing={presets.terminal}
+          chrome={{ title: "agent session", className: "pg-hero-window" }}
+          labels={{ transcript: "Collapsible transcript", working: "Running…" }}
+          collapsible
+          transcript={{ as: "region" }}
+        />
+      </section>
       <section className="pg-section" aria-labelledby="ad-click">
         <h2 id="ad-click">Click mode</h2>
         <ClickDeck />

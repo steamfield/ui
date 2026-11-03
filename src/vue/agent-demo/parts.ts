@@ -21,12 +21,15 @@ import {
   type AgentDemoGlyphs,
   type AgentDemoLabels,
   type AgentDemoLayout,
+  type AgentDemoTranscript,
   type ToolInfo as BaseToolInfo,
   type ToolRegistry as BaseToolRegistry,
   promptFor,
   spinnerFrame,
   toolHidden,
   toolName,
+  transcriptElement,
+  workingText,
 } from "../../agent-demo/core.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
@@ -36,6 +39,7 @@ export type {
   AgentDemoGlyphs,
   AgentDemoLabels,
   AgentDemoLayout,
+  AgentDemoTranscript,
   AnnounceMode,
 } from "../../agent-demo/core.ts";
 
@@ -79,6 +83,9 @@ export interface PartsConfig<TData> {
   readonly toolBody: ToolSlot<TData> | undefined;
   readonly mode: "static" | "live";
   readonly steps: readonly Step<TData>[];
+  /** Each built-in tool card is an open `<details>` with the header as its `<summary>`. */
+  readonly collapsible: boolean;
+  readonly transcript: AgentDemoTranscript | undefined;
 }
 
 /** Visually hidden, still read. Inline so it holds without the stylesheet. */
@@ -285,14 +292,25 @@ function toolHeader<TData>(
   const name = terminal
     ? terminalToolName(step, config)
     : toolName(config.tools, step, config.layout, running);
-  return h("div", { "data-part": "tool-header" }, [
+  // Collapsible cards use the header as the native disclosure toggle.
+  return h(config.collapsible ? "summary" : "div", { "data-part": "tool-header" }, [
     statusPip(running, entry.status === "error", config, frame),
     iconValue
       ? h("span", { "data-part": "tool-icon", "aria-hidden": "true" }, [icon(iconValue)])
       : null,
     h("span", { "data-part": "tool-label" }, name),
     step.args !== undefined
-      ? h("span", { "data-part": "tool-args" }, terminal ? `(${step.args})` : step.args)
+      ? h(
+          "span",
+          { "data-part": "tool-args" },
+          terminal
+            ? [
+                h("span", { "data-part": "tool-paren" }, "("),
+                step.args,
+                h("span", { "data-part": "tool-paren" }, ")"),
+              ]
+            : step.args,
+        )
       : null,
     step.meta ? h("span", { "data-part": "tool-meta" }, step.meta) : null,
   ]);
@@ -314,6 +332,13 @@ function toolBodyContent<TData>(
  */
 function toolSection<TData>(ctx: ToolCallContext<TData>, config: PartsConfig<TData>): VNode | null {
   const { step, entry, loading } = ctx;
+  const working = workingText(config.labels, config.layout, entry.status === "running");
+  if (working) {
+    return h("div", { "data-part": "tool-body" }, [
+      glyph(config.glyphs.output),
+      h("div", { "data-part": "tool-working" }, working),
+    ]);
+  }
   if (step.output === undefined && step.body === undefined) return null;
   const terminal = config.layout === "terminal";
   const shown = terminal ? (entry.visibleLines ?? []) : (step.output ?? []);
@@ -338,14 +363,16 @@ function toolCard<TData>(
 ): VNode {
   const { step, entry } = ctx;
   const accent = config.tools?.[step.name]?.accent;
+  // Rendered open and never set again, so a reader's collapse holds while playback re-renders.
   return h(
-    "div",
+    config.collapsible ? "details" : "div",
     {
       "data-part": "tool-call",
       "data-status": entry.status ?? step.status ?? "done",
       "data-phase": entry.phase,
       "data-tool": step.name,
       ...(accent ? { style: { "--sf-tool-accent": accent } } : {}),
+      ...(config.collapsible ? { open: true } : {}),
     },
     [toolHeader(ctx, config, frame), toolSection(ctx, config)],
   );
@@ -410,17 +437,19 @@ function entryNodes<TData>(
 /**
  * The scrollable transcript: an outer `column-reverse` scroller around an inner `column`, so it
  * anchors to the bottom without JS, leaves a reader who scrolled up alone, and keeps DOM order
- * equal to visual order. Focusable so keyboard users can scroll it. A named group rather than a
- * landmark, so two demos on one page don't repeat a region.
+ * equal to visual order. Focusable by default so keyboard users can scroll it. A named group by
+ * default rather than a landmark, so two demos on one page don't repeat a region; `transcript`
+ * picks a `<section>` region or drops the tab stop.
  */
 export function transcript<TData>(view: DemoView<TData>, config: PartsConfig<TData>): VNode {
   const frame = spinnerFrame(config.glyphs.spinner, view.elapsed);
+  const { tag, role, tabIndex } = transcriptElement(config.transcript);
   return h(
-    "div",
+    tag,
     {
       "data-part": "transcript",
-      role: "group",
-      tabindex: 0,
+      role,
+      tabindex: tabIndex,
       "aria-label": config.labels.transcript,
     },
     [

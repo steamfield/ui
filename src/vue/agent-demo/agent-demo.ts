@@ -11,6 +11,7 @@ import {
   type AgentDemoGlyphs,
   type AgentDemoLabels,
   type AgentDemoLayout,
+  type AgentDemoTranscript,
   type AnnounceMode,
   defaultGlyphs,
   defaultLabels,
@@ -42,8 +43,13 @@ import {
  */
 export type AgentDemoControlsMode = "inline" | "full" | "none";
 
-/** Window chrome: true for the default window, or a title and whether to draw the dots. */
-export type AgentDemoChrome = boolean | { readonly title?: string; readonly dots?: boolean };
+/**
+ * Window chrome: true for the default window, or a title, whether to draw the dots, and a class
+ * for the window root (to size or shadow it).
+ */
+export type AgentDemoChrome =
+  | boolean
+  | { readonly title?: string; readonly dots?: boolean; readonly className?: string };
 
 export interface AgentDemoProps
   extends Omit<UseAgentDemoOptions, "position" | "active" | "onStepStart" | "onComplete"> {
@@ -65,6 +71,13 @@ export interface AgentDemoProps
   readonly header?: string | undefined;
   /** Wraps the transcript in window chrome, with the controls in its title bar. */
   readonly chrome?: AgentDemoChrome | undefined;
+  /**
+   * Renders each built-in tool card as an open `<details>` with its header as the `<summary>`, so
+   * a reader can hide a call's output. Default false.
+   */
+  readonly collapsible?: boolean | undefined;
+  /** The transcript's landmark and tab stop. Default a focusable `role="group"`. */
+  readonly transcript?: AgentDemoTranscript | undefined;
   /** Default "status". */
   readonly announce?: AnnounceMode | undefined;
   /** Added to the root's class, for session-recording opt-outs such as "ph-no-capture". */
@@ -189,8 +202,8 @@ function windowFrame(
   controls: VNodeChild,
   body: VNodeChild[],
 ): VNode {
-  const { title, dots = true } = typeof chrome === "object" ? chrome : {};
-  return h("div", { "data-part": "window" }, [
+  const { title, dots = true, className } = typeof chrome === "object" ? chrome : {};
+  return h("div", { "data-part": "window", ...(className ? { class: className } : {}) }, [
     h("div", { "data-part": "window-bar" }, [
       dots
         ? h("span", { "data-part": "window-dots", "aria-hidden": "true" }, [
@@ -218,6 +231,8 @@ const PROPS = {
   controls: null,
   header: null,
   chrome: { type: [Boolean, Object] as PropType<AgentDemoChrome>, default: undefined },
+  collapsible: { type: Boolean, default: undefined },
+  transcript: null,
   announce: null,
   privacyClassName: null,
   position: null,
@@ -338,6 +353,8 @@ export const AgentDemo: DefineSetupFnComponent<
         toolBody: slots.toolBody,
         mode: demo.mode.value,
         steps: demo.timeline.value.script.steps,
+        collapsible: props.collapsible === true,
+        transcript: props.transcript,
       };
       const composer = view.composer
         ? h(Composer, { ...view.composer, layout: layout(), labels, glyphs })

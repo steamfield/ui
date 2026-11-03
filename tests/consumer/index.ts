@@ -9,6 +9,7 @@ import { createPlaybackGate, type GateState } from "@steamfield/ui/playback";
 import {
   AgentDemo,
   type AgentDemoProps,
+  type AgentDemoTranscript,
   StaticTranscript,
   useAgentDemo,
 } from "@steamfield/ui/react/agent-demo";
@@ -46,6 +47,7 @@ import {
   useAgentDemo as useVueAgentDemo,
   AgentDemo as VueAgentDemo,
   type AgentDemoProps as VueAgentDemoProps,
+  type AgentDemoTranscript as VueAgentDemoTranscript,
   StaticTranscript as VueStaticTranscript,
 } from "@steamfield/ui/vue/agent-demo";
 import { createElement } from "react";
@@ -135,6 +137,26 @@ check(
   toolHtml.includes('data-part="tool-server">db</span> · <span data-part="tool-name">query'),
   "terminal tool header parts",
 );
+// The opt-in extension points: a working line, paren parts, collapsible cards, a region
+// transcript and a window class.
+const region: AgentDemoTranscript = { as: "region", focusable: false };
+const extendedHtml = renderToStaticMarkup(
+  createElement(AgentDemo, {
+    script: { steps: [{ kind: "tool-call", name: "q", args: "x" }] },
+    layout: "terminal",
+    labels: { working: "Running…" },
+    collapsible: true,
+    transcript: region,
+    chrome: { className: "hero" },
+  }),
+);
+check(
+  extendedHtml.includes('<section data-part="transcript" aria-label="Demo transcript">') &&
+    extendedHtml.includes('<summary data-part="tool-header">') &&
+    extendedHtml.includes('<span data-part="tool-paren">(</span>x') &&
+    extendedHtml.includes('class="hero"'),
+  "AgentDemo extension points",
+);
 const windowProps: DemoWindowProps = { title: "session", label: "Example" };
 check(
   renderToStaticMarkup(createElement(DemoWindow, windowProps)).includes("session"),
@@ -158,6 +180,22 @@ const vueToolHtml = await renderToString(
   }),
 );
 check(vueToolHtml.includes('data-part="tool-server"'), "Vue terminal tool header parts");
+const vueRegion: VueAgentDemoTranscript = { as: "region" };
+const vueExtendedHtml = await renderToString(
+  createSSRApp({
+    render: () =>
+      h(VueStaticTranscript, {
+        script: toolScript,
+        layout: "terminal",
+        collapsible: true,
+        transcript: vueRegion,
+      }),
+  }),
+);
+check(
+  vueExtendedHtml.includes("<section") && vueExtendedHtml.includes("<summary"),
+  "Vue StaticTranscript extension points",
+);
 const vueDemoHtml = await renderToString(createSSRApp({ render: () => h(VueAgentDemo, vueProps) }));
 check(vueDemoHtml.includes("data-sf-agent-demo"), "Vue AgentDemo SSR");
 check(typeof useVueAgentDemo === "function", "Vue useAgentDemo export");

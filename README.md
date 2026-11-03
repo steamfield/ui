@@ -165,7 +165,7 @@ import {
 } from "@steamfield/ui/react/agent-demo";
 ```
 
-Also exported as types: `AgentDemoProps`, `AgentDemoControlsProp`, `AnnounceMode`, `AgentDemoLabels`, `AgentDemoGlyphs`, `ToolInfo`, `ToolRegistry`, `AgentDemoLayout`, `ToolCallContext`, `ToolRenderer`, `StaticTranscriptProps`, `AgentDemoControls`, `UseAgentDemoOptions`, `UseAgentDemoResult`.
+Also exported as types: `AgentDemoProps`, `AgentDemoControlsProp`, `AnnounceMode`, `AgentDemoLabels`, `AgentDemoGlyphs`, `ToolInfo`, `ToolRegistry`, `AgentDemoLayout`, `AgentDemoTranscript`, `ToolCallContext`, `ToolRenderer`, `StaticTranscriptProps`, `AgentDemoControls`, `UseAgentDemoOptions`, `UseAgentDemoResult`.
 
 #### `useAgentDemo(script, options?)`
 
@@ -223,7 +223,9 @@ All hook options plus:
 | `stage` | `(view) => ReactNode` | none | Content beside the transcript that follows the view, such as a live chart |
 | `controls` | `"inline" \| "full" \| "none" \| (demo) => ReactNode` | `"inline"` | `"inline"` is one play/pause/replay button; `"full"` adds turn jumps, Next and a 1x/2x speed toggle; a function renders your own |
 | `header` | `ReactNode` | none | Content at the top, before the controls |
-| `chrome` | `boolean \| { title?, dots? }` | none | Wrap the transcript in `DemoWindow`, with controls in its title bar. Needs `window/styles.css` |
+| `chrome` | `boolean \| { title?, dots?, className? }` | none | Wrap the transcript in `DemoWindow`, with controls in its title bar. `className` goes on the window root, to size or shadow it. Needs `window/styles.css` |
+| `collapsible` | `boolean` | `false` | Render each built-in tool card as `<details open>` with its header as the `<summary>`, so a reader can hide a call's output. Native disclosure: works without JavaScript and from the keyboard, and a reader's collapse holds while playback continues. `renderToolCall` replacements are left as they are |
+| `transcript` | `AgentDemoTranscript` (`{ as?: "group" \| "region"; focusable?: boolean }`) | `{ as: "group", focusable: true }` | The transcript element. `"region"` renders a `<section>` landmark with the `transcript` label (use it when the page has one demo); `focusable: false` drops its tab stop (only when it can't scroll, or axe's `scrollable-region-focusable` fails) |
 | `announce` | `"status" \| "beats" \| "none"` | `"status"` | One `role="status"` message; `"beats"` adds a polite live region with each finished beat; `"none"` nothing |
 | `className`, `style` | | none | On the root |
 | `privacyClassName` | `string` | none | Appended to the root class, for session-recording opt-outs such as `"ph-no-capture"` |
@@ -232,13 +234,13 @@ Custom tool rendering follows one rule in React and Vue: a `renderToolCall` or `
 
 `ToolCallContext` (what the render props receive): `step`, `entry`, `index`, `loading` (still running, or the body has not revealed), `mode` (`"static"` on the server, before hydration and in `StaticTranscript`; `"live"` once hydrated). Render something server-safe for `"static"`.
 
-Default labels (`AgentDemoLabels`): `play` "Play", `pause` "Pause", `replay` "Replay", `completeStatus` "Demo complete.", `idleStatus` "Example agent session.", `you` "You", `agent` "Agent", `running` "Running", `done` "Completed", `failed` "Failed", `thinking` "Agent thinking", `placeholder` "Message the agent…", `next` "Next", `speed` "Playback speed", `jumpToTurn` "Jump to turn", `transcript` "Demo transcript", `showCode` "Show code", `more(count)` `… +N lines`.
+Default labels (`AgentDemoLabels`): `play` "Play", `pause` "Pause", `replay` "Replay", `completeStatus` "Demo complete.", `idleStatus` "Example agent session.", `you` "You", `agent` "Agent", `running` "Running", `done` "Completed", `failed` "Failed", `thinking` "Agent thinking", `placeholder` "Message the agent…", `next` "Next", `speed` "Playback speed", `jumpToTurn` "Jump to turn", `transcript` "Demo transcript", `showCode` "Show code", `more(count)` `… +N lines`. One label has no default: `working` (such as "Running…") is shown under a running tool call in the terminal layout, behind the `output` glyph, in a `tool-working` part that pulses while animating. Unset, a running call shows nothing under its header. The chat layout ignores it, since its skeleton already marks a running call.
 
 Default glyphs (`AgentDemoGlyphs`): `prompt` `$`, `user` `❯`, `agent` `●`, `output` `⎿`, `ok` `✓`, `fail` `✕`, `submit` `↵`, `spinner` ten braille frames at 80ms each, `serverSeparator` `" "`. The glyphs are hidden from assistive tech, except `serverSeparator`, which is plain text between a tool's server and name in the terminal header so the two words aren't read as one.
 
 #### `<StaticTranscript>`
 
-The finished transcript with no playback, controls or composer, in the same parts and CSS. It reads no browser state, so it renders on the server; place it outside a client-only island as the no-JS fallback. Props: `script` (required), `layout` (`"chat"`), `finalPolicy` (`"all"`), `labels`, `glyphs`, `tools`, `renderToolCall`, `renderToolBody`, `className`, `style`, `privacyClassName`. It sets `data-static` on the root.
+The finished transcript with no playback, controls or composer, in the same parts and CSS. It reads no browser state, so it renders on the server; place it outside a client-only island as the no-JS fallback. Props: `script` (required), `layout` (`"chat"`), `finalPolicy` (`"all"`), `labels`, `glyphs`, `tools`, `renderToolCall`, `renderToolBody`, `collapsible`, `transcript`, `className`, `style`, `privacyClassName`. It sets `data-static` on the root.
 
 #### Styling hooks
 
@@ -259,7 +261,7 @@ CSS variables (set on the demo or an ancestor), besides the base tokens:
 
 Root attributes: `data-sf-agent-demo`, `data-part="agent-demo"`, `data-layout="chat|terminal"`, `data-sf-animating` (hydrated and playing), `data-paused`, `data-complete`, `data-static` (`StaticTranscript`).
 
-`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`), `tool-header`, `tool-status`, `tool-icon`, `tool-label` (in the terminal layout it holds `tool-server`, the separator text and `tool-name`), `tool-args`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
+`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`; a `<details>` under `collapsible`), `tool-header` (its `<summary>` under `collapsible`), `tool-status`, `tool-icon`, `tool-label` (in the terminal layout it holds `tool-server`, the separator text and `tool-name`), `tool-args` (in the terminal layout it holds a `tool-paren` span on each side of the args text), `tool-paren`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `tool-working`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
 
 To show a terminal tool header as `server · name` with the server dimmed, set `glyphs={{ serverSeparator: " · " }}` and style the part:
 
@@ -267,7 +269,14 @@ To show a terminal tool header as `server · name` with the server dimmed, set `
 [data-part="agent-demo"] [data-part="tool-server"] { color: var(--sf-muted); font-weight: 400; }
 ```
 
-The transcript is a `column-reverse` scroller around a column, so the newest line stays in view without JavaScript and a reader who scrolled up is left alone. It is focusable so keyboard users can scroll it, and it is a named `role="group"` rather than a landmark, so two demos on one page don't repeat a region. Its height is `--sf-demo-height` (default `20rem`).
+To color a terminal call's args apart from its parens, style the two parts:
+
+```css
+[data-part="agent-demo"] [data-part="tool-args"] { color: var(--sf-fg); }
+[data-part="agent-demo"] [data-part="tool-paren"] { color: var(--sf-muted); }
+```
+
+The transcript is a `column-reverse` scroller around a column, so the newest line stays in view without JavaScript and a reader who scrolled up is left alone. By default it is focusable so keyboard users can scroll it, and a named `role="group"` rather than a landmark, so two demos on one page don't repeat a region; the `transcript` prop changes either. Its height is `--sf-demo-height` (default `20rem`).
 
 #### Without JavaScript
 
@@ -865,7 +874,7 @@ import "@steamfield/ui/agent-demo/styles.css";
 import { AgentDemo, StaticTranscript, useAgentDemo } from "@steamfield/ui/vue/agent-demo";
 ```
 
-Also exported as types: `AgentDemoProps`, `AgentDemoSlots`, `AgentDemoSlotState`, `AgentDemoControlsMode`, `AgentDemoChrome`, `AgentDemoLabels`, `AgentDemoGlyphs`, `AgentDemoLayout`, `AnnounceMode`, `ToolInfo`, `ToolIcon`, `ToolRegistry`, `ToolSlot`, `ToolCallContext`, `StaticTranscriptProps`, `StaticTranscriptSlots`, `AgentDemoControls`, `UseAgentDemoOptions`, `UseAgentDemoResult`.
+Also exported as types: `AgentDemoProps`, `AgentDemoSlots`, `AgentDemoSlotState`, `AgentDemoControlsMode`, `AgentDemoChrome`, `AgentDemoTranscript`, `AgentDemoLabels`, `AgentDemoGlyphs`, `AgentDemoLayout`, `AnnounceMode`, `ToolInfo`, `ToolIcon`, `ToolRegistry`, `ToolSlot`, `ToolCallContext`, `StaticTranscriptProps`, `StaticTranscriptSlots`, `AgentDemoControls`, `UseAgentDemoOptions`, `UseAgentDemoResult`.
 
 The Vue binding renders the same elements, `data-part` values, ARIA and text as `react/agent-demo` (a contract test holds the two together), so `agent-demo/styles.css`, the styling hooks and the no-JS behavior above apply unchanged. It needs `vue` `^3.5`.
 
@@ -910,7 +919,7 @@ With `AgentDemo`, pass the same values as props: `<AgentDemo :script="script" :p
 
 ### `<AgentDemo>`
 
-Props are the composable's options plus the React component's display props, under the same names and defaults: `script` (required), `layout`, `labels`, `glyphs`, `tools`, `controls` (`"inline" | "full" | "none"`), `header` (a string; the `header` slot takes markup), `chrome`, `announce` and `privacyClassName`. `position` and `active` take plain values here (Vue unwraps the ref for you). `class` and `style` fall through to the root. `@step-start` and `@complete` bind the `onStepStart` and `onComplete` options; they are props, not emits.
+Props are the composable's options plus the React component's display props, under the same names and defaults: `script` (required), `layout`, `labels`, `glyphs`, `tools`, `controls` (`"inline" | "full" | "none"`), `header` (a string; the `header` slot takes markup), `chrome` (`AgentDemoChrome`, with `className` for the window root), `collapsible`, `transcript` (`AgentDemoTranscript`), `announce` and `privacyClassName`. `labels.working` works as in React. `position` and `active` take plain values here (Vue unwraps the ref for you). `class` and `style` fall through to the root. `@step-start` and `@complete` bind the `onStepStart` and `onComplete` options; they are props, not emits.
 
 `ToolRegistry` icons may be a string, a VNode or a component.
 
@@ -934,7 +943,7 @@ Slots replace React's render props:
 
 ### `<StaticTranscript>`
 
-The finished transcript with no playback, controls or composer, in the same parts and CSS. It reads no browser state, so it renders on the server and in print or PDF export. Props: `script` (required), `layout` (`"chat"`), `finalPolicy` (`"all"`), `labels`, `glyphs`, `tools`, `privacyClassName`; slots `toolCall` and `toolBody`, called with `mode: "static"`. It sets `data-static` on the root.
+The finished transcript with no playback, controls or composer, in the same parts and CSS. It reads no browser state, so it renders on the server and in print or PDF export. Props: `script` (required), `layout` (`"chat"`), `finalPolicy` (`"all"`), `labels`, `glyphs`, `tools`, `collapsible`, `transcript`, `privacyClassName`; slots `toolCall` and `toolBody`, called with `mode: "static"`. It sets `data-static` on the root.
 
 ### Without JavaScript
 

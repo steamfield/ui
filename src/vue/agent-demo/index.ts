@@ -10,6 +10,7 @@ export type {
   AgentDemoGlyphs,
   AgentDemoLabels,
   AgentDemoLayout,
+  AgentDemoTranscript,
   AnnounceMode,
   ToolCallContext,
   ToolIcon,

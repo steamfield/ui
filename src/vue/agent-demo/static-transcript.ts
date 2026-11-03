@@ -9,6 +9,7 @@ import {
   type AgentDemoGlyphs,
   type AgentDemoLabels,
   type AgentDemoLayout,
+  type AgentDemoTranscript,
   defaultGlyphs,
   defaultLabels,
 } from "../../agent-demo/core.ts";
@@ -26,6 +27,10 @@ export interface StaticTranscriptProps {
   readonly labels?: Partial<AgentDemoLabels> | undefined;
   readonly glyphs?: Partial<AgentDemoGlyphs> | undefined;
   readonly tools?: ToolRegistry | undefined;
+  /** As `AgentDemo`'s: each built-in tool card is an open `<details>`. Default false. */
+  readonly collapsible?: boolean | undefined;
+  /** As `AgentDemo`'s. Default a focusable `role="group"`. */
+  readonly transcript?: AgentDemoTranscript | undefined;
   readonly privacyClassName?: string | undefined;
 }
 
@@ -70,6 +75,8 @@ export const StaticTranscript: DefineSetupFnComponent<
             toolBody: slots.toolBody,
             mode: "static",
             steps: props.script.steps,
+            collapsible: props.collapsible === true,
+            transcript: props.transcript,
           }),
         ],
       );
@@ -83,6 +90,8 @@ export const StaticTranscript: DefineSetupFnComponent<
       labels: null,
       glyphs: null,
       tools: null,
+      collapsible: { type: Boolean, default: undefined },
+      transcript: null,
       privacyClassName: null,
     },
     slots: Object as SlotsType<StaticTranscriptSlots>,

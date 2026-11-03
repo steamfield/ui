@@ -1009,3 +1009,95 @@ function Inline({ n }: { n: number }) {
   });
   return <span data-testid="inline">{`${n}:${demo.view.entries.length}`}</span>;
 }
+
+describe("extension points", () => {
+  const running = () => document.querySelector('[data-part="tool-call"][data-status="running"]');
+
+  test("labels.working shows the output glyph and the text under a running call", () => {
+    render(<Terminal labels={{ working: "Running…" }} />);
+    advance(startOf(1) + 100);
+    const body = running()?.querySelector('[data-part="tool-body"]');
+    expect(body?.querySelector('[data-part="glyph"]')?.textContent).toBe("⎿");
+    expect(body?.querySelector('[data-part="tool-working"]')?.textContent).toBe("Running…");
+    advance(TOTAL);
+    expect(document.querySelector('[data-part="tool-working"]')).toBeNull();
+    expect(region().textContent).toContain('{"type":"result","status":"success"}');
+  });
+
+  test("without labels.working, and in the chat layout, a running call shows no working line", () => {
+    render(<Terminal />);
+    advance(startOf(1) + 100);
+    expect(running()).not.toBeNull();
+    expect(running()?.querySelector('[data-part="tool-body"]')).toBeNull();
+    cleanup();
+    render(
+      <AgentDemo
+        script={terminalScript}
+        timing={presets.terminal}
+        composer={false}
+        labels={{ working: "Running…" }}
+      />,
+    );
+    advance(startOf(1) + 100);
+    expect(running()).not.toBeNull();
+    expect(document.querySelector('[data-part="tool-working"]')).toBeNull();
+  });
+
+  test("the terminal header wraps the args' parens in tool-paren parts, text unchanged", () => {
+    const script: DemoScript = { steps: [{ kind: "tool-call", name: "q", args: "select 1" }] };
+    const { container } = render(<StaticTranscript script={script} layout="terminal" />);
+    const args = container.querySelector('[data-part="tool-args"]');
+    expect(args?.textContent).toBe("(select 1)");
+    expect(
+      [...(args?.querySelectorAll('[data-part="tool-paren"]') ?? [])].map((p) => p.textContent),
+    ).toEqual(["(", ")"]);
+    cleanup();
+    const chat = render(<StaticTranscript script={script} />);
+    expect(chat.container.querySelector('[data-part="tool-args"]')?.innerHTML).toBe("select 1");
+  });
+
+  test("collapsible renders each tool call as an open details with the header as its summary", () => {
+    const html = renderToStaticMarkup(
+      <StaticTranscript script={terminalScript} layout="terminal" collapsible />,
+    );
+    expect(html).toMatch(/<details data-part="tool-call"[^>]* open=""/);
+    expect(html).toContain('<summary data-part="tool-header">');
+    const plain = renderToStaticMarkup(<StaticTranscript script={terminalScript} />);
+    expect(plain).not.toContain("<details");
+    expect(plain).not.toContain("<summary");
+  });
+
+  test("a collapsed tool call stays collapsed while playback re-renders it", () => {
+    render(<Terminal collapsible />);
+    advance(startOf(1) + 100);
+    const details = document.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(true);
+    expect(details.querySelector("summary")?.getAttribute("data-part")).toBe("tool-header");
+    details.open = false;
+    advance(TOTAL);
+    expect(document.querySelector("details")).toBe(details);
+    expect(details.open).toBe(false);
+    expect(details.getAttribute("data-status")).toBe("done");
+  });
+
+  test("transcript picks the landmark and the focusability, defaulting to a focusable group", () => {
+    const { rerender } = render(<Terminal />);
+    expect(region().tagName).toBe("DIV");
+    expect(region().getAttribute("tabindex")).toBe("0");
+    rerender(<Terminal transcript={{ as: "region" }} />);
+    const section = screen.getByRole("region", { name: "Demo transcript" });
+    expect(section.tagName).toBe("SECTION");
+    expect(section.getAttribute("role")).toBeNull();
+    expect(section.getAttribute("tabindex")).toBe("0");
+    rerender(<Terminal transcript={{ focusable: false }} />);
+    expect(region().hasAttribute("tabindex")).toBe(false);
+    cleanup();
+    render(<StaticTranscript script={terminalScript} transcript={{ as: "region" }} />);
+    expect(screen.getByRole("region", { name: "Demo transcript" }).tagName).toBe("SECTION");
+  });
+
+  test("chrome.className lands on the window root", () => {
+    const { container } = render(<Terminal chrome={{ className: "hero-window" }} />);
+    expect(container.querySelector('[data-part="window"]')?.className).toBe("hero-window");
+  });
+});

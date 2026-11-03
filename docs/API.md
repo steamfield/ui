@@ -162,14 +162,17 @@ const demo = useAgentDemo(script, {
   script={script}
   layout="chat" | "terminal"                       // default "chat"
   labels={{ play, pause, replay, completeStatus, idleStatus, you, agent, running, done,
-            failed, thinking, placeholder, next, speed, jumpToTurn, transcript, showCode, more }}
+            failed, thinking, placeholder, next, speed, jumpToTurn, transcript, showCode, more,
+            working? }}                                   // working: no default; terminal only
   glyphs={{ prompt, user, agent, output, ok, fail, submit, spinner, serverSeparator }}
   tools={{ [name]: { label, runningLabel, icon?, accent? } }}   // consumer registry
   renderToolCall?={(ctx) => ReactNode | undefined}              // whole card
   renderToolBody?={(ctx) => ReactNode | undefined}              // body only; ctx: { step, entry, index, loading, mode: "static" | "live" }
   stage?={(view) => ReactNode}                                  // e.g. OpenChart's live chart pane
   controls?="inline" | "full" | "none" | ((demo) => ReactNode)  // default "inline"
-  header?={node}  chrome?={boolean | { title?, dots? }}
+  header?={node}  chrome?={boolean | { title?, dots?, className? }}
+  collapsible?: boolean                                         // default false: tool cards as <details open>
+  transcript?={{ as?: "group" | "region", focusable?: boolean }} // default { as: "group", focusable: true }
   composer?: boolean                                            // default: layout === "chat"
   announce?="status" | "beats" | "none"            // default "status": one sr-only role=status, no live region on playing content
   className?, style?, privacyClassName?            // e.g. "ph-no-capture"
@@ -203,6 +206,8 @@ The server and pre-hydration render are `finalState(finalPolicy)`. Entrance CSS 
 
 **Deviation:** `StaticTranscript` takes no timing, seed or composer: it compiles with the defaults and renders `finalState`. It sets `data-static` on the root instead of `data-sf-animating`.
 
+**Addition (0.1.x):** five opt-in extension points, so a site that renders its own markup over `useAgentDemo` (stacks-api's hero) can use `AgentDemo` instead. `labels.working` shows a `tool-working` line behind the output glyph under a running terminal call (the chat layout keeps its skeleton). The terminal header's args render as `tool-args` holding `tool-paren` spans around the args text, so the parens can be colored apart; the visible text is unchanged. `collapsible` renders each built-in tool card as `<details open>` with the header as `<summary>`, a native disclosure that works without JS. `transcript` picks a `<section>` region instead of the named group, and can drop the tab stop; the rule lives in `transcriptElement` in `agent-demo/core.ts`, beside `workingText`. `chrome.className` lands on the window root. `StaticTranscript` takes `collapsible` and `transcript` too, so the no-JS fallback matches.
+
 The agent demo's `data-part` values, `data-layout`, `data-from`, `data-status`, `data-tone`, `data-phase` and the `--sf-demo-*` and `--sf-tool-accent` variables live in `agent-demo/styles.css`, so a Vue renderer shares them.
 
 ## vue/agent-demo
@@ -213,9 +218,9 @@ useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<Us
 //      timeline, clickMode, playCount } as refs/computeds, plus controls and el (template ref)
 // options: React's, with position and active as MaybeRefOrGetter (Slidev: $clicks, useIsSlideActive())
 <AgentDemo :script layout labels glyphs tools controls="inline|full|none" header chrome announce
-           privacyClassName :position :active @step-start @complete>
+           collapsible transcript privacyClassName :position :active @step-start @complete>
   slots: toolCall, toolBody, stage({ view }), header, controls(AgentDemoSlotState)
-<StaticTranscript :script layout finalPolicy labels glyphs tools privacyClassName>  slots: toolCall, toolBody
+<StaticTranscript :script layout finalPolicy labels glyphs tools collapsible transcript privacyClassName>  slots: toolCall, toolBody
 ```
 
 **Deviation:** render props become slots, and a slot that renders nothing (or only comments) keeps the built-in rendering. `@step-start` and `@complete` bind props, not emits. `contract.test.ts` holds the markup equal to React's. `el` follows React's element rules (autoStart waits for an element, a late element starts fresh, a swap keeps progress, option changes reset), and a `playCount` bump on slide re-entry also resets. The binding imports nothing from Slidev; the adapter is two lines in the consumer (see the README).

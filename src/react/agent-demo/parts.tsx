@@ -9,17 +9,20 @@ import {
 } from "react";
 import {
   type AgentDemoLayout,
+  type AgentDemoTranscript,
   promptFor,
   spinnerFrame,
   toolHidden,
   toolName,
+  transcriptElement,
+  workingText,
 } from "../../agent-demo/core.ts";
 import type { Line, Step, ToolBody } from "../../script/types.ts";
 import type { ToolCallStep } from "../../sequencer/timing.ts";
 import type { DemoEntry, DemoView } from "../../sequencer/view.ts";
 import type { AgentDemoGlyphs, AgentDemoLabels, ToolRegistry } from "./labels.ts";
 
-export type { AgentDemoLayout } from "../../agent-demo/core.ts";
+export type { AgentDemoLayout, AgentDemoTranscript } from "../../agent-demo/core.ts";
 
 /** What `renderToolCall` and `renderToolBody` receive. */
 export interface ToolCallContext<TData = unknown> {
@@ -55,6 +58,9 @@ export interface PartsConfig<TData> {
   readonly renderToolBody: ToolRenderer<TData> | undefined;
   readonly mode: "static" | "live";
   readonly steps: readonly Step<TData>[];
+  /** Each built-in tool card is an open `<details>` with the header as its `<summary>`. */
+  readonly collapsible: boolean;
+  readonly transcript: AgentDemoTranscript | undefined;
 }
 
 /** Visually hidden, still read. Inline so it holds without the stylesheet. */
@@ -281,8 +287,10 @@ function ToolHeader<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactE
   ) : (
     toolName(config.tools, step, config.layout, running)
   );
+  // Collapsible cards use the header as the native disclosure toggle.
+  const Header = config.collapsible ? "summary" : "div";
   return (
-    <div data-part="tool-header">
+    <Header data-part="tool-header">
       <ToolStatusPip
         running={running}
         failed={entry.status === "error"}
@@ -296,10 +304,20 @@ function ToolHeader<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactE
       ) : null}
       <span data-part="tool-label">{name}</span>
       {step.args !== undefined ? (
-        <span data-part="tool-args">{terminal ? `(${step.args})` : step.args}</span>
+        <span data-part="tool-args">
+          {terminal ? (
+            <>
+              <span data-part="tool-paren">(</span>
+              {step.args}
+              <span data-part="tool-paren">)</span>
+            </>
+          ) : (
+            step.args
+          )}
+        </span>
       ) : null}
       {step.meta ? <span data-part="tool-meta">{step.meta}</span> : null}
-    </div>
+    </Header>
   );
 }
 
@@ -319,6 +337,15 @@ function ToolBodyContent<TData>({
  */
 function ToolSection<TData>({ ctx, config }: Omit<ToolPartProps<TData>, "frame">): ReactNode {
   const { step, entry, loading } = ctx;
+  const working = workingText(config.labels, config.layout, entry.status === "running");
+  if (working) {
+    return (
+      <div data-part="tool-body">
+        <Glyph>{config.glyphs.output}</Glyph>
+        <div data-part="tool-working">{working}</div>
+      </div>
+    );
+  }
   if (step.output === undefined && step.body === undefined) return null;
   const terminal = config.layout === "terminal";
   const lines = terminal ? (entry.visibleLines ?? []) : (step.output ?? []);
@@ -349,17 +376,20 @@ function ToolCard<TData>({ ctx, config, frame }: ToolPartProps<TData>): ReactEle
   const { step, entry } = ctx;
   const accent = config.tools?.[step.name]?.accent;
   const style = accent ? ({ "--sf-tool-accent": accent } as CSSProperties) : undefined;
+  // Rendered open and never set again, so a reader's collapse holds while playback re-renders.
+  const Root = config.collapsible ? "details" : "div";
   return (
-    <div
+    <Root
       data-part="tool-call"
       data-status={entry.status ?? step.status ?? "done"}
       data-phase={entry.phase}
       data-tool={step.name}
       style={style}
+      open={config.collapsible ? true : undefined}
     >
       <ToolHeader ctx={ctx} config={config} frame={frame} />
       <ToolSection ctx={ctx} config={config} />
-    </div>
+    </Root>
   );
 }
 
@@ -436,8 +466,9 @@ function Entry<TData>({
 /**
  * The scrollable transcript: an outer `column-reverse` scroller around an inner `column`, so it
  * anchors to the bottom without JS, leaves a reader who scrolled up alone, and keeps DOM order
- * equal to visual order. Focusable so keyboard users can scroll it. A named group rather than a
- * landmark, so two demos on one page don't repeat a region.
+ * equal to visual order. Focusable by default so keyboard users can scroll it. A named group by
+ * default rather than a landmark, so two demos on one page don't repeat a region; `transcript`
+ * picks a `<section>` region or drops the tab stop.
  */
 export function Transcript<TData>({
   view,
@@ -447,10 +478,15 @@ export function Transcript<TData>({
   readonly config: PartsConfig<TData>;
 }): ReactElement {
   const frame = spinnerFrame(config.glyphs.spinner, view.elapsed);
+  const { tag: Root, role, tabIndex } = transcriptElement(config.transcript);
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be keyboard reachable (axe scrollable-region-focusable)
-    // biome-ignore lint/a11y/useSemanticElements: a fieldset would add form semantics; a named group isn't a landmark, so two demos don't repeat one (axe landmark-unique)
-    <div data-part="transcript" role="group" tabIndex={0} aria-label={config.labels.transcript}>
+    // tabIndex: a scrollable region must be keyboard reachable (axe scrollable-region-focusable)
+    <Root
+      data-part="transcript"
+      role={role}
+      tabIndex={tabIndex}
+      aria-label={config.labels.transcript}
+    >
       <div data-part="turns">
         {view.entries.map((entry) => (
           <Fragment key={entry.key}>
@@ -458,7 +494,7 @@ export function Transcript<TData>({
           </Fragment>
         ))}
       </div>
-    </div>
+    </Root>
   );
 }
 
