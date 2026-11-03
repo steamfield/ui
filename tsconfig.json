@@ -22,6 +22,7 @@
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"],
   "exclude": [
     "tests/consumer/**",
+    "tests/consumer-no-peers/**",
     "tests/hooks/**",
     "tests/helpers/hooks.ts",
     "fixtures/**",
