@@ -44,7 +44,8 @@
     color: var(--sf-ok, inherit);
   }
 
-  :where([data-part="copy-result"]:not([data-state="failed"])) {
+  /* The result region, by its part or by the `data-copy-result` hook the enhancer reads. */
+  :where(:is([data-part="copy-result"], [data-copy-result]):not([data-state="failed"])) {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -53,7 +54,7 @@
     white-space: nowrap;
   }
 
-  :where([data-part="copy-result"][data-state="failed"]) {
+  :where(:is([data-part="copy-result"], [data-copy-result])[data-state="failed"]) {
     font-size: 0.875em;
     color: var(--sf-fail, inherit);
   }

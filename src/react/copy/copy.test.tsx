@@ -67,6 +67,55 @@ test("useCopy flips copied, resets, and reports to onCopy", async () => {
   expect(result.current.copied).toBe(false);
 });
 
+/** A control over `useCopy` that shows its state as text, as a consumer's button would. */
+function CopyProbe({ resetMs }: { readonly resetMs?: number | false }): ReactElement {
+  const { copied, failed, copy } = useCopy(resetMs === undefined ? {} : { resetMs });
+  let label = "Copy";
+  if (copied) label = "Copied";
+  else if (failed) label = "Failed";
+  return (
+    <button type="button" onClick={() => void copy("x")}>
+      {label}
+    </button>
+  );
+}
+
+test("useCopy with resetMs false stays copied until the next attempt", async () => {
+  vi.useFakeTimers();
+  render(<CopyProbe resetMs={false} />);
+  await act(async () => screen.getByRole("button").click());
+  expect(screen.getByRole("button").textContent).toBe("Copied");
+  act(() => vi.advanceTimersByTime(60 * 60 * 1000));
+  expect(screen.getByRole("button").textContent).toBe("Copied");
+  writeText.mockRejectedValue(new Error("denied"));
+  stubExecCommand(() => false);
+  await act(async () => screen.getByRole("button").click());
+  expect(screen.getByRole("button").textContent).toBe("Failed");
+});
+
+test("useCopy switching resetMs from false to a number resets the next copy", async () => {
+  vi.useFakeTimers();
+  const { rerender } = render(<CopyProbe resetMs={false} />);
+  rerender(<CopyProbe resetMs={300} />);
+  await act(async () => screen.getByRole("button").click());
+  expect(screen.getByRole("button").textContent).toBe("Copied");
+  act(() => vi.advanceTimersByTime(300));
+  expect(screen.getByRole("button").textContent).toBe("Copy");
+});
+
+test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+  "useCopy rejects resetMs %s with invalid_option on resetMs at render",
+  (resetMs) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<CopyProbe resetMs={resetMs} />)).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "resetMs" }),
+    );
+    expect(() => renderToStaticMarkup(<CopyProbe resetMs={resetMs} />)).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "resetMs" }),
+    );
+  },
+);
+
 test("useCopy reports failure without throwing", async () => {
   writeText.mockRejectedValue(new Error("denied"));
   stubExecCommand(() => false);

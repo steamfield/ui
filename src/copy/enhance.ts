@@ -7,7 +7,7 @@ import {
   COPY_ROOT,
 } from "./markup.ts";
 import { DEFAULT_COPY_MESSAGES } from "./messages.ts";
-import { createCopyState } from "./state.ts";
+import { type CopyResetMs, checkResetMs, createCopyState } from "./state.ts";
 
 /** What `onCopy` and the `sf:copy` event receive after every attempt. */
 export interface CopyEventDetail {
@@ -68,7 +68,8 @@ const IDLE_LABEL = "sfCopyIdle";
  */
 export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions = {}): () => void {
   const config: Config = {
-    copiedMs: options.copiedMs ?? 2000,
+    // Checked here so a bad value names this option, not the copy state's `resetMs`.
+    copiedMs: checkResetMs(options.copiedMs ?? 2000, "copiedMs"),
     subjects: { ...DEFAULT_SUBJECTS, ...options.subjects },
     copied: options.messages?.copied ?? DEFAULT_COPY_MESSAGES.copied,
     copiedLabel: options.messages?.copiedLabel ?? DEFAULT_COPY_MESSAGES.copiedLabel,
@@ -102,7 +103,7 @@ export function enhanceCopyButtons(root: ParentNode, options: EnhanceCopyOptions
 }
 
 interface Config {
-  readonly copiedMs: number;
+  readonly copiedMs: CopyResetMs;
   readonly subjects: Readonly<Record<string, string>>;
   readonly copied: string;
   readonly copiedLabel: string;

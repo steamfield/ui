@@ -1,11 +1,31 @@
+import { LibraryError } from "../internal/errors.ts";
 import { copyText } from "./copy-text.ts";
 
 /** What a copy control shows: nothing yet, a recent success, or the last attempt's failure. */
 export type CopyStatus = "idle" | "copied" | "failed";
 
+/** Milliseconds `copied` lasts, or false to keep it until the next attempt. */
+export type CopyResetMs = number | false;
+
+/** The longest delay `setTimeout` honors; a longer one fires at once. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/**
+ * Checks a reset duration: false, or a whole range `setTimeout` honors (0 to 2^31 - 1 ms). NaN,
+ * a negative, Infinity or an overflowing delay would reset at once, so each throws
+ * `invalid_option` naming `field`.
+ */
+export function checkResetMs(value: unknown, field: string): CopyResetMs {
+  if (value === false) return false;
+  if (typeof value !== "number" || !(value >= 0 && value <= MAX_TIMEOUT_MS)) {
+    throw new LibraryError("invalid_option", { field });
+  }
+  return value;
+}
+
 export interface CopyStateOptions {
-  /** How long `copied` lasts before returning to `idle`. Default 2000. */
-  readonly resetMs?: number;
+  /** How long `copied` lasts before returning to `idle`, or false for never. Default 2000. */
+  readonly resetMs?: CopyResetMs;
 }
 
 export interface CopyAttemptOptions {
@@ -14,8 +34,8 @@ export interface CopyAttemptOptions {
    * was pointed at other text while the copy was in flight.
    */
   readonly isCurrent?: () => boolean;
-  /** How long this attempt's `copied` lasts, overriding the controller's `resetMs`. */
-  readonly resetMs?: number;
+  /** How long this attempt's `copied` lasts (false: until the next attempt), overriding the controller's `resetMs`. */
+  readonly resetMs?: CopyResetMs;
 }
 
 export interface CopyState {
@@ -39,7 +59,7 @@ export interface CopyState {
  * that returns `copied` to `idle`. Framework-free; the DOM enhancer and `useCopy` only adapt it.
  */
 export function createCopyState(options: CopyStateOptions = {}): CopyState {
-  const resetMs = options.resetMs ?? 2000;
+  const resetMs = checkResetMs(options.resetMs ?? 2000, "resetMs");
   const listeners = new Set<() => void>();
   let state: CopyStatus = "idle";
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -59,10 +79,11 @@ export function createCopyState(options: CopyStateOptions = {}): CopyState {
       };
     },
     async copy(text, attempt = {}) {
+      const ms = attempt.resetMs === undefined ? resetMs : checkResetMs(attempt.resetMs, "resetMs");
       const ok = await copyText(text);
       if (destroyed || (attempt.isCurrent && !attempt.isCurrent())) return ok;
       clearTimeout(timer);
-      timer = ok ? setTimeout(() => set("idle"), attempt.resetMs ?? resetMs) : undefined;
+      timer = ok && ms !== false ? setTimeout(() => set("idle"), ms) : undefined;
       set(ok ? "copied" : "failed");
       return ok;
     },

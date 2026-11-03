@@ -52,6 +52,17 @@ test("copies the target text, announces it, then resets the label", async () => 
   expect(result()).toBe("");
 });
 
+test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+  "copiedMs %s throws invalid_option naming copiedMs and wires nothing",
+  (copiedMs) => {
+    expect(() => enhanceCopyButtons(document, { copiedMs })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "copiedMs" }),
+    );
+    expect(button().hidden).toBe(true);
+    expect(button().hasAttribute("data-copy-ready")).toBe(false);
+  },
+);
+
 test("a second click while showing Copied still resets to the idle label", async () => {
   enhanceCopyButtons(document, { copiedMs: 1000 });
   await click();

@@ -61,6 +61,51 @@ test("an attempt's resetMs overrides the controller's", async () => {
   expect(state.getState()).toBe("idle");
 });
 
+test("resetMs false keeps copied until the next attempt, which still applies", async () => {
+  const state = createCopyState({ resetMs: false });
+  await state.copy("x");
+  vi.advanceTimersByTime(60 * 60 * 1000);
+  expect(state.getState()).toBe("copied");
+  fail();
+  expect(await state.copy("x")).toBe(false);
+  expect(state.getState()).toBe("failed");
+});
+
+test("an attempt's resetMs false overrides a timed controller, and a number overrides false", async () => {
+  const state = createCopyState({ resetMs: 500 });
+  await state.copy("x", { resetMs: false });
+  vi.advanceTimersByTime(5000);
+  expect(state.getState()).toBe("copied");
+  const never = createCopyState({ resetMs: false });
+  await never.copy("x", { resetMs: 300 });
+  vi.advanceTimersByTime(300);
+  expect(never.getState()).toBe("idle");
+});
+
+test("resetMs 0 resets on the next tick", async () => {
+  const state = createCopyState({ resetMs: 0 });
+  await state.copy("x");
+  expect(state.getState()).toBe("copied");
+  vi.advanceTimersByTime(0);
+  expect(state.getState()).toBe("idle");
+});
+
+test.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31, "2000", true])(
+  "resetMs %s is rejected with invalid_option on resetMs",
+  async (value) => {
+    expect(() => createCopyState({ resetMs: value as number })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "resetMs" }),
+    );
+    const state = createCopyState();
+    await expect(state.copy("x", { resetMs: value as number })).rejects.toMatchObject({
+      code: "invalid_option",
+      field: "resetMs",
+    });
+    expect(writeText).not.toHaveBeenCalled();
+    expect(state.getState()).toBe("idle");
+  },
+);
+
 test("a failure after a success cancels the pending reset", async () => {
   const state = createCopyState({ resetMs: 1000 });
   await state.copy("x");

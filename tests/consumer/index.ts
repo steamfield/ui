@@ -90,6 +90,28 @@ check(
   "CopyCommand with undefined part classes",
 );
 check(typeof useCopy === "function", "useCopy export");
+// resetMs: false keeps "copied" until the next attempt; a bad value throws at render.
+function NeverReset(): ReturnType<typeof createElement> {
+  const { copied } = useCopy({ resetMs: false });
+  return createElement("span", null, copied ? "copied" : "idle");
+}
+check(
+  renderToStaticMarkup(createElement(NeverReset)) === "<span>idle</span>",
+  "useCopy resetMs false",
+);
+function BadReset(): ReturnType<typeof createElement> {
+  useCopy({ resetMs: -1 });
+  return createElement("span");
+}
+try {
+  renderToStaticMarkup(createElement(BadReset));
+  check(false, "useCopy resetMs -1 should throw");
+} catch (thrown) {
+  check(
+    isLibraryError(thrown) && thrown.code === "invalid_option" && thrown.field === "resetMs",
+    "useCopy invalid resetMs",
+  );
+}
 
 // script + sequencer: pure, so they run on the server.
 const script: DemoScript = {

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { type CopyStatus, createCopyState } from "../../copy/state.ts";
+import { type CopyStatus, checkResetMs, createCopyState } from "../../copy/state.ts";
 
 export interface UseCopyOptions {
-  /** How long `copied` stays true after a successful copy. Default 2000. */
-  readonly resetMs?: number;
+  /**
+   * How long `copied` stays true after a successful copy, or false to keep it until the next
+   * attempt. Default 2000. Anything but false or 0 to 2^31 - 1 throws `invalid_option`.
+   */
+  readonly resetMs?: number | false;
   readonly onCopy?: (ok: boolean) => void;
 }
 
@@ -17,7 +20,9 @@ const idle = (): CopyStatus => "idle";
 
 /** Clipboard state for a React control: `copy(text)` resolves to whether it worked. */
 export function useCopy(options: UseCopyOptions = {}): UseCopyResult {
-  const { resetMs = 2000, onCopy } = options;
+  const { onCopy } = options;
+  // Checked at render, so a bad value fails where it is passed rather than on the first click.
+  const resetMs = checkResetMs(options.resetMs ?? 2000, "resetMs");
   // One controller for the component's life: a resetMs change applies to the next attempt and
   // never drops one in flight. It is never destroyed, so a StrictMode or <Activity> remount
   // keeps working; `mounted` drops results that land while unmounted instead.
