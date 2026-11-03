@@ -107,10 +107,11 @@ const IDLE: GateState = {
  * so an inline one is not new on every render; a bound or native function, whose text is only
  * `[native code]`, compares by identity.
  */
+const NATIVE = /\{\s*\[native code\]\s*\}$/;
 const policyKey = (policy: FinalPolicy | undefined): unknown => {
   if (typeof policy !== "function") return policy;
   const source = String(policy);
-  return source.includes("[native code]") ? policy : source;
+  return NATIVE.test(source) ? policy : source;
 };
 
 /** A position as a comparable value, so an inline `{ click: n }` doesn't count as a change. */
@@ -309,33 +310,65 @@ export function createDemoController<TData = unknown>(
   // callbacks, so a callback never sees a half-written state. The calls go through one queue:
   // a callback that moves the clock settles again inside it, and that settle drops calls a rewind
   // made stale and adds its own after the ones still due, so each step still fires once per run,
-  // in order. Each call is isolated: a throwing callback doesn't skip the rest, and the first
-  // error is rethrown once the queue is empty.
+  // in order. Each call is isolated: a throwing callback doesn't skip the rest. Once the queue is
+  // empty the error is rethrown (an AggregateError for several): synchronously to a control or the
+  // clock, and from a microtask during `update`, `mount` or `destroy`, so a callback's error never
+  // unwinds a binding's lifecycle hook.
+  //
+  // While unmounted there is no clock: settling only commits the static state, and the step and
+  // end bookkeeping waits, so a remount resumes without counting the pause as a rewind.
   let depth = 0;
   let draining = false;
+  let lifecycle = false;
   const settle = (): void => {
     if (depth > 0) return;
-    const gs = gate?.getState() ?? IDLE;
-    const { live } = clockMode(gs, gate !== null, options.position !== undefined, undefined);
+    if (gate === null) due = [];
+    else track(gate.getState());
+    if (commit()) for (const listener of [...listeners]) listener();
+    if (!draining) report(drain());
+  };
+  /** Rethrows what callbacks threw: at once, or later inside a lifecycle step. */
+  const report = (errors: unknown[]): void => {
+    if (errors.length === 0) return;
+    const error =
+      // biome-ignore lint/plugin: these are the user's callback errors, rethrown, not the library's.
+      errors.length === 1 ? errors[0] : new AggregateError(errors, "Demo callbacks threw");
+    if (!lifecycle) throw error;
+    queueMicrotask(() => {
+      throw error;
+    });
+  };
+  /** The step and end bookkeeping for the clock at `gs`, queueing the callbacks it makes due. */
+  const track = (gs: GateState): void => {
+    const { live } = clockMode(gs, true, options.position !== undefined, undefined);
     // Computed first: a rewind replaces `due`.
     const passed = passedSteps(gs, live);
     due.push(...passed);
     if (reachedEnd(gs, live)) due.push("end");
-    if (commit()) for (const listener of [...listeners]) listener();
-    if (!draining) drain();
   };
-  const drain = (): void => {
+  /** Calls everything due, in order, and returns what they threw. */
+  const drain = (): unknown[] => {
     draining = true;
-    let failure: { error: unknown } | undefined;
+    const errors: unknown[] = [];
     for (let item = due.shift(); item !== undefined; item = due.shift()) {
       try {
         call(item);
       } catch (error) {
-        failure ??= { error };
+        errors.push(error);
       }
     }
     draining = false;
-    if (failure) throw failure.error;
+    return errors;
+  };
+  /** Runs a binding lifecycle step, whose callback errors are rethrown later. */
+  const inLifecycle = (run: () => void): void => {
+    const outer = lifecycle;
+    lifecycle = true;
+    try {
+      run();
+    } finally {
+      lifecycle = outer;
+    }
   };
   const call = (item: number | "end"): void => {
     if (item === "end") {
@@ -402,30 +435,34 @@ export function createDemoController<TData = unknown>(
       bound.attach(next);
     },
     update(script, next) {
-      batch(() => {
-        // A changed `speed` option replaces a `setSpeed` rate, here and on later mounts.
-        // Checked before anything changes, so a bad rate leaves the controller as it was.
-        if (next.speed !== undefined) checkSpeed(next.speed);
-        options = next;
-        const restart = compileFor(script);
-        bound.configure(gateOptions());
-        // A new script (by key) starts over.
-        if (restart) bound.reset();
-      });
+      inLifecycle(() =>
+        batch(() => {
+          // A changed `speed` option replaces a `setSpeed` rate, here and on later mounts.
+          // Checked before anything changes, so a bad rate leaves the controller as it was.
+          if (next.speed !== undefined) checkSpeed(next.speed);
+          options = next;
+          const restart = compileFor(script);
+          bound.configure(gateOptions());
+          // A new script (by key) starts over.
+          if (restart) bound.reset();
+        }),
+      );
     },
     mount() {
       if (gate) return;
-      batch(() => {
-        bound.connect();
-        gate = bound;
-      });
+      inLifecycle(() =>
+        batch(() => {
+          bound.connect();
+          gate = bound;
+        }),
+      );
     },
     reset: () => bound.reset(),
     destroy() {
       if (!gate) return;
       bound.disconnect();
       gate = null;
-      settle();
+      inLifecycle(settle);
     },
   };
 }

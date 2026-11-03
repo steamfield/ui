@@ -169,7 +169,7 @@ Also exported as types: `AgentDemoProps`, `AgentDemoControlsProp`, `AnnounceMode
 
 #### `useAgentDemo(script, options?)`
 
-The headless hook: compiles the script, gates playback and returns the view to render. Options (also accepted by `AgentDemo`):
+The headless hook: compiles the script, gates playback and returns the view to render. A StrictMode or `<Activity>` remount resumes where it was, with no `onStepStart` or `onComplete` fired again; a real unmount and remount starts over. Options (also accepted by `AgentDemo`):
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -437,7 +437,7 @@ import { usePlayback, useCountUp } from "@steamfield/ui/react/playback";
 
 React state over the gate. Options are `PlaybackGateOptions`. Changing `duration`, `motion` or an observer option starts over at 0 and keeps the current rate; `speed` and `onFrame` change in place. Keep a custom `motion` source stable.
 
-Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a restart or a remount. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true.
+Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `paused`, `reduced`, `complete`, `speed`, `ready`, and `play`, `pause`, `toggle`, `replay`, `seek`, `reset`, `setSpeed`. `setSpeed` is checked like the `speed` option (`invalid_option` on `speed`, thrown at the call) and holds until the `speed` option changes, including across a restart or a remount. SSR-safe: every flag starts false and `ready` flips in an effect, so render the final frame while `ready` is false and show controls only once it is true. A StrictMode or `<Activity>` remount resumes where it was; a real unmount and remount starts over.
 
 `ref` is a `PlaybackRef<T>` (exported as a type): a callback ref that also reads and writes like a `RefObject` through `ref.current`. Pass it as `ref={ref}`. The element may mount after the first render (an iframe behind a state flip) or be swapped for another:
 

@@ -253,15 +253,56 @@ describe("onStepStart", () => {
     expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([1, 0, 1, 2, 3]);
   });
 
-  test("a throwing callback doesn't drop the ones after it; the first error is rethrown", () => {
+  test("a throwing callback doesn't drop the ones after it; every error surfaces", () => {
     const onStepStart = vi.fn((index: number) => {
       if (index === 1) throw new Error("first");
       if (index === 2) throw new Error("second");
     });
     const c = make({ autoStart: false, onStepStart });
     c.getState().controls.play();
-    expect(() => c.getState().controls.seek(startOf(3) + 1)).toThrow("first");
+    let thrown: unknown;
+    try {
+      c.getState().controls.seek(startOf(3) + 1);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors.map((e: Error) => e.message)).toEqual([
+      "first",
+      "second",
+    ]);
     expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3]);
+  });
+
+  test("a single throwing callback rethrows its own error", () => {
+    const c = make({
+      autoStart: false,
+      onStepStart: (index) => {
+        if (index === 1) throw new Error("only");
+      },
+    });
+    c.getState().controls.play();
+    expect(() => c.getState().controls.seek(startOf(3) + 1)).toThrow("only");
+  });
+
+  test("an error during update, mount or destroy is rethrown later, not into the caller", () => {
+    const later: Array<() => void> = [];
+    vi.spyOn(globalThis, "queueMicrotask").mockImplementation((cb) => {
+      later.push(cb);
+    });
+    const onStepStart = vi.fn(() => {
+      throw new Error("in update");
+    });
+    const c = make({}, { visible: false });
+    c.update(script, { ...options, onStepStart });
+    // From the clock, it is thrown at once.
+    expect(() => scroll(true)).toThrow("in update");
+    advance(500);
+    // A new script identity starts over at 0, which passes step 0 again.
+    expect(() => c.update(script, { ...options, scriptKey: "b", onStepStart })).not.toThrow();
+    expect(later).toHaveLength(1);
+    expect(() => later[0]?.()).toThrow("in update");
+    expect(onStepStart).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -473,6 +514,21 @@ describe("script identity", () => {
     c.update(script, { ...options, autoStart: false, finalPolicy: keep.bind({ n: 3 }) });
     expect(c.getState().view.entries).toHaveLength(3);
   });
+
+  test("a function that only mentions [native code] still compares by source", () => {
+    const c = make({
+      autoStart: false,
+      finalPolicy: () => ("[native code]".length > 0 ? [0] : []),
+    });
+    const listener = vi.fn();
+    c.subscribe(listener);
+    c.update(script, {
+      ...options,
+      autoStart: false,
+      finalPolicy: () => ("[native code]".length > 0 ? [0] : []),
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
 
 describe("click mode", () => {
@@ -543,7 +599,7 @@ describe("element rules", () => {
 });
 
 describe("lifecycle", () => {
-  test("destroy goes back to static, and mount starts again", () => {
+  test("destroy goes back to static, and mount reconnects", () => {
     const c = make();
     advance(500);
     c.destroy();
@@ -593,5 +649,31 @@ describe("lifecycle", () => {
     c.destroy();
     c.mount();
     expect(c.getState().speed).toBe(3);
+  });
+
+  test("progress, turn and completion survive destroy and mount, with no callbacks again", () => {
+    const onStepStart = vi.fn();
+    const onComplete = vi.fn();
+    const c = make({ onStepStart, onComplete });
+    advance(startOf(3) + 50);
+    c.getState().controls.pause();
+    const { view, turn } = c.getState();
+    const fired = onStepStart.mock.calls.length;
+    c.destroy();
+    c.mount();
+    expect(c.getState().view.elapsed).toBe(view.elapsed);
+    expect(c.getState().turn).toBe(turn);
+    expect(onStepStart).toHaveBeenCalledTimes(fired);
+    c.getState().controls.play();
+    scroll(true);
+    advance(TOTAL);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(c.getState().complete).toBe(true);
+    c.destroy();
+    c.mount();
+    scroll(true);
+    expect(c.getState().complete).toBe(true);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 3, 4]);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });

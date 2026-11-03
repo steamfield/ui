@@ -7,7 +7,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { StrictMode } from "react";
+import { Activity, StrictMode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
@@ -86,6 +86,40 @@ beforeEach(() => {
   vi.stubGlobal("IntersectionObserver", undefined);
   stubReducedMotion(false);
 });
+
+/** `Terminal` inside an Activity, whose hiding disconnects the demo and showing resumes it. */
+function HiddenTerminal({
+  mode,
+  ...props
+}: { mode: "visible" | "hidden" } & Partial<AgentDemoProps>) {
+  return (
+    <Activity mode={mode}>
+      <Terminal {...props} />
+    </Activity>
+  );
+}
+
+/** Hides and shows the demo, asserting the transcript, label, data-complete and status hold. */
+function hideAndShow(
+  rerender: (ui: React.ReactElement) => void,
+  props: Partial<AgentDemoProps>,
+  label: string,
+): void {
+  const root = document.querySelector("[data-sf-agent-demo]");
+  const before = {
+    text: region().textContent,
+    complete: root?.getAttribute("data-complete"),
+    status: screen.getByRole("status").textContent,
+  };
+  rerender(<HiddenTerminal mode="hidden" {...props} />);
+  rerender(<HiddenTerminal mode="visible" {...props} />);
+  expect(region().textContent).toBe(before.text);
+  expect(screen.getByRole("button", { name: label })).toBeTruthy();
+  expect(document.querySelector("[data-sf-agent-demo]")?.getAttribute("data-complete")).toBe(
+    before.complete,
+  );
+  expect(screen.getByRole("status").textContent).toBe(before.status);
+}
 
 describe("server render", () => {
   test("is the full final transcript, with no animation flag and no controls", () => {
@@ -320,6 +354,63 @@ describe("playback (terminal)", () => {
     advance(TOTAL);
     expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2, 0, 1, 2]);
     expect(onComplete).toHaveBeenCalledTimes(2);
+  });
+
+  test("an Activity hide and show mid-play resumes playing, with no callbacks again", () => {
+    const onStepStart = vi.fn();
+    const onComplete = vi.fn();
+    const props = { onStepStart, onComplete };
+    const { rerender } = render(<HiddenTerminal mode="visible" {...props} />);
+    advance(startOf(1) + 50);
+    const fired = onStepStart.mock.calls.length;
+    hideAndShow(rerender, props, "Pause");
+    expect(onStepStart).toHaveBeenCalledTimes(fired);
+    advance(TOTAL);
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2]);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  test("an Activity hide and show while paused stays paused", () => {
+    const onStepStart = vi.fn();
+    const props = { onStepStart };
+    const { rerender } = render(<HiddenTerminal mode="visible" {...props} />);
+    advance(startOf(1) + 50);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const fired = onStepStart.mock.calls.length;
+    hideAndShow(rerender, props, "Play");
+    advance(5000);
+    expect(onStepStart).toHaveBeenCalledTimes(fired);
+  });
+
+  test("an Activity hide and show once complete stays complete", () => {
+    const onStepStart = vi.fn();
+    const onComplete = vi.fn();
+    const props = { onStepStart, onComplete };
+    const { rerender } = render(<HiddenTerminal mode="visible" {...props} />);
+    advance(TOTAL + 1000);
+    expect(screen.getByRole("status").textContent).toContain("Demo complete.");
+    hideAndShow(rerender, props, "Replay");
+    expect(
+      document.querySelector("[data-sf-agent-demo]")?.getAttribute("data-complete"),
+    ).not.toBeNull();
+    expect(onStepStart.mock.calls.map(([i]) => i)).toEqual([0, 1, 2]);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  test("a callback that throws during a prop update leaves the demo mounted", () => {
+    const later: Array<() => void> = [];
+    vi.spyOn(globalThis, "queueMicrotask").mockImplementation((cb) => {
+      later.push(cb);
+    });
+    const onStepStart = (index: number): void => {
+      if (index === 0) throw new Error("step 0");
+    };
+    const first = render(<Terminal scriptKey="a" onStepStart={() => {}} />);
+    advance(500);
+    first.rerender(<Terminal scriptKey="b" onStepStart={onStepStart} />);
+    expect(region()).toBeTruthy();
+    expect(later).toHaveLength(1);
+    expect(() => later[0]?.()).toThrow("step 0");
   });
 });
 

@@ -579,6 +579,30 @@ describe("usePlayback", () => {
     rerender(<Hideable mode="visible" speed={5} />);
     expect(hook()).toMatchObject({ ready: true, speed: 5 });
   });
+
+  test("an Activity hide and show carries elapsed and resumes", () => {
+    const { rerender } = render(<Hideable mode="visible" speed={1} />);
+    scroll(true);
+    advance(1000);
+    const at = hook().elapsed;
+    rerender(<Hideable mode="hidden" speed={1} />);
+    advance(1000);
+    rerender(<Hideable mode="visible" speed={1} />);
+    expect(hook()).toMatchObject({ ready: true, elapsed: at, started: true });
+    scroll(true);
+    advance(500);
+    expect(hook().elapsed).toBeGreaterThan(at + 400);
+  });
+
+  test("an Activity hide and show keeps a completed demo complete", () => {
+    const { rerender } = render(<Hideable mode="visible" speed={1} />);
+    scroll(true);
+    advance(DURATION + 500);
+    expect(hook().complete).toBe(true);
+    rerender(<Hideable mode="hidden" speed={1} />);
+    rerender(<Hideable mode="visible" speed={1} />);
+    expect(hook()).toMatchObject({ ready: true, complete: true, elapsed: DURATION });
+  });
 });
 
 describe("useCountUp", () => {
