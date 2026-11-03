@@ -31,8 +31,12 @@ export interface CopyMessages {
 }
 
 export interface EnhanceCopyOptions {
-  /** How long the copied label stays before reverting. Default 2000. */
-  readonly copiedMs?: number;
+  /**
+   * How long the copied label stays before reverting, from 0 to 2^31 - 1, or false to keep
+   * Copied until the next click. Default 2000. Any other value throws `invalid_option` naming
+   * `copiedMs`.
+   */
+  readonly copiedMs?: number | false;
   /** Maps a button's aria-label to the noun used in failure messages. */
   readonly subjects?: Readonly<Record<string, string>>;
   readonly messages?: CopyMessages;

@@ -224,7 +224,7 @@ All hook options plus:
 | `controls` | `"inline" \| "full" \| "none" \| (demo) => ReactNode` | `"inline"` | `"inline"` is one play/pause/replay button; `"full"` adds turn jumps, Next and a 1x/2x speed toggle; a function renders your own |
 | `header` | `ReactNode` | none | Content at the top, before the controls |
 | `chrome` | `boolean \| { title?, dots?, className? }` | none | Wrap the transcript in `DemoWindow`, with controls in its title bar. `className` goes on the window root, to size or shadow it. Needs `window/styles.css` |
-| `collapsible` | `boolean` | `false` | Render each built-in tool card as `<details open>` with its header as the `<summary>`, so a reader can hide a call's output. Native disclosure: works without JavaScript and from the keyboard, and a reader's collapse holds while playback continues. `renderToolCall` replacements are left as they are |
+| `collapsible` | `boolean` | `false` | Render each built-in tool card as `<details open>` with its header as the `<summary>`, so a reader can hide a call's output. Native disclosure: works without JavaScript and from the keyboard, and a reader's collapse holds while playback continues. A glyph after the header (`--sf-demo-disclosure`) shows whether the call is open, and the focus ring sits inside the chat card. `renderToolCall` replacements are left as they are; a `renderToolBody` body folds with its card |
 | `transcript` | `AgentDemoTranscript` (`{ as?: "group" \| "region"; focusable?: boolean }`) | `{ as: "group", focusable: true }` | The transcript element. `"region"` renders a `<section>` landmark with the `transcript` label (use it when the page has one demo); `focusable: false` drops its tab stop (only when it can't scroll, or axe's `scrollable-region-focusable` fails) |
 | `announce` | `"status" \| "beats" \| "none"` | `"status"` | One `role="status"` message; `"beats"` adds a polite live region with each finished beat; `"none"` nothing |
 | `className`, `style` | | none | On the root |
@@ -258,6 +258,7 @@ CSS variables (set on the demo or an ancestor), besides the base tokens:
 | `--sf-demo-shimmer`, `--sf-demo-shimmer-hi` | Skeleton base and highlight |
 | `--sf-demo-shadow` | The demo's box shadow |
 | `--sf-tool-accent` | Per tool, set from the registry's `accent` |
+| `--sf-demo-disclosure` | The open/closed indicator after a `collapsible` tool header (default `"▾"`, a string); it points down while open and is turned to point right while closed, and is left out of the header's accessible name |
 
 Root attributes: `data-sf-agent-demo`, `data-part="agent-demo"`, `data-layout="chat|terminal"`, `data-sf-animating` (hydrated and playing), `data-paused`, `data-complete`, `data-static` (`StaticTranscript`).
 
@@ -522,7 +523,7 @@ The button names its source with `aria-controls` and stays `hidden` until the ta
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `copiedMs` | `number` | `2000` | How long the copied label stays, 0 to 2^31 - 1. Anything else throws `invalid_option` on `copiedMs` |
+| `copiedMs` | `number \| false` | `2000` | How long the copied label stays, 0 to 2^31 - 1; `false` keeps Copied until the next click. Anything else throws `LibraryError` `invalid_option` with `field: "copiedMs"` |
 | `subjects` | `Record<string, string>` | `Copy command` → command, `Copy prompt` → prompt, `Copy code` → code, `Copy page` → page | Maps a button's `aria-label` to the noun in failure messages. Unknown labels use "text" |
 | `messages.copied` | `string` | `"Copied to clipboard."` | Announced on success |
 | `messages.copiedLabel` | `string` | `"Copied"` | Visible label on the button while it shows success |

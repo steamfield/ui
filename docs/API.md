@@ -236,12 +236,13 @@ useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<Us
 ```ts
 copyText(text: string): Promise<boolean>
 enhanceCopyButtons(root: ParentNode, {
-  copiedMs?: number                                // 2000
+  copiedMs?: number | false                        // 2000; false keeps Copied until the next click; else 0 to 2^31 - 1 or it throws invalid_option (field "copiedMs")
   subjects?: Record<string, string>                // aria-label -> subject for messages
   messages?: { copied?: string; copiedLabel?: string; failed?: (subject, { hidden }) => string }
   onCopy?(e: { id: string; label: string; ok: boolean }): void   // also dispatches "sf:copy"
 }): () => void
 useCopy({ resetMs?: number | false, onCopy?(ok) }): { copied: boolean; failed: boolean; copy(text): Promise<boolean> }
+// resetMs: 2000; false keeps copied until the next copy; else 0 to 2^31 - 1 or it throws invalid_option (field "resetMs") at render
 <CopyCommand id command prose? prompt?="$" label? buttonText? className? buttonClassName?
              promptClassName? commandClassName? icon? />
 <CopyButton controls label? children? className? icon? />

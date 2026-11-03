@@ -101,30 +101,78 @@ function RainfallBars({ rows }: { readonly rows: readonly MonthRow[] }): ReactEl
   );
 }
 
-function ClickDeck(): ReactElement {
+const clickTerminal: DemoScript = {
+  id: "pg-click-terminal",
+  steps: [
+    { kind: "user", text: "List the fixtures.", at: 1 },
+    {
+      kind: "tool-call",
+      name: "Bash",
+      args: "ls fixtures",
+      at: 2,
+      outputAt: 3,
+      output: ["small.bin", "large.bin"],
+    },
+    { kind: "agent-text", text: "Two fixtures: small.bin and large.bin.", at: 4 },
+  ],
+};
+
+/** Previous and Next click buttons around a click-paced demo. */
+function ClickRow({
+  click,
+  total,
+  setClick,
+}: {
+  readonly click: number;
+  readonly total: number;
+  readonly setClick: (update: (c: number) => number) => void;
+}): ReactElement {
+  return (
+    <div className="pg-row">
+      <button
+        type="button"
+        onClick={() => setClick((c) => Math.max(0, c - 1))}
+        disabled={click === 0}
+      >
+        Previous
+      </button>
+      <span>
+        Click {click} of {total}
+      </span>
+      <button
+        type="button"
+        onClick={() => setClick((c) => Math.min(total, c + 1))}
+        disabled={click === total}
+      >
+        Next click
+      </button>
+    </div>
+  );
+}
+
+function ClickWorking(): ReactElement {
   const [click, setClick] = useState(0);
-  const total = clickCount(deck);
   return (
     <>
-      <div className="pg-row">
-        <button
-          type="button"
-          onClick={() => setClick((c) => Math.max(0, c - 1))}
-          disabled={click === 0}
-        >
-          Previous
-        </button>
-        <span>
-          Click {click} of {total}
-        </span>
-        <button
-          type="button"
-          onClick={() => setClick((c) => Math.min(total, c + 1))}
-          disabled={click === total}
-        >
-          Next click
-        </button>
-      </div>
+      <ClickRow click={click} total={clickCount(clickTerminal)} setClick={setClick} />
+      <AgentDemo
+        script={clickTerminal}
+        layout="terminal"
+        position={{ click }}
+        collapsible
+        transcript={{ as: "region" }}
+        labels={{ transcript: "Click-paced working transcript", working: "Running…" }}
+        style={{ "--sf-demo-height": "12rem" } as CSSProperties}
+      />
+    </>
+  );
+}
+
+function ClickDeck(): ReactElement {
+  const [click, setClick] = useState(0);
+  return (
+    <>
+      <ClickRow click={click} total={clickCount(deck)} setClick={setClick} />
       <AgentDemo
         script={deck}
         layout="chat"
@@ -180,9 +228,29 @@ export function AgentDemoPage(): ReactElement {
           transcript={{ as: "region" }}
         />
       </section>
+      <section className="pg-section" aria-labelledby="ad-chat-collapsible">
+        <h2 id="ad-chat-collapsible">Collapsible chat cards</h2>
+        <AgentDemo
+          script={chat}
+          layout="chat"
+          tools={tools}
+          collapsible
+          transcript={{ as: "region" }}
+          labels={{ transcript: "Collapsible chat transcript" }}
+          renderToolBody={(ctx) =>
+            ctx.step.body?.kind === "custom" ? (
+              <RainfallBars rows={ctx.step.body.data} />
+            ) : undefined
+          }
+        />
+      </section>
       <section className="pg-section" aria-labelledby="ad-click">
         <h2 id="ad-click">Click mode</h2>
         <ClickDeck />
+      </section>
+      <section className="pg-section" aria-labelledby="ad-click-working">
+        <h2 id="ad-click-working">Click mode with a working line</h2>
+        <ClickWorking />
       </section>
       <section className="pg-section" aria-labelledby="ad-static">
         <h2 id="ad-static">StaticTranscript</h2>

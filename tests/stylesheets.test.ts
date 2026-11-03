@@ -110,3 +110,40 @@ describe.each(sheets)("src/%s", (file) => {
     expect(names.filter((name) => !name.startsWith("sf-"))).toEqual([]);
   });
 });
+
+// `--sf-*` names are public API, like exports: a rename or removal fails here, and a new one is
+// added on purpose. (`--sf-demo-enter-y` is set and read inside the sheet's own entrance rules.)
+test("agent-demo/styles.css reads exactly the pinned --sf-* variables", () => {
+  const names = new Set<string>();
+  parse("agent-demo/styles.css").walkDecls((decl) => {
+    for (const { name } of varUses(decl.value)) names.add(name);
+  });
+  expect([...names].sort()).toEqual([
+    "--sf-accent",
+    "--sf-bg",
+    "--sf-border",
+    "--sf-demo-accent-fg",
+    "--sf-demo-accent-strong",
+    "--sf-demo-border-subtle",
+    "--sf-demo-bubble-bg",
+    "--sf-demo-caret",
+    "--sf-demo-disclosure",
+    "--sf-demo-enter-y",
+    "--sf-demo-height",
+    "--sf-demo-prose-font",
+    "--sf-demo-shadow",
+    "--sf-demo-shimmer",
+    "--sf-demo-shimmer-hi",
+    "--sf-demo-subtle-bg",
+    "--sf-fail",
+    "--sf-fg",
+    "--sf-font",
+    "--sf-font-size",
+    "--sf-muted",
+    "--sf-ok",
+    "--sf-radius",
+    "--sf-surface",
+    "--sf-tool-accent",
+    "--sf-warn",
+  ]);
+});

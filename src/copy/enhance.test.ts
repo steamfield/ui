@@ -52,7 +52,21 @@ test("copies the target text, announces it, then resets the label", async () => 
   expect(result()).toBe("");
 });
 
-test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+test("copiedMs false keeps Copied until the next click", async () => {
+  enhanceCopyButtons(document, { copiedMs: false });
+  await click();
+  vi.advanceTimersByTime(60 * 60 * 1000);
+  expect(label()).toBe("Copied");
+  expect(button().dataset.state).toBe("copied");
+  expect(result()).toBe("Copied to clipboard.");
+  writeText.mockRejectedValue(new Error("denied"));
+  stubExecCommand(() => false);
+  button().click();
+  await vi.waitFor(() => expect(button().dataset.state).toBe("failed"));
+  expect(label()).toBe("Copy");
+});
+
+test.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31])(
   "copiedMs %s throws invalid_option naming copiedMs and wires nothing",
   (copiedMs) => {
     expect(() => enhanceCopyButtons(document, { copiedMs })).toThrow(

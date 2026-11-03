@@ -11,7 +11,7 @@ import {
 } from "../../../tests/helpers/dom.ts";
 import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
-import { compile } from "../../sequencer/compile.ts";
+import { compile, tracksOf } from "../../sequencer/compile.ts";
 import { presets } from "../../sequencer/timing.ts";
 import { stateAt } from "../../sequencer/view.ts";
 import {
@@ -1117,6 +1117,76 @@ describe("extension points", () => {
       props: { script: terminalScript, transcript: { as: "region" } },
     });
     expect(s.find('[data-part="transcript"]').element.tagName).toBe("SECTION");
+  });
+
+  test("a call that resolves to an error swaps the working line for Failed and its output", async () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "Deploy it" },
+        { kind: "tool-call", name: "deploy", args: "prod", status: "error", output: ["boom"] },
+      ],
+    };
+    const track = tracksOf(compile(script, { timing: presets.terminal })).tracks[1];
+    const w = await mountDemo({ script, labels: { working: "Running…" } });
+    await advance((track?.start ?? 0) + 50);
+    const call = () => w.find('[data-tool="deploy"]');
+    expect(call().find('[data-part="tool-working"]').text()).toBe("Running…");
+    expect(call().find('[role="img"][aria-label="Running"]').exists()).toBe(true);
+    await advance((track?.runEnd ?? 0) - (track?.start ?? 0) + TOTAL);
+    expect(call().find('[data-part="tool-working"]').exists()).toBe(false);
+    expect(call().attributes("data-status")).toBe("error");
+    expect(call().find('[role="img"][aria-label="Failed"]').exists()).toBe(true);
+    expect(call().find('[data-part="output"]').text()).toBe("boom");
+  });
+
+  test("click mode shows the working line until the output's click, then the output", async () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "List files", at: 1 },
+        { kind: "tool-call", name: "ls", at: 2, outputAt: 3, output: ["a.txt"] },
+      ],
+    };
+    const w = await mountDemo({ script, labels: { working: "Running…" }, position: { click: 2 } });
+    expect(w.find('[data-part="tool-working"]').text()).toBe("Running…");
+    expect(region(w)).not.toContain("a.txt");
+    await w.setProps({ position: { click: 3 } });
+    expect(w.find('[data-part="tool-working"]').exists()).toBe(false);
+    expect(region(w)).toContain("a.txt");
+    await w.setProps({ position: { click: 2 } });
+    expect(w.find('[data-part="tool-working"]').text()).toBe("Running…");
+  });
+
+  test("collapsible leaves a toolCall slot replacement unwrapped", () => {
+    const w = mount(StaticTranscript, {
+      props: { script: terminalScript, layout: "terminal", collapsible: true },
+      slots: { toolCall: () => h("p", "custom card") },
+    });
+    expect(w.text()).toContain("custom card");
+    expect(w.find("details").exists()).toBe(false);
+  });
+
+  test("collapsible wraps a toolBody slot body, which the summary hides", async () => {
+    const w = mount(StaticTranscript, {
+      props: { script: chatScript, collapsible: true },
+      slots: { toolBody: () => h("p", "custom body") },
+      attachTo: document.body,
+    });
+    const details = w.find("details");
+    expect(details.attributes("data-part")).toBe("tool-call");
+    expect(details.text()).toContain("custom body");
+    const el = details.element as HTMLDetailsElement;
+    expect(el.open).toBe(true);
+    await details.find("summary").trigger("click");
+    expect(el.open).toBe(false);
+  });
+
+  test("a region transcript that isn't focusable is a named region with no tab stop", async () => {
+    const w = await mountDemo({ transcript: { as: "region", focusable: false } });
+    const transcript = w.find('[data-part="transcript"]');
+    expect(transcript.element.tagName).toBe("SECTION");
+    expect(transcript.attributes("aria-label")).toBe("Demo transcript");
+    expect(transcript.attributes("role")).toBeUndefined();
+    expect(transcript.attributes("tabindex")).toBeUndefined();
   });
 
   test("an empty labels.working shows no working line", async () => {

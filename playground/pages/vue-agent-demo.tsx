@@ -1,8 +1,8 @@
 import type { DemoScript } from "@steamfield/ui/script";
-import { presets } from "@steamfield/ui/sequencer";
+import { clickCount, presets } from "@steamfield/ui/sequencer";
 import { AgentDemo, StaticTranscript } from "@steamfield/ui/vue/agent-demo";
 import { type ReactElement, useEffect, useRef } from "react";
-import { createApp, h } from "vue";
+import { createApp, defineComponent, h, ref } from "vue";
 
 // The Vue binding is render functions, so it mounts with createApp alone: no SFC compiler and no
 // @vitejs/plugin-vue. React owns the host element; Vue owns everything inside it.
@@ -51,6 +51,64 @@ const extended = (): ReturnType<typeof h> =>
     transcript: { as: "region" },
   });
 
+const chatCollapsible = (): ReturnType<typeof h> =>
+  h(AgentDemo, {
+    script,
+    layout: "chat",
+    collapsible: true,
+    transcript: { as: "region" },
+    labels: { transcript: "Vue collapsible chat transcript" },
+  });
+
+const clickScript: DemoScript = {
+  id: "pg-vue-click",
+  steps: [
+    { kind: "user", text: "List the fixtures.", at: 1 },
+    {
+      kind: "tool-call",
+      name: "Bash",
+      args: "ls fixtures",
+      at: 2,
+      outputAt: 3,
+      output: ["small.bin", "large.bin"],
+    },
+    { kind: "agent-text", text: "Two fixtures: small.bin and large.bin.", at: 4 },
+  ],
+};
+
+/** A click-paced demo whose clicks live in Vue state, as a Slidev deck's would. */
+const ClickWorking = defineComponent(() => {
+  const click = ref(0);
+  const total = clickCount(clickScript);
+  return () =>
+    h("div", null, [
+      h("div", { class: "pg-row" }, [
+        h(
+          "button",
+          { type: "button", disabled: click.value === 0, onClick: () => click.value-- },
+          "Previous",
+        ),
+        h("span", null, `Click ${click.value} of ${total}`),
+        h(
+          "button",
+          { type: "button", disabled: click.value === total, onClick: () => click.value++ },
+          "Next click",
+        ),
+      ]),
+      h(AgentDemo, {
+        script: clickScript,
+        layout: "terminal",
+        position: { click: click.value },
+        collapsible: true,
+        transcript: { as: "region" },
+        labels: { transcript: "Vue click-paced working transcript", working: "Running…" },
+        style: { "--sf-demo-height": "12rem" },
+      }),
+    ]);
+});
+
+const clickWorking = (): ReturnType<typeof h> => h(ClickWorking);
+
 const still = (): ReturnType<typeof h> =>
   h(StaticTranscript, {
     script,
@@ -69,6 +127,14 @@ export function VueAgentDemoPage(): ReactElement {
       <section className="pg-section" aria-labelledby="vue-extensions">
         <h2 id="vue-extensions">Working line, collapsible calls, region transcript</h2>
         <VueIsland render={extended} />
+      </section>
+      <section className="pg-section" aria-labelledby="vue-chat-collapsible">
+        <h2 id="vue-chat-collapsible">Collapsible chat cards</h2>
+        <VueIsland render={chatCollapsible} />
+      </section>
+      <section className="pg-section" aria-labelledby="vue-click-working">
+        <h2 id="vue-click-working">Click mode with a working line</h2>
+        <VueIsland render={clickWorking} />
       </section>
       <section className="pg-section" aria-labelledby="vue-static">
         <h2 id="vue-static">StaticTranscript</h2>

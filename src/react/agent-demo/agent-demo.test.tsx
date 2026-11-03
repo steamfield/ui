@@ -18,7 +18,7 @@ import {
 } from "../../../tests/helpers/dom.ts";
 import type { MotionSource } from "../../playback/motion.ts";
 import type { DemoScript } from "../../script/types.ts";
-import { compile } from "../../sequencer/compile.ts";
+import { compile, tracksOf } from "../../sequencer/compile.ts";
 import { presets } from "../../sequencer/timing.ts";
 import {
   AgentDemo,
@@ -1096,6 +1096,91 @@ describe("extension points", () => {
     cleanup();
     render(<StaticTranscript script={terminalScript} transcript={{ as: "region" }} />);
     expect(screen.getByRole("region", { name: "Demo transcript" }).tagName).toBe("SECTION");
+  });
+
+  test("a call that resolves to an error swaps the working line for Failed and its output", () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "Deploy it" },
+        { kind: "tool-call", name: "deploy", args: "prod", status: "error", output: ["boom"] },
+      ],
+    };
+    const track = tracksOf(compile(script, { timing: presets.terminal })).tracks[1];
+    render(
+      <AgentDemo
+        script={script}
+        layout="terminal"
+        timing={presets.terminal}
+        labels={{ working: "Running…" }}
+      />,
+    );
+    advance((track?.start ?? 0) + 50);
+    const call = () => within(region()).getByText("deploy").closest('[data-part="tool-call"]');
+    expect(within(region()).getByText("Running…")).toBeTruthy();
+    expect(within(region()).getByRole("img", { name: "Running" })).toBeTruthy();
+    advance((track?.runEnd ?? 0) - (track?.start ?? 0) + TOTAL);
+    expect(within(region()).queryByText("Running…")).toBeNull();
+    expect(call()?.getAttribute("data-status")).toBe("error");
+    expect(within(region()).getByRole("img", { name: "Failed" })).toBeTruthy();
+    expect(within(region()).getByText("boom")).toBeTruthy();
+  });
+
+  test("click mode shows the working line until the output's click, then the output", () => {
+    const script: DemoScript = {
+      steps: [
+        { kind: "user", text: "List files", at: 1 },
+        { kind: "tool-call", name: "ls", at: 2, outputAt: 3, output: ["a.txt"] },
+      ],
+    };
+    const props = {
+      script,
+      layout: "terminal",
+      labels: { working: "Running…" },
+    } as const;
+    const { rerender } = render(<AgentDemo {...props} position={{ click: 2 }} />);
+    expect(within(region()).getByText("Running…")).toBeTruthy();
+    expect(within(region()).queryByText("a.txt")).toBeNull();
+    rerender(<AgentDemo {...props} position={{ click: 3 }} />);
+    expect(within(region()).queryByText("Running…")).toBeNull();
+    expect(within(region()).getByText("a.txt")).toBeTruthy();
+    rerender(<AgentDemo {...props} position={{ click: 2 }} />);
+    expect(within(region()).getByText("Running…")).toBeTruthy();
+  });
+
+  test("collapsible leaves a renderToolCall replacement unwrapped", () => {
+    render(
+      <StaticTranscript
+        script={terminalScript}
+        layout="terminal"
+        collapsible
+        renderToolCall={() => <p>custom card</p>}
+      />,
+    );
+    expect(screen.getByText("custom card").closest("details")).toBeNull();
+    expect(document.querySelector("details")).toBeNull();
+  });
+
+  test("collapsible wraps a renderToolBody body, which the summary hides", () => {
+    render(
+      <StaticTranscript
+        script={chatScript}
+        collapsible
+        renderToolBody={() => <p>custom body</p>}
+      />,
+    );
+    const body = screen.getByText("custom body");
+    const details = body.closest("details") as HTMLDetailsElement;
+    expect(details.getAttribute("data-part")).toBe("tool-call");
+    expect(details.open).toBe(true);
+    fireEvent.click(details.querySelector("summary") as HTMLElement);
+    expect(details.open).toBe(false);
+  });
+
+  test("a region transcript that isn't focusable is a named region with no tab stop", () => {
+    render(<Terminal transcript={{ as: "region", focusable: false }} />);
+    const transcript = screen.getByRole("region", { name: "Demo transcript" });
+    expect(transcript.hasAttribute("tabindex")).toBe(false);
+    expect(screen.queryByRole("group", { name: "Demo transcript" })).toBeNull();
   });
 
   test("an empty labels.working shows no working line", () => {

@@ -16,6 +16,7 @@
    --sf-demo-shimmer       skeleton base, --sf-demo-shimmer-hi its highlight
    --sf-demo-shadow        the demo's box shadow
    --sf-tool-accent        per tool, set from the tool registry's `accent`
+   --sf-demo-disclosure    `collapsible` open/closed glyph (a string; default "▾")
 
    There is no built-in dark mode: map these tokens in your own theme. Entrance, typing and
    loading animation only run under [data-sf-animating], with motion allowed by both the media
@@ -321,19 +322,44 @@
     color: var(--sf-muted, inherit);
   }
 
-  /* `collapsible`: the header is the <details>' <summary>, laid out like the plain header. */
+  /* `collapsible`: the header is the <details>' <summary>, laid out like the plain header. Its
+     display: flex already drops the native ::marker; WebKit's own marker needs hiding. In its
+     place, a disclosure glyph after the header points down while open and right while closed. */
   :where([data-part="agent-demo"] summary[data-part="tool-header"]) {
     cursor: pointer;
-    list-style: none;
   }
 
   :where([data-part="agent-demo"] summary[data-part="tool-header"])::-webkit-details-marker {
     display: none;
   }
 
+  :where([data-part="agent-demo"] summary[data-part="tool-header"])::after {
+    content: var(--sf-demo-disclosure, "▾");
+    /* biome-ignore lint/suspicious/noDuplicateProperties: the line above is the fallback for engines without content alt text; this one keeps the glyph out of the summary's accessible name */
+    content: var(--sf-demo-disclosure, "▾") / "";
+    flex: none;
+    margin-inline-start: 0.5rem;
+    color: var(--sf-muted, inherit);
+  }
+
+  :where(
+    [data-part="agent-demo"]
+      details[data-part="tool-call"]:not([open])
+      > summary[data-part="tool-header"]
+  )::after {
+    transform: rotate(-90deg);
+  }
+
   :where([data-part="agent-demo"] summary[data-part="tool-header"]:focus-visible) {
     outline: 2px solid var(--sf-accent, Highlight);
     outline-offset: 2px;
+  }
+
+  /* The chat card clips its overflow, so the ring sits inside the header there. */
+  :where(
+    [data-part="agent-demo"][data-layout="chat"] summary[data-part="tool-header"]:focus-visible
+  ) {
+    outline-offset: -2px;
   }
 
   /* Chat cards */
