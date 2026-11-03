@@ -62,35 +62,6 @@ test("reduced motion shows the final transcript with no Pause button", async ({ 
   await expect(page.locator("[data-sf-animating]")).toHaveCount(0);
 });
 
-test("a collapsible tool call shows its working line, then folds from the keyboard", async ({
-  page,
-}) => {
-  await page.clock.install();
-  await page.goto("/#/agent-demo");
-  const demo = page.locator('[aria-labelledby="ad-extensions"]');
-  const transcript = demo.getByRole("region", { name: "Collapsible transcript" });
-  // Below the fold: playback waits until it is in view.
-  await demo.scrollIntoViewIfNeeded();
-  await expect(demo.getByRole("button", { name: "Pause" })).toBeVisible();
-  await expect
-    .poll(async () => {
-      await page.clock.runFor(100);
-      return transcript.locator('[data-part="tool-working"]').count();
-    })
-    .toBe(1);
-  await expect(transcript.locator('[data-part="tool-working"]')).toHaveText("Running…");
-  await page.clock.runFor(30_000);
-  await expect(demo.getByRole("button", { name: "Replay" })).toBeVisible();
-  const call = transcript.locator('details[data-part="tool-call"]').first();
-  const output = call.locator('[data-part="output"]');
-  await expect(output).toBeVisible();
-  await call.locator("summary").focus();
-  await page.keyboard.press("Enter");
-  await expect(output).toBeHidden();
-  await page.keyboard.press("Space");
-  await expect(output).toBeVisible();
-});
-
 const overflow = (page: Page): Promise<number> =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 

@@ -1090,8 +1090,10 @@ describe("extension points", () => {
     await advance(startOf(1) + 100);
     const details = w.find("details").element as HTMLDetailsElement;
     expect(details.open).toBe(true);
-    expect(details.querySelector("summary")?.getAttribute("data-part")).toBe("tool-header");
-    details.open = false;
+    const summary = w.find("summary");
+    expect(summary.attributes("data-part")).toBe("tool-header");
+    await summary.trigger("click");
+    expect(details.open).toBe(false);
     await advance(TOTAL);
     expect(w.find("details").element).toBe(details);
     expect(details.open).toBe(false);
@@ -1115,6 +1117,58 @@ describe("extension points", () => {
       props: { script: terminalScript, transcript: { as: "region" } },
     });
     expect(s.find('[data-part="transcript"]').element.tagName).toBe("SECTION");
+  });
+
+  test("an empty labels.working shows no working line", async () => {
+    const w = await mountDemo({ labels: { working: "" } });
+    await advance(startOf(1) + 100);
+    expect(running(w).exists()).toBe(true);
+    expect(running(w).find('[data-part="tool-body"]').exists()).toBe(false);
+  });
+
+  test("under reduced motion every option renders the final transcript with no working line", async () => {
+    stubReducedMotion(true);
+    const w = await mountDemo({
+      labels: { working: "Running…" },
+      collapsible: true,
+      transcript: { as: "region" },
+    });
+    await advance(TOTAL);
+    const transcript = w.find('section[data-part="transcript"]');
+    expect(transcript.attributes("aria-label")).toBe("Demo transcript");
+    expect(transcript.text()).toContain("All green.");
+    expect(transcript.find('[data-part="tool-working"]').exists()).toBe(false);
+    expect(transcript.find('[aria-label="Running"]').exists()).toBe(false);
+    expect((transcript.find("details").element as HTMLDetailsElement).open).toBe(true);
+    expect(w.find("[data-sf-animating]").exists()).toBe(false);
+  });
+
+  test("the server render with every option is the final, readable transcript", async () => {
+    const html = await renderToString(
+      createSSRApp({
+        render: () =>
+          h(AgentDemo, {
+            script: terminalScript,
+            layout: "terminal",
+            timing: presets.terminal,
+            labels: { working: "Running…" },
+            collapsible: true,
+            transcript: { as: "region", focusable: false },
+            chrome: { className: "hero-window" },
+          }),
+      }),
+    );
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    const transcript = host.querySelector('section[data-part="transcript"]');
+    expect(transcript?.getAttribute("aria-label")).toBe("Demo transcript");
+    expect(transcript?.hasAttribute("tabindex")).toBe(false);
+    expect(transcript?.textContent).toContain('Bash(rr run "go test ./...")');
+    expect(transcript?.textContent).toContain("All green.");
+    expect(host.querySelector('[data-part="tool-working"]')).toBeNull();
+    expect(host.querySelector("details")?.open).toBe(true);
+    expect(host.querySelector('[data-part="window"]')?.className).toBe("hero-window");
+    expect(host.querySelector("button")).toBeNull();
   });
 
   test("chrome.className lands on the window root", async () => {

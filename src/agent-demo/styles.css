@@ -698,14 +698,11 @@
     }
   }
 
-  /* A gentle pulse for text, which stays readable at its faintest. */
+  /* A pulse for text: from its muted color to the foreground and back, never fading, so it keeps
+     the muted text's contrast at every frame. */
   @keyframes sf-agent-demo-working {
-    0%,
-    100% {
-      opacity: 1;
-    }
     50% {
-      opacity: 0.55;
+      color: var(--sf-fg, currentColor);
     }
   }
 

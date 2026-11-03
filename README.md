@@ -522,7 +522,7 @@ The button names its source with `aria-controls` and stays `hidden` until the ta
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `copiedMs` | `number` | `2000` | How long the copied label stays |
+| `copiedMs` | `number` | `2000` | How long the copied label stays, 0 to 2^31 - 1. Anything else throws `invalid_option` on `copiedMs` |
 | `subjects` | `Record<string, string>` | `Copy command` → command, `Copy prompt` → prompt, `Copy code` → code, `Copy page` → page | Maps a button's `aria-label` to the noun in failure messages. Unknown labels use "text" |
 | `messages.copied` | `string` | `"Copied to clipboard."` | Announced on success |
 | `messages.copiedLabel` | `string` | `"Copied"` | Visible label on the button while it shows success |
@@ -531,7 +531,7 @@ The button names its source with `aria-controls` and stays `hidden` until the ta
 
 Each attempt also dispatches a bubbling `sf:copy` CustomEvent from the button with the same detail.
 
-Hooks: `data-part` values `copy-command` (`data-prose`), `prompt`, `command`, `copy`, `copy-button` (`data-state="copied|failed"`), `copy-icon`, `copy-result` (`data-state`). The stylesheet hides the result region visually unless the state is `failed`. No variables beyond the base tokens.
+Hooks: `data-part` values `copy-command` (`data-prose`), `prompt`, `command`, `copy`, `copy-button` (`data-state="copied|failed"`), `copy-icon`, `copy-result` (`data-state`). The stylesheet hides the result region visually unless the state is `failed`, whether it carries `data-part="copy-result"` or only the `data-copy-result` hook the enhancer reads. No variables beyond the base tokens.
 
 ### Without JavaScript
 
@@ -573,7 +573,7 @@ import { CopyCommand, CopyButton, useCopy } from "@steamfield/ui/react/copy";
 
 ### `useCopy(options?)`
 
-Clipboard state for your own control. Options: `resetMs` (`2000`, how long `copied` stays true), `onCopy(ok)`. Returns `{ copied, failed, copy(text) }`, where `copy` resolves to whether it worked.
+Clipboard state for your own control. Options: `resetMs` (`2000`, how long `copied` stays true; `false` keeps it until the next copy attempt; anything but `false` or 0 to 2^31 - 1 throws `invalid_option` on `resetMs` during render), `onCopy(ok)`. Returns `{ copied, failed, copy(text) }`, where `copy` resolves to whether it worked.
 
 ### Without JavaScript
 

@@ -1072,8 +1072,10 @@ describe("extension points", () => {
     advance(startOf(1) + 100);
     const details = document.querySelector("details") as HTMLDetailsElement;
     expect(details.open).toBe(true);
-    expect(details.querySelector("summary")?.getAttribute("data-part")).toBe("tool-header");
-    details.open = false;
+    const summary = details.querySelector("summary") as HTMLElement;
+    expect(summary.getAttribute("data-part")).toBe("tool-header");
+    fireEvent.click(summary);
+    expect(details.open).toBe(false);
     advance(TOTAL);
     expect(document.querySelector("details")).toBe(details);
     expect(details.open).toBe(false);
@@ -1094,6 +1096,47 @@ describe("extension points", () => {
     cleanup();
     render(<StaticTranscript script={terminalScript} transcript={{ as: "region" }} />);
     expect(screen.getByRole("region", { name: "Demo transcript" }).tagName).toBe("SECTION");
+  });
+
+  test("an empty labels.working shows no working line", () => {
+    render(<Terminal labels={{ working: "" }} />);
+    advance(startOf(1) + 100);
+    expect(running()).not.toBeNull();
+    expect(running()?.querySelector('[data-part="tool-body"]')).toBeNull();
+  });
+
+  test("under reduced motion every option renders the final transcript with no working line", () => {
+    stubReducedMotion(true);
+    render(<Terminal labels={{ working: "Running…" }} collapsible transcript={{ as: "region" }} />);
+    advance(TOTAL);
+    const transcript = screen.getByRole("region", { name: "Demo transcript" });
+    expect(transcript.textContent).toContain("All green.");
+    expect(transcript.querySelector('[data-part="tool-working"]')).toBeNull();
+    expect(within(transcript).queryByRole("img", { name: "Running" })).toBeNull();
+    expect(transcript.querySelector("details")?.open).toBe(true);
+    expect(document.querySelector("[data-sf-animating]")).toBeNull();
+  });
+
+  test("the server render with every option is the final, readable transcript", () => {
+    const html = renderToStaticMarkup(
+      <Terminal
+        labels={{ working: "Running…" }}
+        collapsible
+        transcript={{ as: "region", focusable: false }}
+        chrome={{ className: "hero-window" }}
+      />,
+    );
+    const host = document.body.appendChild(document.createElement("div"));
+    host.innerHTML = html;
+    const transcript = within(host).getByRole("region", { name: "Demo transcript" });
+    expect(transcript.hasAttribute("tabindex")).toBe(false);
+    expect(transcript.textContent).toContain('Bash(rr run "go test ./...")');
+    expect(transcript.textContent).toContain("All green.");
+    expect(host.querySelector('[data-part="tool-working"]')).toBeNull();
+    expect(host.querySelector("details")?.open).toBe(true);
+    expect(host.querySelector('[data-part="window"]')?.className).toBe("hero-window");
+    expect(within(host).queryByRole("button")).toBeNull();
+    host.remove();
   });
 
   test("chrome.className lands on the window root", () => {

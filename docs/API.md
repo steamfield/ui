@@ -241,7 +241,7 @@ enhanceCopyButtons(root: ParentNode, {
   messages?: { copied?: string; copiedLabel?: string; failed?: (subject, { hidden }) => string }
   onCopy?(e: { id: string; label: string; ok: boolean }): void   // also dispatches "sf:copy"
 }): () => void
-useCopy({ resetMs?, onCopy?(ok) }): { copied: boolean; failed: boolean; copy(text): Promise<boolean> }
+useCopy({ resetMs?: number | false, onCopy?(ok) }): { copied: boolean; failed: boolean; copy(text): Promise<boolean> }
 <CopyCommand id command prose? prompt?="$" label? buttonText? className? buttonClassName?
              promptClassName? commandClassName? icon? />
 <CopyButton controls label? children? className? icon? />

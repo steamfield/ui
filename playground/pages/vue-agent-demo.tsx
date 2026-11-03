@@ -40,6 +40,17 @@ const live = (): ReturnType<typeof h> =>
     labels: { transcript: "Vue terminal transcript" },
   });
 
+const extended = (): ReturnType<typeof h> =>
+  h(AgentDemo, {
+    script,
+    layout: "terminal",
+    timing: presets.terminal,
+    chrome: { title: "vue session", className: "pg-hero-window" },
+    labels: { transcript: "Vue collapsible transcript", working: "Running…" },
+    collapsible: true,
+    transcript: { as: "region" },
+  });
+
 const still = (): ReturnType<typeof h> =>
   h(StaticTranscript, {
     script,
@@ -54,6 +65,10 @@ export function VueAgentDemoPage(): ReactElement {
       <section className="pg-section" aria-labelledby="vue-terminal">
         <h2 id="vue-terminal">Terminal</h2>
         <VueIsland render={live} />
+      </section>
+      <section className="pg-section" aria-labelledby="vue-extensions">
+        <h2 id="vue-extensions">Working line, collapsible calls, region transcript</h2>
+        <VueIsland render={extended} />
       </section>
       <section className="pg-section" aria-labelledby="vue-static">
         <h2 id="vue-static">StaticTranscript</h2>
