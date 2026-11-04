@@ -57,6 +57,14 @@ describe("code blocks", () => {
     expect(button?.querySelector("[data-copy-label]")?.textContent).toBe("Copy");
   });
 
+  it("puts the caption before the code, so it is read and focused in the order it is shown", async () => {
+    const { root } = await render(fence("verify", 'title="Terminal"'));
+    const parts = [...(root.querySelector("figure")?.children ?? [])].map((child) =>
+      child.tagName.toLowerCase(),
+    );
+    expect(parts).toEqual(["figcaption", "pre", "span"]);
+  });
+
   it("puts the result region beside the button, inside the copy wrapper", async () => {
     const { root } = await render(fence("verify"));
     const result = root.querySelector("[data-code-copy] [data-copy-result]");

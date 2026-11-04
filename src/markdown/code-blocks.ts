@@ -81,11 +81,13 @@ export function codeBlocks(options: CodeBlocksOptions = {}): () => HastPluginDef
           const caption = title
             ? [element("figcaption", { dataCodeTitle: "" }, [text(title)])]
             : [];
-          ctx.setProperty(node, "id", id);
-          ctx.wrapNode(
+          // Not wrapNode: it makes the wrapped node the first child, which would put the caption
+          // after the code, read and focused out of the order it is shown in.
+          ctx.replaceNode(
             node,
             element("figure", { dataCodeBlock: "", ...(group && { dataGroup: group }) }, [
               ...caption,
+              { ...node, properties: { ...node.properties, id } },
               copyControl(id, label, visible),
             ]),
           );
