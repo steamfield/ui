@@ -232,6 +232,35 @@ describe("user steps", () => {
     expect(entry(view, 3)?.progress).toBeLessThan(1);
   });
 
+  test("typingMs spreads the typing after preTyped over that time", () => {
+    const steps: Step[] = [
+      { kind: "user", text: "abcdef", preTyped: "ab", typingMs: 400 },
+      { kind: "command", text: "ls", typingMs: 100 },
+    ];
+    const t = compile({ steps }, { timing: { ...presets.terminal, typeMsPerChar: 25 } });
+    const [user, command] = t.steps;
+    // The terminal preset holds 0ms on preTyped and before submit, so typing fills the gap.
+    expect(stateAt(t, { ms: (user?.start ?? 0) + 399 }).entries[0]?.visibleText).toBe("abcdef");
+    expect(stateAt(t, { ms: (user?.start ?? 0) + 299 }).entries[0]?.visibleText).toBe("abcde");
+    expect((command?.end ?? 0) - (command?.start ?? 0)).toBe(100 + 500);
+  });
+
+  test("a typeMsPerChar function gets typingMs and decides over it", () => {
+    const steps: Step[] = [{ kind: "user", text: "abcd", typingMs: 4000 }];
+    const t = compile(
+      { steps },
+      {
+        timing: {
+          ...presets.terminal,
+          thinkingAfterUser: false,
+          typeMsPerChar: (step) => Math.max(18, Math.floor((step.typingMs ?? 0) / 400)),
+        },
+      },
+    );
+    // Four 18ms characters, then the 300ms submit flash.
+    expect(t.duration).toBe(4 * 18 + 300);
+  });
+
   test("a step's composer flag overrides the option", () => {
     const script: DemoScript = { steps: [{ kind: "user", text: "hi", composer: false }] };
     expect(stateAt(compile(script, { composer: true }), { ms: 0 }).composer).toBeNull();
@@ -543,8 +572,19 @@ describe("finalState", () => {
     expect(view.entries.map((e) => e.index)).toEqual([0, 5]);
   });
 
+  test('{ order: "listed" } keeps the pick\'s order; "script" sorts it', () => {
+    const pick = (): number[] => [5, 0, 5];
+    const listed = finalState(timeline, { policy: { pick, order: "listed" } });
+    expect(listed.entries.map((e) => e.index)).toEqual([5, 0]);
+    expect(listed.complete).toBe(true);
+    const sorted = finalState(timeline, { policy: { pick } });
+    expect(sorted.entries.map((e) => e.index)).toEqual([0, 5]);
+  });
+
   test.each<[string, unknown, string]>([
     ["an out-of-range index", { policy: () => [99] }, "policy"],
+    ["an object without a pick", { policy: { order: "listed" } }, "policy"],
+    ["an unknown order", { policy: { pick: () => [0], order: "reverse" } }, "policy"],
     ["a non-array result", { policy: () => "0" }, "policy"],
     ["an unknown policy", { policy: "first" }, "policy"],
     ["an unknown option", { polcy: "all" }, "polcy"],

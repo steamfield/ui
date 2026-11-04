@@ -44,13 +44,23 @@ export type Step<TData = unknown> = At &
         readonly preTyped?: string;
         /** Type into the composer and post on submit, instead of typing into the transcript. */
         readonly composer?: boolean;
+        /**
+         * How long typing the text after `preTyped` takes, spread evenly over its characters. A
+         * `typeMsPerChar` function receives the step and decides instead.
+         */
+        readonly typingMs?: number;
       }
     | { readonly kind: "agent-text"; readonly text: string; readonly lead?: string }
     | { readonly kind: "thinking"; readonly ms?: number }
     | { readonly kind: "pause"; readonly ms: number }
     /** A shell prompt prefix for the commands after it, such as "~/demo $". */
     | { readonly kind: "prompt"; readonly text: string }
-    | { readonly kind: "command"; readonly text: string }
+    | {
+        readonly kind: "command";
+        readonly text: string;
+        /** How long typing the command takes; see the user step's `typingMs`. */
+        readonly typingMs?: number;
+      }
     /** `more` counts lines left out; renderers show it as "… +N lines" once the step is done. */
     | { readonly kind: "output"; readonly lines: readonly Line[]; readonly more?: number }
     | {

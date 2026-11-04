@@ -6,6 +6,7 @@ export { transcriptText } from "./transcript.ts";
 export type {
   DemoEntry,
   DemoView,
+  FinalPick,
   FinalPolicy,
   FinalStateOptions,
   Phase,

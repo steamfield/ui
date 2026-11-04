@@ -34,12 +34,12 @@ type At = { at?: number }                      // Slidev click index; optional e
 type ToolStatus = "running" | "done" | "error" | "retried" | (string & {})
 
 type Step<TData = unknown> = At & (
-  | { kind: "user"; text: string; preTyped?: string; composer?: boolean }
+  | { kind: "user"; text: string; preTyped?: string; composer?: boolean; typingMs?: number }
   | { kind: "agent-text"; text: string; lead?: string }
   | { kind: "thinking"; ms?: number }
   | { kind: "pause"; ms: number }
   | { kind: "prompt"; text: string }            // shell prompt prefix, e.g. "~/demo $"
-  | { kind: "command"; text: string }
+  | { kind: "command"; text: string; typingMs?: number }
   | { kind: "output"; lines: Line[]; more?: number }
   | { kind: "tool-call"; id?: string; name: string; server?: string; args?: string
       status?: ToolStatus; meta?: string
@@ -88,7 +88,8 @@ const presets: { chat: Timing; terminal: Timing; instant: Timing }
 
 compile(script, { timing?: Partial<Timing>, seed?: string, composer?: boolean }): Timeline
 stateAt(timeline, pos: { ms: number } | { click: number }): DemoView
-finalState(timeline, { policy?: "all" | "last" | ((steps) => number[]) }): DemoView
+finalState(timeline, { policy?: "all" | "last" | FinalPick | { pick: FinalPick; order?: "script" | "listed" } }): DemoView
+type FinalPick = (steps) => number[]
 clickCount(script): number
 transcriptText(script): string                    // plain text for noscript / sr / llms
 
@@ -152,7 +153,7 @@ createPlaybackGate(el: Element | null, {
 ```tsx
 const demo = useAgentDemo(script, {
   scriptKey?: string                               // reset only when this changes
-  timing?, seed?, composer?, finalPolicy?, position?
+  timing?, seed?, composer?, finalPolicy?, beforeStart?, position?
   autoStart?, threshold?, rootMargin?, leaveGraceMs?, motion?, speed?
   onStepStart?(i, step), onComplete?()
 }) // => { view, controls, ref, ready, playing, paused, reduced, complete, animating, mode, speed, turn, timeline }
@@ -165,6 +166,7 @@ const demo = useAgentDemo(script, {
             failed, thinking, placeholder, next, speed, jumpToTurn, transcript, showCode, more,
             working? }}                                   // working: no default; terminal only
   glyphs={{ prompt, user, agent, output, ok, fail, submit, spinner, serverSeparator }}
+  composerStart?={node}  submitIcon?={node}         // composer slots (attach icon, SVG submit)
   tools={{ [name]: { label, runningLabel, icon?, accent? } }}   // consumer registry
   renderToolCall?={(ctx) => ReactNode | undefined}              // whole card
   renderToolBody?={(ctx) => ReactNode | undefined}              // body only; ctx: { step, entry, index, loading, mode: "static" | "live" }
@@ -208,6 +210,8 @@ The server and pre-hydration render are `finalState(finalPolicy)`. Entrance CSS 
 
 **Addition (0.1.x):** five opt-in extension points, so a site that renders its own markup over `useAgentDemo` (stacks-api's hero) can use `AgentDemo` instead. `labels.working` shows a `tool-working` line behind the output glyph under a running terminal call (the chat layout keeps its skeleton). The terminal header's args render as `tool-args` holding `tool-paren` spans around the args text, so the parens can be colored apart; the visible text is unchanged. `collapsible` renders each built-in tool card as `<details open>` with the header as `<summary>`, a native disclosure that works without JS. `transcript` picks a `<section>` region instead of the named group, and can drop the tab stop; the rule lives in `transcriptElement` in `agent-demo/core.ts`, beside `workingText`. `chrome.className` lands on the window root. `StaticTranscript` takes `collapsible` and `transcript` too, so the no-JS fallback matches.
 
+**Addition (0.2.2):** five opt-in additions so OpenData's landing chat demo (`MCPChatDemo`) runs on `AgentDemo` with no visible difference. `beforeStart: "start"` renders the view at 0ms instead of the final state before playback (server, pre-hydration, `autoStart: false`), so a demo that begins from an empty transcript doesn't flash its finished one first; reduced motion still shows the final state, and the rule lives in the controller. `leaveGraceMs: Infinity` keeps a started demo playing off screen, like a one-shot observer (before, `setTimeout(Infinity)` fired at once, so it paused immediately). A user or command step's `typingMs` spreads its typing over that time, and a `typeMsPerChar` function can read it to apply its own floor. `finalPolicy: { pick, order: "listed" }` keeps a pick's order, for a reduced-motion view that puts the answer above its chart. `composerStart` and `submitIcon` (Vue slots of the same names) put nodes in the composer, with a new `composer-start` part.
+
 The agent demo's `data-part` values, `data-layout`, `data-from`, `data-status`, `data-tone`, `data-phase` and the `--sf-demo-*` and `--sf-tool-accent` variables live in `agent-demo/styles.css`, so a Vue renderer shares them.
 
 ## vue/agent-demo
@@ -219,7 +223,7 @@ useAgentDemo(script: MaybeRefOrGetter<DemoScript>, options?: MaybeRefOrGetter<Us
 // options: React's, with position and active as MaybeRefOrGetter (Slidev: $clicks, useIsSlideActive())
 <AgentDemo :script layout labels glyphs tools controls="inline|full|none" header chrome announce
            collapsible transcript privacyClassName :position :active @step-start @complete>
-  slots: toolCall, toolBody, stage({ view }), header, controls(AgentDemoSlotState)
+  slots: toolCall, toolBody, stage({ view }), header, controls(AgentDemoSlotState), composerStart, submitIcon
 <StaticTranscript :script layout finalPolicy labels glyphs tools collapsible transcript privacyClassName>  slots: toolCall, toolBody
 ```
 

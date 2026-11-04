@@ -12,7 +12,9 @@ export interface PlaybackGateOptions {
   readonly rootMargin?: string;
   /**
    * How long the element may be out of view before playback pauses. Coming back inside the
-   * grace period resumes at once, as if it never left. Default 0.
+   * grace period resumes at once, as if it never left. `Infinity` never pauses for leaving: once
+   * the element has been in view, it counts as in view until the next element or option change,
+   * like a one-shot observer. Default 0.
    */
   readonly leaveGraceMs?: number;
   /**
@@ -233,6 +235,8 @@ function build(
   const onIntersect = (visible: boolean): void => {
     clearTimeout(grace);
     grace = undefined;
+    // Seen once is enough when the grace never runs out.
+    if (!visible && inView && config.leaveGraceMs === Number.POSITIVE_INFINITY) return;
     if (visible || !inView || config.leaveGraceMs === 0) {
       inView = visible;
       update();

@@ -12,6 +12,7 @@ import {
   watch,
 } from "vue";
 import {
+  type BeforeStart,
   createDemoController,
   type DemoControllerOptions,
   positionKey,
@@ -23,6 +24,8 @@ import type { DemoScript, Step } from "../../script/types.ts";
 import type { Timeline } from "../../sequencer/compile.ts";
 import type { Timing } from "../../sequencer/timing.ts";
 import type { DemoView, FinalPolicy, Position } from "../../sequencer/view.ts";
+
+export type { BeforeStart } from "../../agent-demo/controller.ts";
 
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
@@ -48,6 +51,14 @@ export interface UseAgentDemoOptions<TData = unknown> {
   /** What the server, the pre-mount render and reduced motion show. Default "all". */
   readonly finalPolicy?: FinalPolicy | undefined;
   /**
+   * What shows before playback starts (the server, the pre-mount render, and with
+   * `autoStart: false` until `play()`): "final" (the default) is `finalState(finalPolicy)`;
+   * "start" is the view at 0ms, where playback begins (with the chat preset's start delay, an
+   * empty transcript), so nothing disappears when it starts. Reduced motion still shows the final
+   * state.
+   */
+  readonly beforeStart?: BeforeStart | undefined;
+  /**
    * A fixed position instead of the clock: click mode. Pass a ref or a getter so it follows the
    * deck, such as `() => ({ click: $clicks.value })` in Slidev. The demo renders `stateAt` there,
    * runs no clock and shows no controls. The binding imports nothing from Slidev; see the adapter
@@ -64,7 +75,10 @@ export interface UseAgentDemoOptions<TData = unknown> {
   /** In-view threshold. Default 0.15. */
   readonly threshold?: number | undefined;
   readonly rootMargin?: string | undefined;
-  /** How long the demo may be out of view before it pauses. Default 0. */
+  /**
+   * How long the demo may be out of view before it pauses. Default 0. `Infinity` never pauses
+   * for leaving view once the demo has been seen; a hidden tab still pauses.
+   */
   readonly leaveGraceMs?: number | undefined;
   /** Default "auto", which follows `prefers-reduced-motion` live. Keep a custom source stable. */
   readonly motion?: MotionPreference | MotionSource | undefined;

@@ -113,6 +113,10 @@ export interface AgentDemoSlots {
   readonly header?: () => VNode[];
   /** Your own controls, in place of the built-in ones. */
   readonly controls?: (state: AgentDemoSlotState) => VNode[];
+  /** Shown at the start of the composer, before the typed text, such as an attach icon. */
+  readonly composerStart?: () => VNode[];
+  /** Replaces `glyphs.submit` in the composer's submit key, such as an icon. */
+  readonly submitIcon?: () => VNode[];
 }
 
 function playbackControls(
@@ -242,6 +246,7 @@ const PROPS = {
   seed: null,
   composer: { type: Boolean, default: undefined },
   finalPolicy: null,
+  beforeStart: null,
   autoStart: { type: Boolean, default: undefined },
   threshold: null,
   rootMargin: null,
@@ -357,7 +362,14 @@ export const AgentDemo: DefineSetupFnComponent<
         transcript: props.transcript,
       };
       const composer = view.composer
-        ? h(Composer, { ...view.composer, layout: layout(), labels, glyphs })
+        ? h(Composer, {
+            ...view.composer,
+            layout: layout(),
+            labels,
+            glyphs,
+            start: slots.composerStart?.(),
+            submitIcon: slots.submitIcon?.(),
+          })
         : null;
       const body = [transcript(view, config), composer];
       const animating = demo.animating.value;

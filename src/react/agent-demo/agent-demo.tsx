@@ -45,6 +45,10 @@ export interface AgentDemoProps<TData = unknown> extends UseAgentDemoOptions<TDa
   /** Overrides for any of the default strings. */
   readonly labels?: Partial<AgentDemoLabels>;
   readonly glyphs?: Partial<AgentDemoGlyphs>;
+  /** Shown at the start of the composer, before the typed text, such as an attach icon. */
+  readonly composerStart?: ReactNode;
+  /** Replaces `glyphs.submit` in the composer's submit key, such as an icon. */
+  readonly submitIcon?: ReactNode;
   /** Labels, icons and accents per tool name, for the chat layout's card headers. */
   readonly tools?: ToolRegistry;
   /** Replaces a whole tool card. Return undefined, null or false to keep the default card. */
@@ -266,6 +270,8 @@ export function AgentDemo<TData = unknown>(props: AgentDemoProps<TData>): ReactE
             layout={layout}
             labels={labels}
             glyphs={glyphs}
+            start={props.composerStart}
+            submitIcon={props.submitIcon}
           />
         ) : null}
       </Frame>

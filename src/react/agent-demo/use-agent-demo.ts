@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
-import { createDemoController } from "../../agent-demo/controller.ts";
+import { type BeforeStart, createDemoController } from "../../agent-demo/controller.ts";
 import type { ToolRegistry } from "../../agent-demo/core.ts";
 import type { ReducedPolicy } from "../../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../../playback/motion.ts";
@@ -8,6 +8,8 @@ import type { Timeline } from "../../sequencer/compile.ts";
 import type { Timing } from "../../sequencer/timing.ts";
 import type { DemoView, FinalPolicy, Position } from "../../sequencer/view.ts";
 import { type PlaybackRef, playbackRef } from "../playback/use-playback.ts";
+
+export type { BeforeStart } from "../../agent-demo/controller.ts";
 
 export interface UseAgentDemoOptions<TData = unknown> {
   /**
@@ -34,6 +36,14 @@ export interface UseAgentDemoOptions<TData = unknown> {
   /** What the server, the pre-hydration render and reduced motion show. Default "all". */
   readonly finalPolicy?: FinalPolicy;
   /**
+   * What shows before playback starts (the server, the pre-hydration render, and with
+   * `autoStart: false` until `play()`): "final" (the default) is `finalState(finalPolicy)`;
+   * "start" is the view at 0ms, where playback begins (with the chat preset's start delay, an
+   * empty transcript), so nothing disappears when it starts. Reduced motion still shows the final
+   * state.
+   */
+  readonly beforeStart?: BeforeStart;
+  /**
    * A fixed position instead of the clock, such as `{ click: $clicks }` from Slidev. The demo
    * renders `stateAt` there, runs no clock and shows no controls.
    */
@@ -43,7 +53,10 @@ export interface UseAgentDemoOptions<TData = unknown> {
   /** In-view threshold. Default 0.15. */
   readonly threshold?: number;
   readonly rootMargin?: string;
-  /** How long the demo may be out of view before it pauses. Default 0. */
+  /**
+   * How long the demo may be out of view before it pauses. Default 0. `Infinity` never pauses
+   * for leaving view once the demo has been seen; a hidden tab still pauses.
+   */
   readonly leaveGraceMs?: number;
   /** Default "auto", which follows `prefers-reduced-motion` live. Keep a custom source stable. */
   readonly motion?: MotionPreference | MotionSource;

@@ -88,6 +88,16 @@ describe("rejects a malformed script, naming the field", () => {
     ["infinite pause", { steps: [{ kind: "pause", ms: Number.POSITIVE_INFINITY }] }, "steps[0].ms"],
     ["prompt text", { steps: [{ kind: "prompt" }] }, "steps[0].text"],
     ["command text", { steps: [{ kind: "command", text: 1 }] }, "steps[0].text"],
+    [
+      "a negative typingMs",
+      { steps: [{ kind: "user", text: "a", typingMs: -1 }] },
+      "steps[0].typingMs",
+    ],
+    [
+      "a non-numeric command typingMs",
+      { steps: [{ kind: "command", text: "a", typingMs: "1" }] },
+      "steps[0].typingMs",
+    ],
     ["output lines", { steps: [{ kind: "output", lines: "x" }] }, "steps[0].lines"],
     ["a bad line", { steps: [{ kind: "output", lines: ["a", 2] }] }, "steps[0].lines[1]"],
     ["a line without text", { steps: [{ kind: "output", lines: [{}] }] }, "steps[0].lines[0]"],

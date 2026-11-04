@@ -418,6 +418,42 @@ describe("reduced motion", () => {
 });
 
 describe("slots and labels", () => {
+  test("composerStart and submitIcon slots render as nodes, hidden from assistive tech", async () => {
+    const w = await mountDemo(
+      { script: chatScript, layout: "chat", timing: undefined },
+      {
+        composerStart: () => [h("svg", { "data-testid": "clip" })],
+        submitIcon: () => [h("svg", { "data-testid": "arrow" })],
+      },
+    );
+    const start = w.find('[data-part="composer-start"]');
+    expect(start.attributes("aria-hidden")).toBe("true");
+    expect(start.find('[data-testid="clip"]').exists()).toBe(true);
+    expect(w.find('[data-part="submit"] [data-testid="arrow"]').exists()).toBe(true);
+    expect(w.find('[data-part="submit"]').text()).not.toContain("↵");
+    w.unmount();
+    const plain = await mountDemo({ script: chatScript, layout: "chat", timing: undefined });
+    expect(plain.find('[data-part="composer-start"]').exists()).toBe(false);
+    expect(plain.find('[data-part="submit"]').text()).toBe("↵");
+  });
+
+  test('beforeStart "start" renders an empty transcript on the server and before play', async () => {
+    const html = await renderToString(
+      createSSRApp({ render: () => h(AgentDemo, { script: chatScript, beforeStart: "start" }) }),
+    );
+    expect(html).not.toContain("How many rows");
+    expect(html).toContain("Message the agent…");
+    const w = await mountDemo({
+      script: chatScript,
+      layout: "chat",
+      timing: undefined,
+      beforeStart: "start",
+      autoStart: false,
+    });
+    await advance(5000);
+    expect(region(w)).not.toContain("How many rows");
+  });
+
   test("toolCall replaces a card; rendering nothing keeps the default", async () => {
     const seen: Array<Pick<ToolCallContext, "index" | "mode" | "loading">> = [];
     const w = await mountDemo(

@@ -89,6 +89,7 @@ function checkBody(body: unknown, field: string): void {
 function checkUser(step: Record_, field: string): void {
   requireString(step, "text", field);
   optional(step, "composer", isBoolean, field);
+  optional(step, "typingMs", isMs, field);
   const { preTyped, text } = step;
   if (
     preTyped !== undefined &&
@@ -126,8 +127,11 @@ function checkStep(step: Record_, field: string): void {
       if (!isMs(step.ms)) throw invalid(`${field}.ms`);
       return;
     case "prompt":
+      requireString(step, "text", field);
+      return;
     case "command":
       requireString(step, "text", field);
+      optional(step, "typingMs", isMs, field);
       return;
     case "output":
       checkLines(step.lines, `${field}.lines`);

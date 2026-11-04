@@ -11,6 +11,7 @@ import {
   type ReducedPolicy,
 } from "../playback/gate.ts";
 import type { MotionPreference, MotionSource } from "../playback/motion.ts";
+import { LibraryError } from "../script/errors.ts";
 import type { DemoScript, Step } from "../script/types.ts";
 import { compile, type Timeline } from "../sequencer/compile.ts";
 import type { Timing } from "../sequencer/timing.ts";
@@ -31,6 +32,7 @@ export interface DemoControllerOptions<TData = unknown> {
   readonly composer?: boolean | undefined;
   readonly tools?: ToolRegistry | undefined;
   readonly finalPolicy?: FinalPolicy | undefined;
+  readonly beforeStart?: BeforeStart | undefined;
   readonly position?: Position | undefined;
   readonly autoStart?: boolean | undefined;
   readonly threshold?: number | undefined;
@@ -89,6 +91,19 @@ export interface DemoController<TData = unknown> {
   readonly destroy: () => void;
 }
 
+/**
+ * What shows before playback has moved: "final" is `finalState(finalPolicy)`, "start" is the
+ * view at 0ms, where playback begins. Reduced motion shows the final state either way.
+ */
+export type BeforeStart = "final" | "start";
+
+/** `beforeStart` as given, or `invalid_option`. */
+const checkBeforeStart = (value: unknown): void => {
+  if (value !== undefined && value !== "final" && value !== "start") {
+    throw new LibraryError("invalid_option", { field: "beforeStart" });
+  }
+};
+
 /** Everything off: what the server and the pre-mount render see. */
 const IDLE: GateState = {
   started: false,
@@ -108,10 +123,16 @@ const IDLE: GateState = {
  * `[native code]`, compares by identity.
  */
 const NATIVE = /\{\s*\[native code\]\s*\}$/;
+const fnKey = (fn: unknown): unknown => {
+  if (typeof fn !== "function") return fn;
+  const source = String(fn);
+  return NATIVE.test(source) ? fn : source;
+};
 const policyKey = (policy: FinalPolicy | undefined): unknown => {
-  if (typeof policy !== "function") return policy;
-  const source = String(policy);
-  return NATIVE.test(source) ? policy : source;
+  if (typeof policy !== "object" || policy === null) return fnKey(policy);
+  const pick = fnKey(policy.pick);
+  // An object policy is new on every render when written inline, so it compares by its parts.
+  return typeof pick === "string" ? `${policy.order ?? "script"}:${pick}` : policy;
 };
 
 /** A position as a comparable value, so an inline `{ click: n }` doesn't count as a change. */
@@ -213,15 +234,19 @@ export function createDemoController<TData = unknown>(
     }),
   });
 
-  /** `stateAt` a position, or the final state without one. */
-  const viewAt = (position: Position | undefined): DemoView<TData> =>
-    position === undefined
-      ? finalState(timeline, { policy: options.finalPolicy ?? "all" })
-      : stateAt(timeline, position);
+  /**
+   * `stateAt` a position, or without one the view before playback: the final state, or with
+   * `beforeStart: "start"` the view at 0ms, unless motion is reduced.
+   */
+  const viewAt = (position: Position | undefined, reduced: boolean): DemoView<TData> => {
+    if (position !== undefined) return stateAt(timeline, position);
+    if (options.beforeStart === "start" && !reduced) return stateAt(timeline, { ms: 0 });
+    return finalState(timeline, { policy: options.finalPolicy ?? "all" });
+  };
 
   /** Everything `derive` reads, compared to tell whether the state changed. */
   const inputsNow = (): readonly unknown[] => {
-    const { position, finalPolicy, reducedPolicy, speed } = options;
+    const { position, finalPolicy, reducedPolicy, speed, beforeStart } = options;
     const gs = gate?.getState() ?? IDLE;
     return [
       timeline,
@@ -232,6 +257,7 @@ export function createDemoController<TData = unknown>(
       policyKey(finalPolicy),
       reducedPolicy,
       speed,
+      beforeStart,
       ended,
     ];
   };
@@ -251,7 +277,7 @@ export function createDemoController<TData = unknown>(
       clickMode,
       options.reducedPolicy,
     );
-    const view = viewAt(position ?? at);
+    const view = viewAt(position ?? at, ready && gs.reduced);
     return {
       view,
       controls,
@@ -417,6 +443,7 @@ export function createDemoController<TData = unknown>(
     },
   };
 
+  checkBeforeStart(options.beforeStart);
   compileFor(initialScript);
   bound = createBoundGate(gateOptions());
   bound.subscribe(settle);
@@ -440,6 +467,7 @@ export function createDemoController<TData = unknown>(
           // A changed `speed` option replaces a `setSpeed` rate, here and on later mounts.
           // Checked before anything changes, so a bad rate leaves the controller as it was.
           if (next.speed !== undefined) checkSpeed(next.speed);
+          checkBeforeStart(next.beforeStart);
           options = next;
           const restart = compileFor(script);
           bound.configure(gateOptions());

@@ -178,12 +178,13 @@ The headless hook: compiles the script, gates playback and returns the view to r
 | `seed` | `string` | the script's `id`, then `""` | Seeds the timing jitter |
 | `composer` | `boolean` | `false` in the hook; `AgentDemo` uses `true` for `layout="chat"` | Whether user steps type into the composer instead of the transcript (a step's own `composer` overrides it) |
 | `tools` | `ToolRegistry` | none | Only `hidden` is read: a hidden tool's calls take no time, so leaving them out leaves no silent gap. `AgentDemo` passes its `tools` prop. A change to the hidden set recompiles and restarts playback |
-| `finalPolicy` | `"all" \| "last" \| (steps) => number[]` | `"all"` | What the server, the pre-hydration render and reduced motion show. A function compares by its source text, like `timing`, so an inline one doesn't count as new every render; a function whose captured variables change is not seen as new (pass a different function, or hoist it). Bound and native functions compare by identity |
+| `finalPolicy` | `"all" \| "last" \| (steps) => number[] \| { pick, order? }` | `"all"` | What the server, the pre-hydration render and reduced motion show. A function's picks show in script order; `{ pick, order: "listed" }` shows them in the order `pick` returns them (such as an answer above the chart it explains). A function compares by its source text, like `timing`, so an inline one doesn't count as new every render; a function whose captured variables change is not seen as new (pass a different function, or hoist it). Bound and native functions compare by identity |
+| `beforeStart` | `"final" \| "start"` | `"final"` | What shows before playback starts: on the server, before hydration, and with `autoStart: false` until `play()`. `"start"` is the view at 0ms (with the `chat` preset's start delay, an empty transcript), so a demo that should appear to begin from nothing doesn't flash its final transcript first. Reduced motion still shows the `finalPolicy` view |
 | `position` | `{ ms } \| { click }` | none | Pin the view to a position, such as `{ click }` from a Slidev deck. No clock runs and no controls show |
 | `autoStart` | `boolean` | `true` | Start when in view. When false the final transcript shows until `play()` |
 | `threshold` | `number` | `0.15` | In-view threshold |
 | `rootMargin` | `string` | `"0px"` | In-view root margin |
-| `leaveGraceMs` | `number` | `0` | How long the demo may be out of view before it pauses |
+| `leaveGraceMs` | `number` | `0` | How long the demo may be out of view before it pauses. `Infinity` never pauses for leaving once the demo has been seen, like a one-shot observer; a hidden tab still pauses |
 | `motion` | `"auto" \| "reduce" \| "full" \| MotionSource` | `"auto"` | Where motion permission comes from. Keep a custom source stable |
 | `reducedPolicy` | `"end" \| "hold"` | `"end"` | What reduced motion shows: `"end"` is the `finalPolicy` view; `"hold"` freezes the frame playback reached and resumes from it when motion returns. Before playback has moved, both show the final view |
 | `speed` | `number` | `1` | Initial clock rate |
@@ -217,6 +218,8 @@ All hook options plus:
 | `layout` | `"chat" \| "terminal"` | `"chat"` | The two looks over one set of parts |
 | `labels` | `Partial<AgentDemoLabels>` | see below | Overrides for any default string |
 | `glyphs` | `Partial<AgentDemoGlyphs>` | see below | Overrides for the decorative glyphs |
+| `composerStart` | `ReactNode` | none | Shown at the start of the composer, before the typed text, in a `composer-start` part hidden from assistive tech (an attach icon, say) |
+| `submitIcon` | `ReactNode` | none | Replaces `glyphs.submit` inside the composer's `submit` part, such as an SVG arrow |
 | `tools` | `ToolRegistry` | none | Per tool `name`: `label`, `runningLabel`, `icon`, `accent` (any CSS color, sets `--sf-tool-accent`), `hidden` (leave its calls out; they take no playback time either). A tool without an entry gets its name humanized ("query_sql" reads "Query sql"). The terminal layout ignores the labels and shows `server name` |
 | `renderToolCall` | `(ctx) => ReactNode \| undefined` | none | Replaces a whole tool card. Return `undefined`, `null` or `false` for the default |
 | `renderToolBody` | `(ctx) => ReactNode \| undefined` | none | Renders a tool body (`custom` bodies, or any kind you override) |
@@ -262,7 +265,7 @@ CSS variables (set on the demo or an ancestor), besides the base tokens:
 
 Root attributes: `data-sf-agent-demo`, `data-part="agent-demo"`, `data-layout="chat|terminal"`, `data-sf-animating` (hydrated and playing), `data-paused`, `data-complete`, `data-static` (`StaticTranscript`).
 
-`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`; a `<details>` under `collapsible`), `tool-header` (its `<summary>` under `collapsible`), `tool-status`, `tool-icon`, `tool-label` (in the terminal layout it holds `tool-server`, the separator text and `tool-name`), `tool-args` (in the terminal layout it holds a `tool-paren` span on each side of the args text), `tool-paren`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `tool-working`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
+`data-part` values: `agent-demo`, `header`, `controls`, `turn-jumps`, `control` (with `data-control="play|next|speed|turn"`), `transcript`, `turns`, `message` (`data-from="user|agent"`, `data-phase`), `glyph`, `text`, `lead`, `caret`, `command`, `output`, `line` (`data-tone="ok|fail|warn|muted"`), `more`, `thinking`, `thinking-dot`, `tool-call` (`data-status`, `data-phase`, `data-tool`; a `<details>` under `collapsible`), `tool-header` (its `<summary>` under `collapsible`), `tool-status`, `tool-icon`, `tool-label` (in the terminal layout it holds `tool-server`, the separator text and `tool-name`), `tool-args` (in the terminal layout it holds a `tool-paren` span on each side of the args text), `tool-paren`, `tool-meta`, `tool-body` (`data-loading`), `tool-content`, `tool-working`, `skeleton` (`data-state="loading|leaving"`), `skeleton-bar`, `code` (`data-lang`), `code-collapse`, `steps`, `step`, `error`, `composer` (`data-flash`), `composer-start`, `composer-text`, `placeholder`, `submit` (`data-flash`), `stage`, `status`, `beats`.
 
 To show a terminal tool header as `server · name` with the server dimmed, set `glyphs={{ serverSeparator: " · " }}` and style the part:
 
@@ -281,7 +284,7 @@ The transcript is a `column-reverse` scroller around a column, so the newest lin
 
 #### Without JavaScript
 
-- Server and first client render: `finalState(finalPolicy)`, the whole transcript, with no controls and no composer text. Entrance and typing animation only applies under `[data-sf-animating]`, which is set after hydration.
+- Server and first client render: `finalState(finalPolicy)`, the whole transcript, with no controls and no composer text (with `beforeStart: "start"`, the view at 0ms instead). Entrance and typing animation only applies under `[data-sf-animating]`, which is set after hydration.
 - Reduced motion (media query or a `motion` source that says reduce): the same final transcript, no controls, no animation.
 - `StaticTranscript` is the fully server-safe option; `AgentDemo` also renders on the server because it reads no browser state during render.
 - Screen readers get one `role="status"` message ("Example agent session.", then "Demo complete.") rather than a live region on moving content.
@@ -297,12 +300,12 @@ Types and a runtime validator for scripts that arrive as JSON. The shapes:
 
 | Step `kind` | Fields |
 | --- | --- |
-| `user` | `text`; `preTyped` (a prefix of `text` already in the composer); `composer` (type into the composer) |
+| `user` | `text`; `preTyped` (a prefix of `text` already in the composer); `composer` (type into the composer); `typingMs` (how long typing the rest takes) |
 | `agent-text` | `text`; `lead` (bold lead-in) |
 | `thinking` | `ms` (optional) |
 | `pause` | `ms` |
 | `prompt` | `text`: the shell prompt prefix for the commands after it, such as `"~/demo $"` |
-| `command` | `text` |
+| `command` | `text`; `typingMs` |
 | `output` | `lines: Line[]`; `more` (count of left-out lines) |
 | `tool-call` | `name`; `id`, `server`, `args`, `status`, `meta`, `output: Line[]`, `outputAt`, `more`, `body` |
 
@@ -348,7 +351,7 @@ Validates and returns a frozen `Timeline` (`script`, `steps` with `key`/`index`/
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `startDelay` | `Span` | Before the first step |
-| `typeMsPerChar` | `number \| (step) => number` | Per typed character of user and command steps |
+| `typeMsPerChar` | `number \| (step) => number` | Per typed character of user and command steps. A number gives way to a step's `typingMs`, spread over the characters it types; a function gets the step (its `typingMs` too) and always decides |
 | `jitter` | `number` | ± ms per typed character |
 | `preTypedHoldMs` | `Span` | How long `preTyped` text sits before typing resumes |
 | `submitHoldMs` | `Span` | After typing, before submit |
@@ -420,7 +423,7 @@ Create it in the browser (an effect), never during server rendering. With a `nul
 | `autoStart` | `boolean` | `true` | Start when in view. When false, wait for `play()` |
 | `threshold` | `number` | `0.15` | In-view threshold |
 | `rootMargin` | `string` | `"0px"` | In-view root margin |
-| `leaveGraceMs` | `number` | `0` | How long out of view before pausing. Coming back inside resumes at once |
+| `leaveGraceMs` | `number` | `0` | How long out of view before pausing. Coming back inside resumes at once. `Infinity`: once in view, it stays in view until the element or an option changes |
 | `motion` | `"auto" \| "reduce" \| "full" \| { get, subscribe }` | `"auto"` | `"auto"` follows `prefers-reduced-motion` and any `[data-sf-motion="reduce"]` ancestor of the element, live. Only changes to the `data-sf-motion` attribute are watched: moving the element into or out of such a subtree is picked up at the next attribute or media query change. A source's `get()` returns true while motion is allowed |
 | `reducedPolicy` | `"end" \| "hold"` | `"end"` | When motion is not allowed: jump to the end, or hold where it is |
 | `duration` | `number` | `Infinity` | Total demo time in ms; `complete` turns true at it |
@@ -900,7 +903,7 @@ The Vue binding renders the same elements, `data-part` values, ARIA and text as 
 
 ### `useAgentDemo(script, options?)`
 
-The composable behind `AgentDemo`; call it in `setup`. `script` and `options` may each be a value, a ref or a getter, so a component can pass its props through reactively. The options are React's `useAgentDemo` options (`scriptKey`, `timing`, `seed`, `composer`, `tools`, `finalPolicy`, `autoStart`, `threshold`, `rootMargin`, `leaveGraceMs`, `motion`, `reducedPolicy`, `speed`, `onStepStart`, `onComplete`), plus two for decks:
+The composable behind `AgentDemo`; call it in `setup`. `script` and `options` may each be a value, a ref or a getter, so a component can pass its props through reactively. The options are React's `useAgentDemo` options (`scriptKey`, `timing`, `seed`, `composer`, `tools`, `finalPolicy`, `beforeStart`, `autoStart`, `threshold`, `rootMargin`, `leaveGraceMs`, `motion`, `reducedPolicy`, `speed`, `onStepStart`, `onComplete`), plus two for decks:
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -952,6 +955,8 @@ Slots replace React's render props:
 | `stage` | `{ view }` | Content beside the transcript that follows the view, such as a live chart |
 | `header` | none | Content at the top of the demo, before the controls |
 | `controls` | `AgentDemoSlotState` | Your own controls in place of the built-in ones: `view`, `controls`, `started`, `playing`, `paused`, `complete`, `animating`, `speed`, `turn`, `timeline` as plain values |
+| `composerStart` | none | React's `composerStart`: shown at the start of the composer, hidden from assistive tech |
+| `submitIcon` | none | React's `submitIcon`: replaces `glyphs.submit` in the composer's submit key |
 
 ```vue
 <AgentDemo :script="script" layout="chat" :tools="tools" @complete="onDone">

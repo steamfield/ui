@@ -428,6 +428,40 @@ describe("composer (chat)", () => {
     expect(composer()?.textContent).toContain("Message the agent…");
   });
 
+  test("composerStart and submitIcon render as nodes, hidden from assistive tech", () => {
+    const { container } = render(
+      <AgentDemo
+        script={chatScript}
+        composerStart={<svg data-testid="clip" />}
+        submitIcon={<svg data-testid="arrow" />}
+      />,
+    );
+    const start = container.querySelector('[data-part="composer-start"]');
+    expect(start?.getAttribute("aria-hidden")).toBe("true");
+    expect(start?.querySelector('[data-testid="clip"]')).toBeTruthy();
+    const submit = container.querySelector('[data-part="submit"]');
+    expect(submit?.querySelector('[data-testid="arrow"]')).toBeTruthy();
+    expect(submit?.textContent).not.toContain("↵");
+  });
+
+  test("without them, no start slot and the submit glyph", () => {
+    const { container } = render(<AgentDemo script={chatScript} />);
+    expect(container.querySelector('[data-part="composer-start"]')).toBeNull();
+    expect(container.querySelector('[data-part="submit"]')?.textContent).toBe("↵");
+  });
+
+  test('beforeStart "start" renders an empty transcript on the server and before play', () => {
+    const html = renderToStaticMarkup(<AgentDemo script={chatScript} beforeStart="start" />);
+    expect(html).not.toContain("How many rows");
+    expect(html).toContain("Message the agent…");
+    const { container } = render(
+      <AgentDemo script={chatScript} beforeStart="start" autoStart={false} />,
+    );
+    advance(5000);
+    expect(region().textContent).not.toContain("How many rows");
+    expect(container.querySelector('[data-part="composer"]')).toBeTruthy();
+  });
+
   test("flashes the submit key when the message posts", () => {
     const { container } = render(<AgentDemo script={chatScript} seed="s" />);
     let flashed = false;

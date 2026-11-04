@@ -301,6 +301,18 @@ describe("leave grace period", () => {
     expect(g.getState().playing).toBe(true);
   });
 
+  test("an infinite grace period keeps playing off screen once seen", () => {
+    const g = make({ leaveGraceMs: Number.POSITIVE_INFINITY });
+    expect(g.getState().playing).toBe(false);
+    observer().fire(true);
+    observer().fire(false);
+    advance(5000);
+    expect(g.getState()).toMatchObject({ inView: true, playing: true });
+    expect(g.getState().elapsed).toBeGreaterThan(4000);
+    setTabHidden(true);
+    expect(g.getState().playing).toBe(false);
+  });
+
   test("with no grace period, leaving pauses at once", () => {
     const g = make();
     observer().fire(true);

@@ -498,19 +498,26 @@ export function Transcript<TData>({
   );
 }
 
-/** The inert composer: typed text with a caret, else the placeholder, and the submit key. */
+/**
+ * The inert composer: an optional start slot, typed text with a caret, else the placeholder, and
+ * the submit key.
+ */
 export function Composer({
   text,
   flash,
   layout,
   labels,
   glyphs,
+  start,
+  submitIcon,
 }: {
   readonly text: string;
   readonly flash: boolean;
   readonly layout: AgentDemoLayout;
   readonly labels: AgentDemoLabels;
   readonly glyphs: AgentDemoGlyphs;
+  readonly start?: ReactNode;
+  readonly submitIcon?: ReactNode;
 }): ReactElement {
   const track = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -520,6 +527,11 @@ export function Composer({
   return (
     <div data-part="composer" data-flash={flash ? "" : undefined} aria-hidden="true">
       {layout === "terminal" ? <Glyph>{glyphs.user}</Glyph> : null}
+      {start == null || start === false ? null : (
+        <span data-part="composer-start" aria-hidden="true">
+          {start}
+        </span>
+      )}
       <span data-part="composer-text" ref={track}>
         {text ? (
           <>
@@ -531,7 +543,7 @@ export function Composer({
         )}
       </span>
       <span data-part="submit" data-flash={flash ? "" : undefined}>
-        {glyphs.submit}
+        {submitIcon == null || submitIcon === false ? glyphs.submit : submitIcon}
       </span>
     </div>
   );

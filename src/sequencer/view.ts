@@ -42,7 +42,10 @@ export interface DemoEntry<TData = unknown> {
 }
 
 export interface DemoView<TData = unknown> {
-  /** Visible steps in script order. Only grows as the position moves forward. */
+  /**
+   * Visible steps in script order. Only grows as the position moves forward. A `finalState` with
+   * `order: "listed"` is the one exception: its entries follow the pick.
+   */
   readonly entries: readonly DemoEntry<TData>[];
   /** What the composer holds, or null when no user step types into it. */
   readonly composer: { readonly text: string; readonly flash: boolean } | null;
@@ -59,11 +62,19 @@ export interface DemoView<TData = unknown> {
 /** A position: ms from the start, or a click index for click-paced playback. */
 export type Position = { readonly ms: number } | { readonly click: number };
 
+/** Picks the indices of the steps `finalState` keeps. */
+export type FinalPick = (steps: readonly Step<unknown>[]) => number[];
+
 /**
  * Which steps `finalState` keeps: every step, the last agent text and tool call (or, in a script
- * with neither, the last command and output), or a pick.
+ * with neither, the last command and output), or a pick. A pick shows its steps in script order;
+ * `{ pick, order: "listed" }` shows them in the order the pick lists them.
  */
-export type FinalPolicy = "all" | "last" | ((steps: readonly Step<unknown>[]) => number[]);
+export type FinalPolicy =
+  | "all"
+  | "last"
+  | FinalPick
+  | { readonly pick: FinalPick; readonly order?: "script" | "listed" };
 
 export interface FinalStateOptions {
   readonly policy?: FinalPolicy;
@@ -261,26 +272,37 @@ export function stateAt<TData>(timeline: Timeline<TData>, position: Position): D
   return clickView(timeline, position.click);
 }
 
-function pick(policy: FinalPolicy, steps: readonly Step<unknown>[]): Set<number> {
+/** The kept indices, and whether they keep the order listed instead of script order. */
+function pick(
+  policy: FinalPolicy,
+  steps: readonly Step<unknown>[],
+): { keep: readonly number[]; listed: boolean } {
   if (policy === "last") {
     const last = (kind: Step["kind"]): number => steps.findLastIndex((s) => s.kind === kind);
     const picked = [last("agent-text"), last("tool-call")];
-    if (picked.every((i) => i === -1)) return new Set([last("command"), last("output")]);
-    return new Set(picked);
+    if (picked.every((i) => i === -1))
+      return { keep: [last("command"), last("output")], listed: false };
+    return { keep: picked, listed: false };
   }
-  if (typeof policy !== "function") throw new LibraryError("invalid_option", { field: "policy" });
-  const picked = policy(steps);
+  const object = typeof policy === "object" && policy !== null;
+  const fn = object ? policy.pick : policy;
+  const order = object ? (policy.order ?? "script") : "script";
+  if (typeof fn !== "function" || (order !== "script" && order !== "listed")) {
+    throw new LibraryError("invalid_option", { field: "policy" });
+  }
+  const picked = fn(steps);
   const valid =
     Array.isArray(picked) && picked.every((i) => Number.isInteger(i) && i >= 0 && i < steps.length);
   if (!valid) throw new LibraryError("invalid_option", { field: "policy" });
-  return new Set(picked);
+  return { keep: [...new Set(picked)], listed: order === "listed" };
 }
 
 /**
  * The finished view, for SSR, no-JS and reduced motion. "all" (the default) equals
  * `stateAt(timeline, { ms: duration })`. "last" keeps only the last agent-text and the last
  * tool-call, in script order; a script with neither keeps its last command and last output. A
- * function gets the steps and returns the indices to keep.
+ * function gets the steps and returns the indices to keep, shown in script order; the object
+ * form `{ pick, order: "listed" }` shows them in the order `pick` returns them instead.
  */
 export function finalState<TData>(
   timeline: Timeline<TData>,
@@ -291,6 +313,12 @@ export function finalState<TData>(
   const { policy = "all" } = options;
   const view = timeView(timeline, timeline.duration);
   if (policy === "all") return view;
-  const keep = pick(policy, timeline.script.steps as readonly Step<unknown>[]);
-  return { ...view, entries: view.entries.filter((entry) => keep.has(entry.index)) };
+  const { keep, listed } = pick(policy, timeline.script.steps as readonly Step<unknown>[]);
+  if (!listed) {
+    const kept = new Set(keep);
+    return { ...view, entries: view.entries.filter((entry) => kept.has(entry.index)) };
+  }
+  const byIndex = new Map(view.entries.map((entry) => [entry.index, entry]));
+  const entries = keep.flatMap((index) => byIndex.get(index) ?? []);
+  return { ...view, entries };
 }

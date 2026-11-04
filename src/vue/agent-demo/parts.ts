@@ -470,9 +470,16 @@ export interface ComposerProps {
   readonly layout: AgentDemoLayout;
   readonly labels: AgentDemoLabels;
   readonly glyphs: AgentDemoGlyphs;
+  /** The `composerStart` slot's nodes. */
+  readonly start?: VNode[] | undefined;
+  /** The `submitIcon` slot's nodes, in place of `glyphs.submit`. */
+  readonly submitIcon?: VNode[] | undefined;
 }
 
-/** The inert composer: typed text with a caret, else the placeholder, and the submit key. */
+/**
+ * The inert composer: an optional start slot, typed text with a caret, else the placeholder, and
+ * the submit key.
+ */
 export const Composer: DefineSetupFnComponent<ComposerProps> = defineComponent(
   (props: ComposerProps) => {
     const track = ref<HTMLElement | null>(null);
@@ -492,6 +499,9 @@ export const Composer: DefineSetupFnComponent<ComposerProps> = defineComponent(
         },
         [
           props.layout === "terminal" ? glyph(props.glyphs.user) : null,
+          hasContent(props.start)
+            ? h("span", { "data-part": "composer-start", "aria-hidden": "true" }, props.start)
+            : null,
           h(
             "span",
             { "data-part": "composer-text", ref: track },
@@ -502,7 +512,7 @@ export const Composer: DefineSetupFnComponent<ComposerProps> = defineComponent(
           h(
             "span",
             { "data-part": "submit", "data-flash": props.flash ? "" : undefined },
-            props.glyphs.submit,
+            hasContent(props.submitIcon) ? props.submitIcon : props.glyphs.submit,
           ),
         ],
       );
@@ -515,6 +525,8 @@ export const Composer: DefineSetupFnComponent<ComposerProps> = defineComponent(
       layout: { type: String as PropType<AgentDemoLayout>, required: true },
       labels: { type: Object as PropType<AgentDemoLabels>, required: true },
       glyphs: { type: Object as PropType<AgentDemoGlyphs>, required: true },
+      start: { type: Array as PropType<VNode[]>, default: undefined },
+      submitIcon: { type: Array as PropType<VNode[]>, default: undefined },
     },
   },
 );

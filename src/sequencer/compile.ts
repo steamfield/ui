@@ -137,12 +137,21 @@ class Builder<TData> {
   }
 }
 
-function typeDelay<TData>(b: Builder<TData>, step: Extract<Step, { kind: "user" | "command" }>) {
+/**
+ * The base ms per typed character: a `typeMsPerChar` function's answer, else the step's `typingMs`
+ * spread over the `chars` it types, else the preset's number.
+ */
+function typeDelay<TData>(
+  b: Builder<TData>,
+  step: Extract<Step, { kind: "user" | "command" }>,
+  chars: number,
+) {
   const { typeMsPerChar } = b.timing;
-  const base = checkedMs(
-    typeof typeMsPerChar === "number" ? typeMsPerChar : typeMsPerChar(step),
-    "typeMsPerChar",
-  );
+  let base: number;
+  if (typeof typeMsPerChar === "function") base = typeMsPerChar(step);
+  else if (step.typingMs !== undefined) base = step.typingMs / Math.max(1, chars);
+  else base = typeMsPerChar;
+  base = checkedMs(base, "typeMsPerChar");
   return (): number => Math.max(0, base + b.jitter());
 }
 
@@ -187,7 +196,7 @@ function buildUser<TData>(
     b.t += b.span(b.timing.preTypedHoldMs);
   }
   const chars = Array.from(step.text.slice(pre.length));
-  const delay = typeDelay(b, step);
+  const delay = typeDelay(b, step, chars.length);
   times.push(...b.reveal(chars, delay));
   units.push(...chars);
   b.t += b.span(b.timing.submitHoldMs);
@@ -240,7 +249,7 @@ function buildStep<TData>(
       return;
     case "command":
       track.units = Array.from(step.text);
-      track.unitTimes = b.reveal(track.units, typeDelay(b, step));
+      track.unitTimes = b.reveal(track.units, typeDelay(b, step, track.units.length));
       track.settle = b.t;
       b.t += b.span(b.timing.gapMs);
       return;

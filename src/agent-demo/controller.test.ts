@@ -8,6 +8,7 @@ import type { MotionSource } from "../playback/motion.ts";
 import type { DemoScript } from "../script/types.ts";
 import { compile } from "../sequencer/compile.ts";
 import { presets } from "../sequencer/timing.ts";
+import { stateAt } from "../sequencer/view.ts";
 import {
   createDemoController,
   type DemoController,
@@ -82,6 +83,39 @@ describe("before mount", () => {
   test("finalPolicy picks the final view", () => {
     const c = make({ finalPolicy: "last" }, { mount: false });
     expect(c.getState().view.entries.length).toBeLessThan(script.steps.length);
+  });
+
+  test('beforeStart "start" shows the view at 0ms before mount and until play', () => {
+    const c = make({ beforeStart: "start", autoStart: false }, { mount: false });
+    const start = stateAt(timeline, { ms: 0 });
+    expect(c.getState().view).toEqual(start);
+    c.mount();
+    scroll(true);
+    expect(c.getState().view).toEqual(start);
+    c.getState().controls.play();
+    advance(TOTAL + 100);
+    expect(c.getState().view.entries).toHaveLength(script.steps.length);
+  });
+
+  test('beforeStart "start" still shows the final state under reduced motion', () => {
+    stubReducedMotion(true);
+    const c = make({ beforeStart: "start" });
+    expect(c.getState().view.entries).toHaveLength(script.steps.length);
+  });
+
+  test("beforeStart rejects an unknown value", () => {
+    expect(() => make({ beforeStart: "empty" as never }, { mount: false })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "beforeStart" }),
+    );
+  });
+
+  test("an inline object finalPolicy compares by content, so re-renders keep the view", () => {
+    const policy = () => ({ pick: (): number[] => [4, 0], order: "listed" as const });
+    const c = make({ finalPolicy: policy() }, { mount: false });
+    const before = c.getState();
+    c.update(script, { ...options, finalPolicy: policy() });
+    expect(c.getState()).toBe(before);
+    expect(before.view.entries.map((e) => e.index)).toEqual([4, 0]);
   });
 
   test("the speed option shows before mount; controls do nothing", () => {

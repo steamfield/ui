@@ -108,6 +108,6 @@
     "path": "dist/vue/agent-demo/index.js",
     "import": "{ AgentDemo }",
     "ignore": ["vue"],
-    "limit": "11.2 kB"
+    "limit": "11.5 kB"
   }
 ]

@@ -22,6 +22,7 @@ export type { StaticTranscriptProps, StaticTranscriptSlots } from "./static-tran
 export { StaticTranscript } from "./static-transcript.ts";
 export type {
   AgentDemoControls,
+  BeforeStart,
   UseAgentDemoOptions,
   UseAgentDemoResult,
 } from "./use-agent-demo.ts";

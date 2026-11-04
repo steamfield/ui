@@ -16,7 +16,10 @@ export type ToolCallStep<TData = unknown> = Extract<Step<TData>, { kind: "tool-c
 export interface Timing<TData = unknown> {
   /** Before the first step. */
   readonly startDelay: Span;
-  /** Base ms per typed character of user and command steps. */
+  /**
+   * Base ms per typed character of user and command steps. A number gives way to a step's
+   * `typingMs`; a function gets the step (`typingMs` included) and always decides.
+   */
   readonly typeMsPerChar: number | ((step: TypedStep) => number);
   /** ± ms added to each typed character, from the seeded PRNG. */
   readonly jitter: number;
