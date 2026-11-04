@@ -61,9 +61,12 @@ export function initReveal(options: RevealOptions = {}): () => void {
   const deferred = options.deferred ?? defaultDeferred;
   const readyEvent = options.readyEvent ?? "sf:reveal-ready";
   const released = new WeakSet<Element>();
-  root.dataset.motionReady = "true";
   // Tells `revealGateScript`'s fallback that the gate is in good hands.
   root.dataset.revealLive = "true";
+  // Called from <head>, the gate goes up now so nothing paints ungated while the page parses (and
+  // `immediate` then measures gated layout). Called after parsing, it goes up in `start`, after
+  // `immediate` has measured, so on-screen containers never compute their hidden start state.
+  if (document.readyState === "loading") root.dataset.motionReady = "true";
 
   const reveal = (el: Element): void => {
     el.setAttribute("data-revealed", "true");
@@ -77,19 +80,28 @@ export function initReveal(options: RevealOptions = {}): () => void {
     { rootMargin: options.rootMargin ?? "0px 0px -12% 0px", threshold: options.threshold ?? 0 },
   );
 
-  const observe = (scope: ParentNode, hydrated: boolean): void => {
+  /**
+   * Decides every container in `scope` before touching any: `immediate` usually reads layout, and a
+   * read after a reveal (or the gate) forces a style pass that makes the next container animate.
+   * Returns the writes to apply; a hydrated container is released from deferral for good.
+   */
+  const plan = (scope: ParentNode, hydrated: boolean): (() => void) => {
     const targets = [...scope.querySelectorAll(CONTAINER)];
     if (scope instanceof Element && scope.matches(CONTAINER)) targets.unshift(scope);
-    for (const el of targets) if (!el.hasAttribute("data-revealed")) arm(el, hydrated);
+    const armed = targets.filter(
+      (el) => !el.hasAttribute("data-revealed") && (hydrated || !deferred(el)),
+    );
+    const now = armed.map((el) => immediate(el));
+    return () => {
+      armed.forEach((el, i) => {
+        if (hydrated) released.add(el);
+        if (now[i]) reveal(el);
+        else observer.observe(el);
+      });
+    };
   };
 
-  /** Reveals or observes one container; a hydrated one is released from deferral for good. */
-  const arm = (el: Element, hydrated: boolean): void => {
-    if (hydrated) released.add(el);
-    else if (deferred(el)) return;
-    if (immediate(el)) reveal(el);
-    else observer.observe(el);
-  };
+  const observe = (scope: ParentNode, hydrated: boolean): void => plan(scope, hydrated)();
 
   const onReady = (event: Event): void => {
     if (event.target instanceof Element) observe(event.target, true);
@@ -121,7 +133,9 @@ export function initReveal(options: RevealOptions = {}): () => void {
   // Watching starts after the first pass, once the document is parsed: a call from <head> must not
   // arm elements the parser is still adding children to.
   const start = (): void => {
-    observe(document, false);
+    const apply = plan(document, false);
+    root.dataset.motionReady = "true";
+    apply();
     mutations?.observe(document.body ?? root, { childList: true, subtree: true });
   };
   if (document.readyState === "loading") {

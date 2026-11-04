@@ -94,6 +94,30 @@ describe("initReveal", () => {
     expect([...observer().targets].map((el) => el.id)).toEqual(["b"]);
   });
 
+  test("asks immediate() about every container before setting the gate or revealing any", () => {
+    // A layout read (the usual above-the-fold check) taken after the gate or a reveal is in
+    // place forces a style pass in the hidden start state, so the container animates in instead
+    // of simply being there.
+    const seen: { id: string; gated: boolean; revealed: number }[] = [];
+    dispose = initReveal({
+      immediate: (el) => {
+        seen.push({
+          id: el.id,
+          gated: root.dataset.motionReady === "true",
+          revealed: document.querySelectorAll("[data-revealed]").length,
+        });
+        return true;
+      },
+    });
+    expect(seen).toEqual([
+      { id: "a", gated: false, revealed: 1 },
+      { id: "b", gated: false, revealed: 1 },
+    ]);
+    expect(byId("a").getAttribute("data-revealed")).toBe("true");
+    expect(byId("b").getAttribute("data-revealed")).toBe("true");
+    expect(root.dataset.motionReady).toBe("true");
+  });
+
   test("reduced motion skips setup entirely", () => {
     stubReducedMotion(true);
     dispose = initReveal();
@@ -205,6 +229,8 @@ describe("late hydration", () => {
   test("waits for DOMContentLoaded while the document is loading", () => {
     const state = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
     dispose = initReveal();
+    // Called from <head>, the gate is up at once so nothing paints ungated while the page parses.
+    expect(root.dataset.motionReady).toBe("true");
     expect(observer().targets.size).toBe(0);
     state.mockReturnValue("interactive");
     document.dispatchEvent(new Event("DOMContentLoaded"));

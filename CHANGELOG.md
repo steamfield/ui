@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- `initReveal` asks `immediate` about every container before it sets the gate or reveals any. A layout read in `immediate` (the usual above-the-fold check) used to run after the gate and earlier reveals were applied, which forced a style pass in the hidden start state, so on-screen containers animated in instead of simply being there.
 - `codeBlocks` emits a titled block's `figcaption` before its `<pre>`, so assistive tech reads and focuses the title before the code, as it is shown. Sites that moved the caption up with `order: -1` look the same and can drop that rule.
 - 9ac39c5: `useCopy` clears its pending reset timer when the component unmounts. Since 0.1.0 the 2-second `copied` reset kept running after unmount, so a remount (StrictMode, `<Activity>`) could briefly show a stale `copied` state.
 
