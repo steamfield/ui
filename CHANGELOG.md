@@ -1,5 +1,11 @@
 # @steamfield/ui
 
+## 0.2.1
+
+### Patch Changes
+
+- 9ac39c5: `useCopy` clears its pending reset timer when the component unmounts. Since 0.1.0 the 2-second `copied` reset kept running after unmount, so a remount (StrictMode, `<Activity>`) could briefly show a stale `copied` state.
+
 ## 0.2.0
 
 ### Minor Changes
