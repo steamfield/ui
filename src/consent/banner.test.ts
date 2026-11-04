@@ -204,19 +204,44 @@ describe("with reduced motion", () => {
     expect(banner()).toBeNull();
   });
 
-  test("mounting twice for one store adds one banner, kept until both unmount", () => {
+  test("each mount owns its banner, and unmount is idempotent", () => {
     const store = createConsentStore();
     const first = mountConsentBanner(store);
     const second = mountConsentBanner(store);
+    expect(document.querySelectorAll('[data-part="consent"]')).toHaveLength(2);
+    first();
+    first();
     expect(document.querySelectorAll('[data-part="consent"]')).toHaveLength(1);
-    first();
-    first();
-    expect(banner()).not.toBeNull();
-    second();
+    store.accept();
     expect(banner()).toBeNull();
-    // A fresh mount after both are gone works again.
-    mountConsentBanner(store);
+    second();
+    second();
+    store.reset();
+    expect(banner()).toBeNull();
+  });
+
+  test("without a body or a container it throws invalid_option on container", () => {
+    vi.spyOn(document, "body", "get").mockReturnValue(null as unknown as HTMLElement);
+    expect(() => mountConsentBanner(createConsentStore())).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "container" }),
+    );
+  });
+
+  test("a container works even before the body exists", () => {
+    const container = document.createElement("div");
+    vi.spyOn(document, "body", "get").mockReturnValue(null as unknown as HTMLElement);
+    mountConsentBanner(createConsentStore(), { container });
+    expect(container.querySelector('[data-part="consent"]')).not.toBeNull();
+  });
+
+  test("after the store is destroyed, the banner stays until unmounted", () => {
+    const store = createConsentStore();
+    const unmount = mountConsentBanner(store);
+    store.destroy();
+    store.accept();
     expect(banner()).not.toBeNull();
+    unmount();
+    expect(banner()).toBeNull();
   });
 
   test.each([
@@ -240,5 +265,68 @@ describe("with reduced motion", () => {
     unmount();
     vi.unstubAllGlobals();
     expect(banner()).toBeNull();
+  });
+
+  describe("focus when the banner goes", () => {
+    test("a keyboard Accept returns focus to where it was before entering the banner", async () => {
+      const before = document.createElement("button");
+      before.textContent = "Page";
+      document.body.append(before);
+      before.focus();
+      mountConsentBanner(createConsentStore(), { privacyHref: "/privacy" });
+      const user = userEvent.setup();
+      await user.tab();
+      await user.tab();
+      await user.tab();
+      expect(document.activeElement?.textContent).toBe("Accept");
+      await user.keyboard("{Enter}");
+      expect(banner()).toBeNull();
+      expect(document.activeElement).toBe(before);
+    });
+
+    test("with no earlier focus, focus goes to the body, whose tabindex is removed on blur", () => {
+      mountConsentBanner(createConsentStore());
+      button("Decline").focus();
+      button("Decline").click();
+      expect(banner()).toBeNull();
+      expect(document.activeElement).toBe(document.body);
+      expect(document.body.getAttribute("tabindex")).toBe("-1");
+      const next = document.createElement("button");
+      document.body.append(next);
+      next.focus();
+      expect(document.body.hasAttribute("tabindex")).toBe(false);
+    });
+
+    test("an earlier element that has since left the page falls back to the body", () => {
+      const before = document.createElement("button");
+      document.body.append(before);
+      before.focus();
+      mountConsentBanner(createConsentStore());
+      button("Accept").focus();
+      before.remove();
+      button("Accept").click();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    test("focus outside the banner is left alone", () => {
+      const store = createConsentStore();
+      const elsewhere = document.createElement("button");
+      document.body.append(elsewhere);
+      mountConsentBanner(store);
+      elsewhere.focus();
+      store.accept();
+      expect(document.activeElement).toBe(elsewhere);
+      expect(document.body.hasAttribute("tabindex")).toBe(false);
+    });
+
+    test("unmounting with focus inside returns it too", () => {
+      const before = document.createElement("button");
+      document.body.append(before);
+      before.focus();
+      const unmount = mountConsentBanner(createConsentStore());
+      button("Accept").focus();
+      unmount();
+      expect(document.activeElement).toBe(before);
+    });
   });
 });

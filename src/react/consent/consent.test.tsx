@@ -1,7 +1,10 @@
+// Every store is created once, outside render, as the docs require: a store created inline in
+// render would be a new store on every render.
 import { act, render, renderHook, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { type ReactElement, StrictMode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { setDocumentCookie, stubReducedMotion } from "../../../tests/helpers/dom.ts";
 import { mountConsentBanner } from "../../consent/banner.ts";
@@ -12,17 +15,23 @@ import { useConsent } from "./use-consent.ts";
 beforeEach(() => {
   setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
   document.body.innerHTML = "";
+  document.documentElement.removeAttribute("data-sf-motion");
 });
+
+const region = (name = "Analytics consent"): HTMLElement | null =>
+  screen.queryByRole("region", { name });
 
 describe("useConsent", () => {
   test("reads the stored decision", () => {
     setDocumentCookie("sf-consent=denied; Path=/");
-    const { result } = renderHook(() => useConsent(createConsentStore()));
+    const store = createConsentStore();
+    const { result } = renderHook(() => useConsent(store));
     expect(result.current.consent).toBe("denied");
   });
 
   test("accept, decline and reset update it and the cookie", () => {
-    const { result } = renderHook(() => useConsent(createConsentStore()));
+    const store = createConsentStore();
+    const { result } = renderHook(() => useConsent(store));
     expect(result.current.consent).toBeNull();
     act(() => result.current.accept());
     expect(result.current.consent).toBe("granted");
@@ -43,8 +52,43 @@ describe("useConsent", () => {
 
   test("is undecided on the server", () => {
     setDocumentCookie("sf-consent=granted; Path=/");
-    expect(renderToStaticMarkup(<Probe store={createConsentStore()} />)).toBe("<span>null</span>");
+    const store = createConsentStore();
+    expect(renderToStaticMarkup(<Probe store={store} />)).toBe("<span>null</span>");
   });
+});
+
+describe("hydration", () => {
+  beforeEach(() => {
+    stubReducedMotion(true);
+  });
+
+  async function hydrate(store: ConsentStore): Promise<HTMLElement> {
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<App store={store} />);
+    document.body.append(container);
+    await act(async () => {
+      hydrateRoot(container, <App store={store} />);
+    });
+    return container;
+  }
+
+  test.each([
+    ["granted", "sf-consent=granted; Path=/", "granted", false],
+    ["undecided", "", "null", true],
+  ])(
+    "%s: hydrates without a mismatch, then shows the stored state",
+    async (_, cookie, shown, banner) => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      if (cookie) setDocumentCookie(cookie);
+      const store = createConsentStore();
+      // The server render is the same for both: undecided, and no banner.
+      expect(renderToString(<App store={store} />)).toBe("<main><span>null</span></main>");
+      const container = await hydrate(store);
+      expect(errors).not.toHaveBeenCalled();
+      expect(container.querySelector("span")?.textContent).toBe(shown);
+      expect(region() !== null).toBe(banner);
+    },
+  );
 });
 
 describe("<ConsentBanner> with reduced motion", () => {
@@ -52,15 +96,14 @@ describe("<ConsentBanner> with reduced motion", () => {
     stubReducedMotion(true);
   });
 
-  const region = (name = "Analytics consent"): HTMLElement | null =>
-    screen.queryByRole("region", { name });
-
   test("renders nothing on the server", () => {
-    expect(renderToStaticMarkup(<ConsentBanner store={createConsentStore()} />)).toBe("");
+    const store = createConsentStore();
+    expect(renderToStaticMarkup(<ConsentBanner store={store} />)).toBe("");
   });
 
   test("shows at once while undecided, with no animation", () => {
-    render(<ConsentBanner store={createConsentStore()} />);
+    const store = createConsentStore();
+    render(<ConsentBanner store={store} />);
     expect(region()).not.toBeNull();
     expect(region()?.hasAttribute("data-sf-animating")).toBe(false);
     expect(screen.queryByRole("link")).toBeNull();
@@ -68,14 +111,16 @@ describe("<ConsentBanner> with reduced motion", () => {
 
   test("renders nothing when already decided", () => {
     setDocumentCookie("sf-consent=granted; Path=/");
-    render(<ConsentBanner store={createConsentStore()} />);
+    const store = createConsentStore();
+    render(<ConsentBanner store={store} />);
     expect(region()).toBeNull();
   });
 
   test("labels come from props", () => {
+    const store = createConsentStore();
     render(
       <ConsentBanner
-        store={createConsentStore()}
+        store={store}
         message="We count visits."
         acceptLabel="Allow"
         declineLabel="No thanks"
@@ -113,10 +158,31 @@ describe("<ConsentBanner> with reduced motion", () => {
     expect(region()).not.toBeNull();
   });
 
+  test("a keyboard Accept returns focus to where it was before entering the banner", async () => {
+    const store = createConsentStore();
+    render(
+      <>
+        <button type="button">Page</button>
+        <ConsentBanner store={store} privacyHref="/privacy" />
+      </>,
+    );
+    const page = screen.getByRole("button", { name: "Page" });
+    page.focus();
+    const user = userEvent.setup();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement?.textContent).toBe("Accept");
+    await user.keyboard("{Enter}");
+    expect(region()).toBeNull();
+    expect(document.activeElement).toBe(page);
+  });
+
   test("survives StrictMode's double mount with one banner", () => {
+    const store = createConsentStore();
     render(
       <StrictMode>
-        <ConsentBanner store={createConsentStore()} />
+        <ConsentBanner store={store} />
       </StrictMode>,
     );
     expect(screen.getAllByRole("region")).toHaveLength(1);
@@ -135,14 +201,16 @@ describe("<ConsentBanner> with reduced motion", () => {
 
   test("a bad prop throws invalid_option during render", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => render(<ConsentBanner store={createConsentStore()} delayMs={-1} />)).toThrow(
+    const store = createConsentStore();
+    expect(() => render(<ConsentBanner store={store} delayMs={-1} />)).toThrow(
       expect.objectContaining({ code: "invalid_option", field: "delayMs" }),
     );
   });
 
   test("renders the same markup as mountConsentBanner", () => {
     const options = { privacyHref: "/privacy", message: "Hi." } as const;
-    const fromReact = render(<ConsentBanner store={createConsentStore()} {...options} />).container;
+    const store = createConsentStore();
+    const fromReact = render(<ConsentBanner store={store} {...options} />).container;
     const dom = document.createElement("div");
     document.body.append(dom);
     mountConsentBanner(createConsentStore({ cookieName: "other" }), { ...options, container: dom });
@@ -152,20 +220,56 @@ describe("<ConsentBanner> with reduced motion", () => {
 });
 
 describe("<ConsentBanner> with motion allowed", () => {
-  test("slides in after delayMs, and an accept while animating removes it", () => {
+  beforeEach(() => {
     stubReducedMotion(false);
     vi.useFakeTimers();
+  });
+
+  test("slides in after delayMs, and an accept while animating removes it", () => {
     const store = createConsentStore();
     render(<ConsentBanner store={store} delayMs={500} />);
-    expect(screen.queryByRole("region")).toBeNull();
+    expect(region()).toBeNull();
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(screen.getByRole("region").hasAttribute("data-sf-animating")).toBe(true);
+    expect(region()?.hasAttribute("data-sf-animating")).toBe(true);
     act(() => store.accept());
-    expect(screen.queryByRole("region")).toBeNull();
+    expect(region()).toBeNull();
+  });
+
+  test("a re-render during the delay doesn't restart it", () => {
+    const store = createConsentStore();
+    const { rerender } = render(<ConsentBanner store={store} delayMs={500} message="One." />);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    rerender(<ConsentBanner store={store} delayMs={500} message="Two." />);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(region()?.textContent).toContain("Two.");
+  });
+
+  test("inside a [data-sf-motion=reduce] ancestor it renders without animation", () => {
+    const store = createConsentStore();
+    render(
+      <div data-sf-motion="reduce">
+        <ConsentBanner store={store} delayMs={0} />
+      </div>,
+    );
+    expect(region()).not.toBeNull();
+    expect(region()?.hasAttribute("data-sf-animating")).toBe(false);
   });
 });
+
+function App({ store }: { readonly store: ConsentStore }): ReactElement {
+  return (
+    <main>
+      <Probe store={store} />
+      <ConsentBanner store={store} />
+    </main>
+  );
+}
 
 function Probe({ store }: { readonly store: ConsentStore }): ReactElement {
   return <span>{String(useConsent(store).consent)}</span>;

@@ -12,16 +12,17 @@
    --sf-consent-radius             card corners; buttons use half (--sf-radius)
    --sf-consent-shadow             card shadow
    --sf-consent-font               font family (inherit)
+   --sf-consent-z-index            stacking order (50)
 
-   A bottom-right card, full width with a 16px gutter on narrow screens. It slides in only under
-   [data-sf-animating], with motion allowed by both the media query and any
-   [data-sf-motion="reduce"] ancestor. */
+   A bottom-right card 1rem from the corner, full width with a 1rem gutter on narrow screens.
+   It slides in only under [data-sf-animating], with motion allowed by both the media query and
+   any [data-sf-motion="reduce"] ancestor. */
 @layer sf {
   :where([data-part="consent"]) {
     position: fixed;
     inset-block-end: 1rem;
     inset-inline-end: 1rem;
-    z-index: 50;
+    z-index: var(--sf-consent-z-index, 50);
     box-sizing: border-box;
     width: min(25rem, calc(100vw - 2rem));
     display: grid;
@@ -43,8 +44,8 @@
 
   @media (max-width: 40rem) {
     :where([data-part="consent"]) {
-      inset-inline: 16px;
-      inset-block-end: 16px;
+      inset-inline: 1rem;
+      inset-block-end: 1rem;
       width: auto;
     }
   }

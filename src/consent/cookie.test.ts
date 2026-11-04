@@ -1,7 +1,7 @@
 // The cookie writer the store uses: attributes aren't readable back from `document.cookie`, so
 // they are checked here for each kind of host. store.test.ts covers the real read/write path.
 import { describe, expect, test } from "vitest";
-import { consentCookie, readConsentCookie } from "./cookie.ts";
+import { consentCookie, consentCookieWrites, readConsentCookie } from "./cookie.ts";
 
 const year = { maxAge: 31_536_000, domain: "steamfield.io" };
 const at = (url: string): URL => new URL(url);
@@ -74,7 +74,38 @@ describe("readConsentCookie", () => {
     expect(readConsentCookie(cookie, "sf-consent")).toBe(expected);
   });
 
-  test("the first matching cookie wins, as the browser lists the most specific first", () => {
+  test("takes the first listed, which RFC 6265 orders by path length, then creation time", () => {
     expect(readConsentCookie("sf-consent=denied; sf-consent=granted", "sf-consent")).toBe("denied");
+  });
+
+  test("an older host-only cookie listed before the shared Domain one shadows it", () => {
+    // Same name and path: the browser lists the earlier-created host-only cookie first, which is
+    // why consentCookieWrites expires it before writing the shared one.
+    expect(readConsentCookie("sf-consent=denied; sf-consent=granted", "sf-consent")).toBe("denied");
+    expect(readConsentCookie("sf-consent=granted", "sf-consent")).toBe("granted");
+  });
+});
+
+describe("consentCookieWrites", () => {
+  test("on the shared domain, expires the host-only cookie before writing the shared one", () => {
+    expect(
+      consentCookieWrites("sf-consent", "granted", year, at("https://rr.steamfield.io/")),
+    ).toEqual([
+      "sf-consent=; Path=/; Max-Age=0; SameSite=Lax; Secure",
+      "sf-consent=granted; Path=/; Max-Age=31536000; SameSite=Lax; Domain=.steamfield.io; Secure",
+    ]);
+  });
+
+  test("clearing on the shared domain clears both", () => {
+    expect(consentCookieWrites("sf-consent", null, year, at("http://steamfield.io/"))).toEqual([
+      "sf-consent=; Path=/; Max-Age=0; SameSite=Lax",
+      "sf-consent=; Path=/; Max-Age=0; SameSite=Lax; Domain=.steamfield.io",
+    ]);
+  });
+
+  test("a host-only cookie is a single write", () => {
+    expect(consentCookieWrites("sf-consent", "denied", year, at("http://localhost/"))).toEqual([
+      "sf-consent=denied; Path=/; Max-Age=31536000; SameSite=Lax",
+    ]);
   });
 });

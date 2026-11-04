@@ -1,8 +1,9 @@
 // The consent banner in a real browser, and the design claim behind the shared store: a decision
 // made on one subdomain is honored on every other, while an unrelated host keeps its own. Chromium
 // resolves *.steamfield.test to the preview server; the playground's DOM store uses
-// `domain: "steamfield.test"`.
-import { expect, type Page, test } from "@playwright/test";
+// `domain: "steamfield.test"`. The preview is plain http, so `Secure` on https is covered only by
+// the unit tests (src/consent/cookie.test.ts).
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 
 test.use({
   launchOptions: {
@@ -10,16 +11,26 @@ test.use({
   },
 });
 
-const PORT = 5200;
-const url = (host: string, query = "?delay=0"): string =>
-  `http://${host}:${PORT}/${query}#/consent`;
+const COOKIE = "pg-consent";
+
+/** The preview server's port, from the configured baseURL. */
+function port(): string {
+  const base = test.info().project.use.baseURL;
+  if (!base) throw new Error("playwright.config.ts sets no baseURL");
+  return new URL(base).port;
+}
+const origin = (host: string): string => `http://${host}:${port()}`;
 const banner = (page: Page) => page.getByRole("region", { name: "Analytics consent", exact: true });
 const decision = (page: Page) => page.locator("#consent-dom-state");
+const domSection = (page: Page) => page.getByRole("region", { name: /^mountConsentBanner/ });
 
-async function open(page: Page, host: string, query?: string): Promise<void> {
-  await page.goto(url(host, query));
+async function open(page: Page, host: string, query = "?delay=0"): Promise<void> {
+  await page.goto(`${origin(host)}/${query}#/consent`);
   await page.locator("main h1").waitFor();
 }
+
+const consentCookies = async (context: BrowserContext) =>
+  (await context.cookies()).filter(({ name }) => name === COOKIE);
 
 for (const [button, state] of [
   ["Accept", "granted"],
@@ -32,9 +43,10 @@ for (const [button, state] of [
     await expect(banner(page)).toHaveCount(0);
     await expect(decision(page)).toHaveText(state);
 
-    const cookie = (await context.cookies()).find(({ name }) => name === "pg-consent");
-    expect(cookie).toMatchObject({ value: state, domain: ".steamfield.test", path: "/" });
-    expect(cookie?.sameSite).toBe("Lax");
+    const cookies = await consentCookies(context);
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]).toMatchObject({ value: state, domain: ".steamfield.test", path: "/" });
+    expect(cookies[0]?.sameSite).toBe("Lax");
 
     await open(page, "b.steamfield.test");
     await expect(decision(page)).toHaveText(state);
@@ -46,15 +58,58 @@ for (const [button, state] of [
   });
 }
 
-test("reset on one subdomain brings the banner back on another", async ({ page }) => {
+test("reset on one subdomain brings the banner back on another and empties the jar", async ({
+  page,
+  context,
+}) => {
   await open(page, "a.steamfield.test");
   await banner(page).getByRole("button", { name: "Accept" }).click();
   await open(page, "b.steamfield.test");
-  await page.getByRole("button", { name: "Reset choice" }).first().click();
+  await domSection(page).getByRole("button", { name: "Reset choice" }).click();
   await expect(banner(page)).toBeVisible();
+  expect(await consentCookies(context)).toEqual([]);
   await open(page, "a.steamfield.test");
   await expect(decision(page)).toHaveText("undecided");
   await expect(banner(page)).toBeVisible();
+});
+
+test("an older host-only cookie doesn't shadow a new shared decision", async ({
+  page,
+  context,
+}) => {
+  await open(page, "a.steamfield.test");
+  await expect(banner(page)).toBeVisible();
+  // A decision left from before `domain` was configured: host-only, and older than the next one.
+  await context.addCookies([{ name: COOKIE, value: "denied", url: origin("a.steamfield.test") }]);
+  await banner(page).getByRole("button", { name: "Accept" }).click();
+  await page.reload();
+  await page.locator("main h1").waitFor();
+  await expect(decision(page)).toHaveText("granted");
+  const cookies = await consentCookies(context);
+  expect(cookies).toHaveLength(1);
+  expect(cookies[0]).toMatchObject({ value: "granted", domain: ".steamfield.test" });
+});
+
+test("unrelated cookies, including look-alike names, are read past and left alone", async ({
+  page,
+  context,
+}) => {
+  const seeded = [
+    { name: `x-${COOKIE}`, value: "granted" },
+    { name: `${COOKIE}-old`, value: "denied" },
+    { name: "other", value: "granted" },
+  ];
+  await context.addCookies(
+    seeded.map((cookie) => ({ ...cookie, domain: ".steamfield.test", path: "/" })),
+  );
+  await open(page, "a.steamfield.test");
+  await expect(decision(page)).toHaveText("undecided");
+  await banner(page).getByRole("button", { name: "Accept" }).click();
+  await expect(decision(page)).toHaveText("granted");
+  const jar = await context.cookies();
+  for (const { name, value } of seeded) {
+    expect(jar.find((cookie) => cookie.name === name)?.value).toBe(value);
+  }
 });
 
 test("an unrelated host gets a host-only cookie and doesn't share the decision", async ({
@@ -64,12 +119,26 @@ test("an unrelated host gets a host-only cookie and doesn't share the decision",
   await open(page, "localhost");
   await banner(page).getByRole("button", { name: "Accept" }).click();
   await expect(decision(page)).toHaveText("granted");
-  const cookie = (await context.cookies()).find(({ name }) => name === "pg-consent");
-  expect(cookie).toMatchObject({ value: "granted", domain: "localhost" });
+  const cookies = await consentCookies(context);
+  expect(cookies).toHaveLength(1);
+  expect(cookies[0]).toMatchObject({ value: "granted", domain: "localhost" });
 
   await open(page, "a.steamfield.test");
   await expect(decision(page)).toHaveText("undecided");
   await expect(banner(page)).toBeVisible();
+});
+
+test("a keyboard Accept returns focus to where it was before the banner", async ({ page }) => {
+  await open(page, "localhost");
+  const reset = domSection(page).getByRole("button", { name: "Reset choice" });
+  await reset.focus();
+  await banner(page).getByRole("link", { name: "Privacy" }).focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(banner(page).getByRole("button", { name: "Accept" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(banner(page)).toHaveCount(0);
+  await expect(reset).toBeFocused();
 });
 
 test("with motion it slides in after the default delay and doesn't take focus", async ({

@@ -21,7 +21,7 @@
     "name": "consent",
     "path": "dist/consent/index.js",
     "import": "{ createConsentStore, mountConsentBanner }",
-    "limit": "2.1 kB"
+    "limit": "2.3 kB"
   },
   {
     "name": "copy",
@@ -65,7 +65,7 @@
     "path": "dist/react/consent/index.js",
     "import": "{ ConsentBanner, useConsent }",
     "ignore": ["react", "react-dom"],
-    "limit": "1.4 kB"
+    "limit": "1.65 kB"
   },
   {
     "name": "react/copy",

@@ -115,7 +115,8 @@ export interface ConsentBannerState {
   readonly start: () => () => void;
 }
 
-const CLOSED: ConsentBannerView = Object.freeze({ open: false, animate: false });
+/** The closed view: not in the page. */
+export const CLOSED: ConsentBannerView = Object.freeze({ open: false, animate: false });
 
 /**
  * The banner's rules, shared by `mountConsentBanner` and React `ConsentBanner`. The banner is open
@@ -123,6 +124,9 @@ const CLOSED: ConsentBannerView = Object.freeze({ open: false, animate: false })
  * is allowed; under reduced motion it opens at once, without animation. A decision, from the
  * banner or anywhere else, closes it. A `reset()` opens it again straight away, since the page
  * has long since loaded.
+ *
+ * The store must outlive its banners: once it is destroyed the banner hears no more decisions,
+ * so it stays as it is until it is stopped.
  */
 export function createConsentBannerState(
   store: ConsentStore,
@@ -149,7 +153,8 @@ export function createConsentBannerState(
     }
     timer = setTimeout(() => {
       timer = undefined;
-      set({ open: true, animate: motion.get() });
+      // A decision the subscription missed (the store was destroyed) still keeps it closed.
+      if (store.getState() === null) set({ open: true, animate: motion.get() });
     }, delay);
   };
 

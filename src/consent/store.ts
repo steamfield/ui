@@ -1,6 +1,6 @@
 import { LibraryError } from "../internal/errors.ts";
 import { unknownOption } from "../internal/options.ts";
-import { consentCookie, readConsentCookie } from "./cookie.ts";
+import { consentCookie, consentCookieWrites, readConsentCookie } from "./cookie.ts";
 
 /** The visitor's decision: `"granted"`, `"denied"`, or null while undecided. */
 export type ConsentState = "granted" | "denied" | null;
@@ -9,12 +9,13 @@ export interface ConsentStoreOptions {
   /** The cookie that holds the decision. Default "sf-consent". */
   readonly cookieName?: string;
   /**
-   * A registrable domain such as "example.com". On that host or any subdomain of it the cookie is
-   * written with `Domain=.example.com`, so every subdomain shares one decision. On any other host
+   * A registrable domain such as "example.com", never a public suffix such as "co.uk" or
+   * "pages.dev" (browsers refuse those). On that host or any subdomain of it the cookie is written
+   * with `Domain=.example.com`, so every subdomain shares one decision. On any other host
    * (localhost, a preview URL) the cookie is host-only. Default: host-only everywhere.
    */
   readonly domain?: string;
-  /** How long the decision is kept. Default 365. */
+  /** How long the decision is kept, in days: at least one second, at most 400. Default 365. */
   readonly maxAgeDays?: number;
 }
 
@@ -41,12 +42,18 @@ const KNOWN = ["cookieName", "domain", "maxAgeDays"];
 const COOKIE_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/i;
 const SECONDS_PER_DAY = 86_400;
+const MAX_DAYS = 400;
 
 /**
  * The consent decision, kept in a first-party cookie (`Path=/`, `SameSite=Lax`, `Secure` on
  * https). The state is read from the cookie once, here, and changes only through this store's
  * commands. Safe to call during server rendering: without a `document` the state is null and the
  * commands write nothing. Bad options throw `LibraryError` `invalid_option` naming the field.
+ *
+ * Each write is read back. If the browser refused the shared-domain cookie, the decision is
+ * written host-only instead. If no cookie persists at all (cookies blocked), the decision still
+ * holds in memory for this page, so the banner closes and subscribers hear it, but the next page
+ * load is undecided again.
  */
 export function createConsentStore(options: ConsentStoreOptions = {}): ConsentStore {
   const bad = unknownOption(options, KNOWN);
@@ -60,19 +67,27 @@ export function createConsentStore(options: ConsentStoreOptions = {}): ConsentSt
     throw new LibraryError("invalid_option", { field: "domain" });
   }
   const days = options.maxAgeDays ?? 365;
-  if (typeof days !== "number" || !Number.isFinite(days) || days <= 0) {
+  const maxAge = typeof days === "number" ? Math.round(days * SECONDS_PER_DAY) : Number.NaN;
+  // Browsers cap cookie lifetimes at 400 days, and under one second rounds to a deleting Max-Age=0.
+  if (!(maxAge >= 1 && days <= MAX_DAYS)) {
     throw new LibraryError("invalid_option", { field: "maxAgeDays" });
   }
-  const cookie = { maxAge: Math.round(days * SECONDS_PER_DAY), domain: domain?.toLowerCase() };
+  const cookie = { maxAge, domain: domain?.toLowerCase() };
   const listeners = new Set<(state: ConsentState) => void>();
   let destroyed = false;
   let state = typeof document === "undefined" ? null : readConsentCookie(document.cookie, name);
 
+  const write = (next: ConsentState): void => {
+    if (typeof document === "undefined") return;
+    const writes = consentCookieWrites(name, next, cookie, location);
+    for (const assignment of writes) setCookie(assignment);
+    if (writes.length === 1 || readConsentCookie(document.cookie, name) === next) return;
+    // The browser refused the Domain cookie: keep the decision on this host at least.
+    setCookie(consentCookie(name, next, { ...cookie, domain: undefined }, location));
+  };
+
   const set = (next: ConsentState): void => {
-    if (typeof document !== "undefined") {
-      // biome-ignore lint/suspicious/noDocumentCookie: the async Cookie Store API is missing from older Safari and Firefox, and this write must be synchronous.
-      document.cookie = consentCookie(name, next, cookie, location);
-    }
+    write(next);
     if (next === state) return;
     state = next;
     for (const listener of [...listeners]) listener(next);
@@ -95,4 +110,9 @@ export function createConsentStore(options: ConsentStoreOptions = {}): ConsentSt
       listeners.clear();
     },
   };
+}
+
+function setCookie(assignment: string): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: the async Cookie Store API is missing from older Safari and Firefox, and this write must be synchronous.
+  document.cookie = assignment;
 }

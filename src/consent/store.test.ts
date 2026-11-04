@@ -1,7 +1,7 @@
 // Adapted from OpenData's shared/lib/consent.test.ts. Its read/write/clear cases are kept, with
 // `getStoredConsent()` read through a fresh `createConsentStore()` (what a page reload does) and
 // the setters mapped to the store's commands. `hasConsent` has no counterpart here.
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, type MockInstance, test, vi } from "vitest";
 import { setDocumentCookie } from "../../tests/helpers/dom.ts";
 import { createConsentStore } from "./store.ts";
 
@@ -10,7 +10,8 @@ const getStoredConsent = () => createConsentStore().getState();
 
 describe("consent cookie storage", () => {
   beforeEach(() => {
-    // Clear all cookies
+    // Expire every cookie this host lists, host-only, which is how these tests set them. The
+    // shared-domain tests at the end clear their own Domain cookies.
     document.cookie.split(";").forEach((c) => {
       const name = c.trim().split("=")[0];
       if (name) {
@@ -194,6 +195,10 @@ describe("options", () => {
     [{ maxAgeDays: Number.NaN }, "maxAgeDays"],
     [{ maxAgeDays: Number.POSITIVE_INFINITY }, "maxAgeDays"],
     [{ maxAgeDays: "365" }, "maxAgeDays"],
+    // Rounds to Max-Age=0, which would delete the cookie it means to write.
+    [{ maxAgeDays: 0.4 / 86_400 }, "maxAgeDays"],
+    // Browsers cap cookie lifetimes at 400 days.
+    [{ maxAgeDays: 401 }, "maxAgeDays"],
     [{ cookiename: "x" }, "cookiename"],
     [null, "options"],
   ])("%j throws invalid_option on %s", (options, field) => {
@@ -204,6 +209,10 @@ describe("options", () => {
 
   test("accepts a mixed-case domain", () => {
     expect(() => createConsentStore({ domain: "Example.COM" })).not.toThrow();
+  });
+
+  test.each([1 / 86_400, 400])("accepts maxAgeDays %s, the ends of the range", (maxAgeDays) => {
+    expect(() => createConsentStore({ maxAgeDays })).not.toThrow();
   });
 });
 
@@ -237,5 +246,60 @@ describe("a shared domain, on the real cookie jar", () => {
     expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBeNull();
     goTo("https://preview.example.com/");
     createConsentStore({ domain: "steamfield.io" }).reset();
+  });
+});
+
+/** The real `document.cookie` setter, from wherever the prototype chain defines it. */
+function cookieSetter(): (value: string) => void {
+  for (let proto: object | null = document; proto; proto = Object.getPrototypeOf(proto)) {
+    const set = Object.getOwnPropertyDescriptor(proto, "cookie")?.set;
+    if (set) return (value) => set.call(document, value);
+  }
+  throw new Error("document.cookie has no setter");
+}
+
+describe("when the browser refuses a write", () => {
+  let writes: MockInstance<(value: string) => void>;
+  const goTo = (url: string): void => {
+    (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(url);
+  };
+  /** Passes every write to the real jar except those `refuse` matches, as a browser would. */
+  function refuseWrites(refuse: (value: string) => boolean): void {
+    const real = cookieSetter();
+    writes = vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
+      if (!refuse(value)) real(value);
+    });
+  }
+  beforeEach(() => {
+    const start = location.href;
+    return () => {
+      vi.restoreAllMocks();
+      setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
+      goTo(start);
+    };
+  });
+
+  test("with cookies blocked the decision holds in memory for this page only", () => {
+    setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
+    refuseWrites(() => true);
+    const store = createConsentStore();
+    expect(store.getState()).toBeNull();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.accept();
+    expect(writes).toHaveBeenCalled();
+    expect(store.getState()).toBe("granted");
+    expect(listener).toHaveBeenCalledWith("granted");
+    expect(createConsentStore().getState()).toBeNull();
+  });
+
+  test("a refused Domain cookie falls back to a host-only one", () => {
+    goTo("https://rr.steamfield.io/");
+    refuseWrites((value) => value.includes("Domain="));
+    createConsentStore({ domain: "steamfield.io" }).decline();
+    expect(writes.mock.calls.at(-1)?.[0]).toBe(
+      "sf-consent=denied; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
+    );
+    expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBe("denied");
   });
 });

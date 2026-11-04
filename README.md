@@ -912,29 +912,36 @@ One analytics consent decision, kept in a first-party cookie and shared by every
 ```ts
 const consent = createConsentStore({ domain: "example.com" });
 initAnalytics({ consent: consent.getState() });
-consent.subscribe((state) => (state === "granted" ? optIn() : state === "denied" ? optOut() : undefined));
+// Only "granted" turns on storage; undecided (after a reset) and "denied" go back to cookieless.
+consent.subscribe((state) => (state === "granted" ? optIn() : optOut()));
 mountConsentBanner(consent, { privacyHref: "https://example.com/privacy" });
 ```
+
+The store only records the decision. Declining does not delete cookies or storage your analytics SDK already set after an earlier Accept; its opt-out has to do that.
 
 ### `createConsentStore(options?)`
 
 Returns a `ConsentStore`: `getState()` (`"granted" | "denied" | null`, null while undecided), `subscribe(listener)` (called with the new state after each change; returns an unsubscribe function), `accept()`, `decline()`, `reset()` (clears the cookie, so the visitor is undecided again) and `destroy()` (drops every subscriber; a later `subscribe` is inert, while the commands still write the cookie).
 
-The state is read from the cookie when the store is created. The cookie is `Path=/`, `SameSite=Lax`, `Max-Age` from `maxAgeDays`, and `Secure` on https. It is safe on the server: without a `document`, `getState()` is null and the commands write nothing.
+The state is read from the cookie when the store is created. The cookie is `Path=/`, `SameSite=Lax`, `Max-Age` from `maxAgeDays`, and `Secure` on https. On the shared domain, each write first expires any host-only cookie of the same name (one left from before `domain` was set would otherwise shadow the shared one), and `reset()` clears both. It is safe on the server: without a `document`, `getState()` is null and the commands write nothing.
+
+Each write is read back. If the browser refuses the `Domain` cookie, the decision is written host-only instead. If no cookie persists at all (cookies blocked), the decision still holds in memory for the page, so the banner closes and subscribers hear it, but the next page load is undecided again. Create one store per page and keep it for the page's life: banners and hooks follow the store they were given.
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `cookieName` | `string` | `"sf-consent"` | The cookie that holds the decision |
-| `domain` | `string` | none | A registrable domain such as `"example.com"`. On that host or a subdomain of it the cookie gets `Domain=.example.com`, so every subdomain shares one decision; anywhere else (localhost, a preview host) it is host-only. Without it the cookie is host-only everywhere |
-| `maxAgeDays` | `number` | `365` | How long the decision is kept |
+| `domain` | `string` | none | A registrable domain such as `"example.com"`, never a public suffix such as `"co.uk"` or `"pages.dev"` (browsers refuse those, and the store falls back to host-only). On that host or a subdomain of it the cookie gets `Domain=.example.com`, so every subdomain shares one decision; anywhere else (localhost, a preview host) it is host-only. Without it the cookie is host-only everywhere |
+| `maxAgeDays` | `number` | `365` | How long the decision is kept: at least one second (`1 / 86400`), at most `400`, the cap browsers apply |
 
-A cookie name that isn't a cookie token, a `domain` with a leading dot or other non-host characters, a `maxAgeDays` that isn't a positive finite number, or an unknown key throws `LibraryError` `invalid_option` naming the field. A cookie value other than `granted` or `denied` reads as undecided.
+A cookie name that isn't a cookie token, a `domain` with a leading dot or other non-host characters, a `maxAgeDays` outside that range or not a number, or an unknown key throws `LibraryError` `invalid_option` naming the field. A cookie value other than `granted` or `denied` reads as undecided.
 
 ### `mountConsentBanner(store, options?)`
 
-Appends the banner to `container` (default `document.body`) while the store is undecided, and returns a function that removes it and stops following the store. It is a non-modal labelled region (`<section aria-label>`, not a dialog): it has no focus trap and never takes focus. It sits last in the tab order, with the privacy link, Decline and Accept in that order. The buttons call `store.decline()` and `store.accept()`. Any decision, from the banner or anywhere else, removes it; `store.reset()` brings it back at once.
+Appends the banner to `container` (default `document.body`) while the store is undecided, and returns a function that removes it and stops following the store; calling that function again does nothing. Each call owns its own banner, so mount once per page. It is a non-modal labelled region (`<section aria-label>`, not a dialog): it has no focus trap and never takes focus. It is the container's last child, so it comes after the container's other content in the tab order (last on the page with the default `document.body`); inside it, focus moves from the privacy link to Decline to Accept. The buttons call `store.decline()` and `store.accept()`. Any decision, from the banner or anywhere else, removes it; `store.reset()` brings it back at once. If focus is in the banner when it goes, focus returns to the element that had it before focus entered the banner, or to the body when there was none.
 
-On page load the banner waits `delayMs`, then slides in. Under `prefers-reduced-motion: reduce` or a `[data-sf-motion="reduce"]` ancestor of the container it shows at once, with no delay and no animation. Mounting again for a store that already has a banner adds no second one; the banner goes when every returned function has been called. Without a `document` it does nothing.
+On page load the banner waits `delayMs`, then slides in. Under `prefers-reduced-motion: reduce` or a `[data-sf-motion="reduce"]` ancestor of the container it shows at once, with no delay and no animation. The store must outlive the banner: a destroyed store announces no more decisions, so the banner stays until it is unmounted. Without a `document` it does nothing.
+
+Call it once the body exists: from a module or deferred script (Astro's module scripts are deferred), or with a `container`. Without either it throws `invalid_option` with `field: "container"`.
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -949,7 +956,7 @@ On page load the banner waits `delayMs`, then slides in. Under `prefers-reduced-
 
 A bad `delayMs`, a non-string text option or an unknown key throws `invalid_option` naming the field.
 
-Hooks: `data-part` values `consent` (`data-sf-animating` while it slides in), `consent-message`, `consent-actions`, `consent-privacy`, `consent-decline`, `consent-accept`. The stylesheet places it as a bottom-right card, full width with a 16px gutter below 40rem. Its variables each fall back to a base token, then to a system color:
+Hooks: `data-part` values `consent` (`data-sf-animating` while it slides in), `consent-message`, `consent-actions`, `consent-privacy`, `consent-decline`, `consent-accept`. The stylesheet places it as a bottom-right card 1rem from the corner, full width with a 1rem gutter below 40rem. Its variables each fall back to a base token, then to a system color:
 
 | Variable | Default | Used for |
 | --- | --- | --- |
@@ -962,6 +969,7 @@ Hooks: `data-part` values `consent` (`data-sf-animating` while it slides in), `c
 | `--sf-consent-radius` | `--sf-radius` | Card corners; buttons use half |
 | `--sf-consent-shadow` | a soft drop shadow | Card shadow |
 | `--sf-consent-font` | `inherit` | Font family |
+| `--sf-consent-z-index` | `50` | Stacking order |
 
 ### Without JavaScript
 
@@ -976,7 +984,9 @@ import type { ConsentBannerProps, UseConsentResult } from "@steamfield/ui/react/
 
 `useConsent(store)` follows a store from `createConsentStore` and returns `{ consent, accept, decline, reset }`. It reads null on the server and in hydration, then the stored decision.
 
-`<ConsentBanner store={store} />` renders the same markup and follows the same rules as `mountConsentBanner`, and takes the same options as props (all but `container`; it renders where you put it). It renders nothing on the server and in the first client render, so a visitor who has decided never sees it flash. A bad prop throws `invalid_option` during render.
+`<ConsentBanner store={store} />` renders the same markup and follows the same rules as `mountConsentBanner`, including where focus goes when it closes, and takes the same options as props (all but `container`; it renders where you put it). It renders nothing on the server and in the first client render, so a visitor who has decided never sees it flash. Motion is read from where it renders: inside a `[data-sf-motion="reduce"]` ancestor it doesn't animate, though it still waits `delayMs`, since it can't see its ancestors before it renders. A bad prop throws `invalid_option` during render.
+
+Pass a stable store, created once outside render (at module level or in `useState`): a new store each render would restart the banner and its delay. The same goes for `useConsent`.
 
 ### Without JavaScript
 

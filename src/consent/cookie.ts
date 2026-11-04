@@ -38,7 +38,27 @@ export function consentCookie(
   return parts.join("; ");
 }
 
-/** The decision in a `document.cookie` string. Anything but "granted" or "denied" reads as null. */
+/**
+ * Every `document.cookie` assignment that records `value`, in order. When the cookie is scoped to
+ * the shared domain, a host-only cookie of the same name is expired first: one left from before
+ * `domain` was configured would otherwise be listed alongside the shared one and could shadow it.
+ */
+export function consentCookieWrites(
+  name: string,
+  value: ConsentState,
+  options: ConsentCookieOptions,
+  at: CookieLocation,
+): string[] {
+  const scoped = consentCookie(name, value, options, at);
+  if (!scoped.includes("; Domain=")) return [scoped];
+  return [consentCookie(name, null, { ...options, domain: undefined }, at), scoped];
+}
+
+/**
+ * The decision in a `document.cookie` string: the first cookie named `name`. Browsers list
+ * cookies by RFC 6265 order (longer path first, then earlier creation), so with two of the same
+ * name and path the older one wins. Anything but "granted" or "denied" reads as null.
+ */
 export function readConsentCookie(cookie: string, name: string): ConsentState {
   const prefix = `${name}=`;
   for (const pair of cookie.split(/;\s*/)) {

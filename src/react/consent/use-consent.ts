@@ -14,7 +14,10 @@ export interface UseConsentResult {
 
 const undecided = (): ConsentState => null;
 
-/** Follows `store` and re-renders on every decision. */
+/**
+ * Follows `store` and re-renders on every decision. Pass a stable store, created once outside
+ * render: a new one each render would read the cookie again and resubscribe every time.
+ */
 export function useConsent(store: ConsentStore): UseConsentResult {
   const consent = useSyncExternalStore(store.subscribe, store.getState, undecided);
   return { consent, accept: store.accept, decline: store.decline, reset: store.reset };
