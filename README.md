@@ -456,6 +456,25 @@ Returns `ref` (attach to the gating element), `elapsed`, `started`, `playing`, `
 - Swapping one element for another keeps `elapsed`, `started`, `paused` and the rate; only option changes (`duration`, `motion`, observer options) start over at 0. An option change and a swap in the same render start over once, at 0, with one new observer.
 - Detaching an element (with no new one) keeps the state, which reads as out of view once the browser reports the removed element as no longer intersecting. An inline ref callback that reattaches the same node every render, or a manual `ref.current = node`, changes nothing.
 
+For a timer rather than a clock (a carousel step, a simulated tick, a live-data poll), gate your own interval on `playing` instead of reading `elapsed`. `playing` already folds in view, tab visibility, pause and reduced motion, so the timer stops whenever any of them does and restarts when all clear:
+
+```tsx
+function useOnScreenInterval(tick: () => void, intervalMs: number) {
+  const latest = useRef(tick);
+  latest.current = tick;
+  // reducedPolicy "hold": reduced motion never plays, so the timer never starts.
+  const { ref, playing } = usePlayback<HTMLDivElement>({ reducedPolicy: "hold" });
+  useEffect(() => {
+    if (!playing) return;
+    const timer = setInterval(() => latest.current(), intervalMs);
+    return () => clearInterval(timer);
+  }, [playing, intervalMs]);
+  return ref;
+}
+```
+
+With no `duration` (and no `onFrame`) the gate runs no animation-frame clock and never completes, so `playing` stays true for as long as the conditions hold.
+
 ### `useCountUp(end, options?)`
 
 Counts from 0 to `end` once, while the element is in view and the tab is visible.
