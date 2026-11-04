@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 describe("createConsentBannerState", () => {
-  test("is closed until started, then opens after the delay, animated", () => {
+  test("is closed until started, opens after the delay, and animates once rendered", () => {
     const banner = createConsentBannerState(createConsentStore(), {
       delayMs: 1000,
       motion: motion(true),
@@ -33,7 +33,45 @@ describe("createConsentBannerState", () => {
     vi.advanceTimersByTime(999);
     expect(banner.getState()).toBe(CLOSED);
     vi.advanceTimersByTime(1);
+    expect(banner.getState()).toEqual({ open: true, animate: false });
+    banner.rendered();
     expect(banner.getState()).toEqual({ open: true, animate: true });
+  });
+
+  test("the entrance is decided by motion where the banner sits, when it reports rendered", () => {
+    const source = motion(true);
+    const banner = createConsentBannerState(createConsentStore(), { delayMs: 0, motion: source });
+    banner.start();
+    // The element turns out to sit inside a reduced-motion subtree.
+    source.set(false);
+    banner.rendered();
+    expect(banner.getState()).toEqual({ open: true, animate: false });
+  });
+
+  test("only the first rendered after each opening counts", () => {
+    const store = createConsentStore();
+    const source = motion(false);
+    const banner = createConsentBannerState(store, { delayMs: 0, motion: source });
+    banner.start();
+    banner.rendered();
+    source.set(true);
+    banner.rendered();
+    expect(banner.getState().animate).toBe(false);
+    // A new opening gets a new decision.
+    store.accept();
+    store.reset();
+    banner.rendered();
+    expect(banner.getState()).toEqual({ open: true, animate: true });
+  });
+
+  test("rendered while closed does nothing", () => {
+    const banner = createConsentBannerState(createConsentStore(), {
+      delayMs: 1000,
+      motion: motion(true),
+    });
+    banner.start();
+    banner.rendered();
+    expect(banner.getState()).toBe(CLOSED);
   });
 
   test("CLOSED is frozen", () => {
@@ -86,6 +124,7 @@ describe("createConsentBannerState", () => {
     banner.start();
     store.accept();
     store.reset();
+    banner.rendered();
     expect(banner.getState()).toEqual({ open: true, animate: true });
     // The page-load timer was cancelled; nothing changes when it would have fired.
     const listener = vi.fn();

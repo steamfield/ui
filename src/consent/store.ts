@@ -51,9 +51,9 @@ const MAX_DAYS = 400;
  * commands write nothing. Bad options throw `LibraryError` `invalid_option` naming the field.
  *
  * Each write is read back. If the browser refused the shared-domain cookie, the decision is
- * written host-only instead. If no cookie persists at all (cookies blocked), the decision still
- * holds in memory for this page, so the banner closes and subscribers hear it, but the next page
- * load is undecided again.
+ * written host-only instead. If no cookie persists at all (cookies blocked, or `document.cookie`
+ * throwing on an opaque origin), the decision still holds in memory for this page, so the banner
+ * closes and subscribers hear it, but the next page load is undecided again. None of this throws.
  */
 export function createConsentStore(options: ConsentStoreOptions = {}): ConsentStore {
   const bad = unknownOption(options, KNOWN);
@@ -75,13 +75,13 @@ export function createConsentStore(options: ConsentStoreOptions = {}): ConsentSt
   const cookie = { maxAge, domain: domain?.toLowerCase() };
   const listeners = new Set<(state: ConsentState) => void>();
   let destroyed = false;
-  let state = typeof document === "undefined" ? null : readConsentCookie(document.cookie, name);
+  let state = readCookie(name);
 
   const write = (next: ConsentState): void => {
     if (typeof document === "undefined") return;
     const writes = consentCookieWrites(name, next, cookie, location);
     for (const assignment of writes) setCookie(assignment);
-    if (writes.length === 1 || readConsentCookie(document.cookie, name) === next) return;
+    if (writes.length === 1 || readCookie(name) === next) return;
     // The browser refused the Domain cookie: keep the decision on this host at least.
     setCookie(consentCookie(name, next, { ...cookie, domain: undefined }, location));
   };
@@ -112,7 +112,24 @@ export function createConsentStore(options: ConsentStoreOptions = {}): ConsentSt
   };
 }
 
+// `document.cookie` throws a SecurityError where the page may not use cookies (an opaque origin,
+// such as a sandboxed iframe). That is the same outcome as cookies being blocked, handled the same
+// way: reads find no decision, writes persist nothing, and the decision lives in memory.
+
+function readCookie(name: string): ConsentState {
+  if (typeof document === "undefined") return null;
+  try {
+    return readConsentCookie(document.cookie, name);
+  } catch {
+    return null;
+  }
+}
+
 function setCookie(assignment: string): void {
-  // biome-ignore lint/suspicious/noDocumentCookie: the async Cookie Store API is missing from older Safari and Firefox, and this write must be synchronous.
-  document.cookie = assignment;
+  try {
+    // biome-ignore lint/suspicious/noDocumentCookie: the async Cookie Store API is missing from older Safari and Firefox, and this write must be synchronous.
+    document.cookie = assignment;
+  } catch {
+    // Cookies are unavailable here; the store keeps the decision in memory (see above).
+  }
 }

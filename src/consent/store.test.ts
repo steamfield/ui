@@ -5,9 +5,39 @@ import { beforeEach, describe, expect, type MockInstance, test, vi } from "vites
 import { setDocumentCookie, stubCookieJar } from "../../tests/helpers/dom.ts";
 import { createConsentStore } from "./store.ts";
 
-// Every test runs on a jar that deletes `Max-Age=0` cookies at once, as browsers do.
+/** Hosts the shared-domain tests visit; each test's cleanup clears the consent cookie on all. */
+const HOSTS = [
+  "https://steamfield.io/",
+  "https://rr.steamfield.io/",
+  "https://decks.steamfield.io/",
+  "https://preview.example.com/",
+  "https://other.example.com/",
+];
+
+const goTo = (url: string): void => {
+  (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(url);
+};
+
+// Every test runs on a jar that deletes `Max-Age=0` cookies at once, as browsers do, and starts
+// with no consent cookie. The cleanup runs even when an assertion fails, so no cookie leaks into
+// the next test: on each visited host it clears the host-only cookie and the shared one.
 beforeEach(() => {
   stubCookieJar();
+  setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
+  const start = location.href;
+  return () => {
+    // A test may have stubbed `document` away or left the jar refusing writes: put both back
+    // (Vitest would before the next test anyway) and clear through a plain jar.
+    vi.unstubAllGlobals();
+    stubCookieJar();
+    for (const host of HOSTS) {
+      goTo(host);
+      setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
+      setDocumentCookie("sf-consent=; Path=/; Max-Age=0; Domain=.steamfield.io");
+    }
+    goTo(start);
+    setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
+  };
 });
 
 /** What a page load would read: a new store over the current cookies. */
@@ -16,7 +46,7 @@ const getStoredConsent = () => createConsentStore().getState();
 describe("consent cookie storage", () => {
   beforeEach(() => {
     // Expire every cookie this host lists, host-only, which is how these tests set them. The
-    // shared-domain tests at the end clear their own Domain cookies.
+    // top-level cleanup clears the consent cookie on the shared-domain tests' hosts.
     document.cookie.split(";").forEach((c) => {
       const name = c.trim().split("=")[0];
       if (name) {
@@ -221,15 +251,7 @@ describe("options", () => {
   });
 });
 
-describe("a shared domain, on the real cookie jar", () => {
-  const goTo = (url: string): void => {
-    (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(url);
-  };
-  beforeEach(() => {
-    const start = location.href;
-    return () => goTo(start);
-  });
-
+describe("a shared domain, across hosts", () => {
   test("a decision on a subdomain is read on the domain and a sibling subdomain", () => {
     goTo("https://rr.steamfield.io/");
     createConsentStore({ domain: "steamfield.io" }).accept();
@@ -249,31 +271,17 @@ describe("a shared domain, on the real cookie jar", () => {
     expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBe("denied");
     goTo("https://other.example.com/");
     expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBeNull();
-    goTo("https://preview.example.com/");
-    createConsentStore({ domain: "steamfield.io" }).reset();
   });
 });
 
 describe("when the browser refuses a write", () => {
   let writes: MockInstance<(value: string) => void>;
-  const goTo = (url: string): void => {
-    (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(url);
-  };
   /** Passes every write to the jar except those `refuse` matches, as a browser would. */
   function refuseWrites(refuse: (value: string) => boolean): void {
     writes = stubCookieJar(refuse);
   }
-  beforeEach(() => {
-    const start = location.href;
-    return () => {
-      vi.restoreAllMocks();
-      setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
-      goTo(start);
-    };
-  });
 
   test("with cookies blocked the decision holds in memory for this page only", () => {
-    setDocumentCookie("sf-consent=; Path=/; Max-Age=0");
     refuseWrites(() => true);
     const store = createConsentStore();
     expect(store.getState()).toBeNull();
@@ -294,5 +302,30 @@ describe("when the browser refuses a write", () => {
       "sf-consent=denied; Path=/; Max-Age=31536000; SameSite=Lax; Secure",
     );
     expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBe("denied");
+    // Reset clears the fallback cookie too.
+    createConsentStore({ domain: "steamfield.io" }).reset();
+    expect(createConsentStore({ domain: "steamfield.io" }).getState()).toBeNull();
+  });
+});
+
+describe("when document.cookie throws (an opaque origin)", () => {
+  test("nothing persists, nothing throws, and the decision holds in memory", () => {
+    const denied = (): never => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+    const read = vi.spyOn(document, "cookie", "get").mockImplementation(denied);
+    const write = vi.spyOn(document, "cookie", "set").mockImplementation(denied);
+    const store = createConsentStore({ domain: "steamfield.io" });
+    expect(store.getState()).toBeNull();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    expect(() => store.accept()).not.toThrow();
+    expect(store.getState()).toBe("granted");
+    expect(() => store.decline()).not.toThrow();
+    expect(() => store.reset()).not.toThrow();
+    expect(listener.mock.calls).toEqual([["granted"], ["denied"], [null]]);
+    // The stubs were really hit, so the guards are what kept these from throwing.
+    expect(read).toHaveBeenCalled();
+    expect(write).toHaveBeenCalled();
   });
 });

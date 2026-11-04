@@ -112,6 +112,39 @@ test("unrelated cookies, including look-alike names, are read past and left alon
   }
 });
 
+test("a Domain cookie the browser refuses falls back to host-only", async ({ page, context }) => {
+  // Chromium won't set Domain=localhost from a.localhost, as for a public suffix.
+  await open(page, "a.localhost", "?delay=0&domain=localhost");
+  await banner(page).getByRole("button", { name: "Accept" }).click();
+  await expect(decision(page)).toHaveText("granted");
+  const cookies = await consentCookies(context);
+  expect(cookies).toHaveLength(1);
+  expect(cookies[0]).toMatchObject({ value: "granted", domain: "a.localhost" });
+  await page.reload();
+  await page.locator("main h1").waitFor();
+  await expect(decision(page)).toHaveText("granted");
+  await expect(banner(page)).toHaveCount(0);
+  await domSection(page).getByRole("button", { name: "Reset choice" }).click();
+  expect(await consentCookies(context)).toEqual([]);
+});
+
+test("returning focus doesn't scroll the page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 300 });
+  await open(page, "localhost");
+  // An element at the very top, scrolled out of view before the banner closes.
+  const top = page.getByRole("navigation", { name: "Components" }).getByRole("link").first();
+  await top.focus();
+  await banner(page).getByRole("link", { name: "Privacy" }).focus();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const scrolled = await page.evaluate(() => window.scrollY);
+  expect(scrolled).toBeGreaterThan(0);
+  await expect(top).not.toBeInViewport();
+  await banner(page).getByRole("button", { name: "Accept" }).click();
+  await expect(banner(page)).toHaveCount(0);
+  await expect(top).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
+});
+
 test("an unrelated host gets a host-only cookie and doesn't share the decision", async ({
   page,
   context,

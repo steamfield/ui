@@ -284,20 +284,7 @@ describe("with reduced motion", () => {
       expect(document.activeElement).toBe(before);
     });
 
-    test("with no earlier focus, focus goes to the body, whose tabindex is removed on blur", () => {
-      mountConsentBanner(createConsentStore());
-      button("Decline").focus();
-      button("Decline").click();
-      expect(banner()).toBeNull();
-      expect(document.activeElement).toBe(document.body);
-      expect(document.body.getAttribute("tabindex")).toBe("-1");
-      const next = document.createElement("button");
-      document.body.append(next);
-      next.focus();
-      expect(document.body.hasAttribute("tabindex")).toBe(false);
-    });
-
-    test("an earlier element that has since left the page falls back to the body", () => {
+    test("an earlier element that has since left the page leaves the browser default", () => {
       const before = document.createElement("button");
       document.body.append(before);
       before.focus();
@@ -325,8 +312,11 @@ describe("with reduced motion", () => {
       before.focus();
       const unmount = mountConsentBanner(createConsentStore());
       button("Accept").focus();
+      const focus = vi.spyOn(before, "focus");
       unmount();
       expect(document.activeElement).toBe(before);
+      // Returning focus never scrolls the page.
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     });
   });
 });

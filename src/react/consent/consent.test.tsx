@@ -178,6 +178,32 @@ describe("<ConsentBanner> with reduced motion", () => {
     expect(document.activeElement).toBe(page);
   });
 
+  test("unmounting with focus inside returns it too", () => {
+    const store = createConsentStore();
+    const before = document.createElement("button");
+    document.body.append(before);
+    before.focus();
+    const { unmount } = render(<ConsentBanner store={store} />);
+    screen.getByRole("button", { name: "Accept" }).focus();
+    unmount();
+    expect(document.activeElement).toBe(before);
+  });
+
+  test("switching to a decided store returns focus too", () => {
+    const store = createConsentStore();
+    setDocumentCookie("other=granted; Path=/");
+    const decided = createConsentStore({ cookieName: "other" });
+    const before = document.createElement("button");
+    document.body.append(before);
+    before.focus();
+    const { rerender } = render(<ConsentBanner store={store} />);
+    screen.getByRole("button", { name: "Accept" }).focus();
+    rerender(<ConsentBanner store={decided} />);
+    expect(region()).toBeNull();
+    expect(document.activeElement).toBe(before);
+    setDocumentCookie("other=; Path=/; Max-Age=0");
+  });
+
   test("survives StrictMode's double mount with one banner", () => {
     const store = createConsentStore();
     render(

@@ -3,11 +3,15 @@ import { ConsentBanner, useConsent } from "@steamfield/ui/react/consent";
 import { type ReactElement, useEffect, useState } from "react";
 
 // `?delay=0` skips the page-load delay (the browser suite uses it). The DOM store shares its
-// decision across *.steamfield.test, which tests/browser/consent.spec.ts maps to this server.
+// decision across *.steamfield.test, which tests/browser/consent.spec.ts maps to this server;
+// `?domain=` overrides that domain (the suite uses one Chromium refuses, to check the fallback).
 function delayParam(): number | undefined {
   const delay = new URLSearchParams(location.search).get("delay");
   return delay === null ? undefined : Number(delay);
 }
+
+const domainParam = (): string =>
+  new URLSearchParams(location.search).get("domain") ?? "steamfield.test";
 
 function Decision({
   store,
@@ -29,7 +33,7 @@ function Decision({
 
 export function ConsentPage(): ReactElement {
   const [domStore] = useState(() =>
-    createConsentStore({ cookieName: "pg-consent", domain: "steamfield.test" }),
+    createConsentStore({ cookieName: "pg-consent", domain: domainParam() }),
   );
   const [reactStore] = useState(() => createConsentStore({ cookieName: "pg-consent-react" }));
   const [delayMs] = useState(delayParam);

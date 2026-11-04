@@ -14,6 +14,7 @@ import {
   CONSENT_ANIMATING,
   CONSENT_PARTS,
   type ConsentBannerOptions,
+  type ConsentBannerState,
   type ConsentBannerView,
   createConsentBannerState,
   resolveBannerOptions,
@@ -33,40 +34,48 @@ export interface ConsentBannerProps extends ConsentBannerOptions {
 /**
  * The consent banner as a React component: the same markup and rules as `mountConsentBanner`.
  * It renders nothing on the server and in the first client render, then opens while `store` is
- * undecided. Motion is read from where the banner renders, so a `[data-sf-motion="reduce"]`
- * ancestor turns off its entrance (it can't see its ancestors before it renders, so the delay
- * still applies there). Bad props throw `LibraryError` `invalid_option` during render.
+ * undecided. The controller decides the entrance once the banner has rendered, from where it
+ * sits, so a `[data-sf-motion="reduce"]` ancestor turns it off (the delay still applies there:
+ * the banner can't see its ancestors before it renders). Focus returns as in
+ * `mountConsentBanner`, also when the component unmounts or `store` changes. Bad props throw
+ * `LibraryError` `invalid_option` during render.
  */
 export function ConsentBanner({ store, ...options }: ConsentBannerProps): ReactElement | null {
   const content = resolveBannerOptions(options);
   const [view, setView] = useState<ConsentBannerView>(CLOSED);
-  const [motionHere, setMotionHere] = useState(true);
   const root = useRef<HTMLElement>(null);
+  const controller = useRef<ConsentBannerState | null>(null);
   const [focus] = useState(createFocusReturn);
 
   useEffect(() => {
     const banner = createConsentBannerState(store, {
       delayMs: content.delayMs,
+      // Read from the banner once it has rendered; before that only the media query counts.
       motion: { get: () => autoMotionSource(root.current).get(), subscribe: () => () => {} },
     });
-    const unsubscribe = banner.subscribe(() => {
+    controller.current = banner;
+    const apply = (): void => {
       const next = banner.getState();
       // Move focus out before React removes the element.
       if (!next.open) focus.restore(root.current);
       setView(next);
-    });
+    };
+    const unsubscribe = banner.subscribe(apply);
     const stop = banner.start();
-    setView(banner.getState());
+    apply();
     return () => {
       unsubscribe();
       stop();
     };
   }, [store, content.delayMs, focus]);
 
-  // Once rendered, the banner can see its own ancestors; this runs before paint.
+  // The banner is in the page and not yet painted: let the controller decide the entrance.
   useLayoutEffect(() => {
-    if (view.open) setMotionHere(autoMotionSource(root.current).get());
-  }, [view.open]);
+    if (view.open) controller.current?.rendered();
+  }, [view]);
+
+  // On unmount this runs before React removes the element, while focus can still be moved.
+  useLayoutEffect(() => () => focus.restore(root.current), [focus]);
 
   if (!view.open) return null;
   const onFocus = (event: FocusEvent<HTMLElement>): void =>
@@ -77,7 +86,7 @@ export function ConsentBanner({ store, ...options }: ConsentBannerProps): ReactE
       aria-label={content.label}
       data-part={CONSENT_PARTS.root}
       onFocus={onFocus}
-      {...(view.animate && motionHere ? { [CONSENT_ANIMATING]: "" } : {})}
+      {...(view.animate ? { [CONSENT_ANIMATING]: "" } : {})}
     >
       <p data-part={CONSENT_PARTS.message}>{content.message}</p>
       <div data-part={CONSENT_PARTS.actions}>

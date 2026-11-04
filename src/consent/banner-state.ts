@@ -113,6 +113,12 @@ export interface ConsentBannerState {
    * closing the banner). Restartable, for a binding that mounts twice (React StrictMode).
    */
   readonly start: () => () => void;
+  /**
+   * The binding calls this once the open banner is in the page (and before paint). The controller
+   * then decides the entrance from where the banner sits, through the motion source, which reads
+   * the element once it exists. Only the first call after each opening counts.
+   */
+  readonly rendered: () => void;
 }
 
 /** The closed view: not in the page. */
@@ -120,8 +126,9 @@ export const CLOSED: ConsentBannerView = Object.freeze({ open: false, animate: f
 
 /**
  * The banner's rules, shared by `mountConsentBanner` and React `ConsentBanner`. The banner is open
- * only while the store is undecided. On start it opens after `delayMs` and slides in when motion
- * is allowed; under reduced motion it opens at once, without animation. A decision, from the
+ * only while the store is undecided. On start it opens after `delayMs`, or at once when motion is
+ * off. It opens without animation; once the binding reports it `rendered`, it slides in if motion
+ * is allowed where it sits. A decision, from the
  * banner or anywhere else, closes it. A `reset()` opens it again straight away, since the page
  * has long since loaded.
  *
@@ -135,6 +142,8 @@ export function createConsentBannerState(
   const listeners = new Set<() => void>();
   let view = CLOSED;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Opened, and the binding hasn't yet reported the element in the page.
+  let entering = false;
 
   const set = (next: ConsentBannerView): void => {
     if (next.open === view.open && next.animate === view.animate) return;
@@ -145,16 +154,25 @@ export function createConsentBannerState(
     clearTimeout(timer);
     timer = undefined;
   };
+  const show = (): void => {
+    entering = !view.open;
+    set({ open: true, animate: view.animate });
+  };
+  const close = (): void => {
+    cancel();
+    entering = false;
+    set(CLOSED);
+  };
   const open = (delay: number): void => {
     cancel();
     if (!motion.get() || delay === 0) {
-      set({ open: true, animate: motion.get() });
+      show();
       return;
     }
     timer = setTimeout(() => {
       timer = undefined;
       // A decision the subscription missed (the store was destroyed) still keeps it closed.
-      if (store.getState() === null) set({ open: true, animate: motion.get() });
+      if (store.getState() === null) show();
     }, delay);
   };
 
@@ -169,17 +187,18 @@ export function createConsentBannerState(
     start() {
       const unsubscribe = store.subscribe((state) => {
         if (state === null) open(0);
-        else {
-          cancel();
-          set(CLOSED);
-        }
+        else close();
       });
       if (store.getState() === null) open(delayMs);
       return () => {
         unsubscribe();
-        cancel();
-        set(CLOSED);
+        close();
       };
+    },
+    rendered() {
+      if (!entering) return;
+      entering = false;
+      if (motion.get()) set({ open: true, animate: true });
     },
   };
 }

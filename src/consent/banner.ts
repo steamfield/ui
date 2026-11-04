@@ -38,15 +38,16 @@ export function mountConsentBanner(
   if (typeof document === "undefined") return () => {};
   const container = options.container ?? document.body;
   if (!container) throw new LibraryError("invalid_option", { field: "container" });
+  let element: HTMLElement | undefined;
   const banner = createConsentBannerState(store, {
     delayMs: content.delayMs,
-    motion: autoMotionSource(container),
+    // Read from the banner once it is in the page, and from the container before that.
+    motion: { get: () => autoMotionSource(element ?? container).get(), subscribe: () => () => {} },
   });
   const focus = createFocusReturn();
   const onFocusIn = (event: FocusEvent): void => {
     if (element) focus.enter(element, event.relatedTarget);
   };
-  let element: HTMLElement | undefined;
   const remove = (): void => {
     if (!element) return;
     focus.restore(element);
@@ -54,13 +55,18 @@ export function mountConsentBanner(
     element = undefined;
   };
   const render = (): void => {
-    const view = banner.getState();
-    if (!view.open) remove();
-    else if (!element) {
-      element = build(container.ownerDocument, content, view.animate, store);
+    if (!banner.getState().open) {
+      remove();
+      return;
+    }
+    if (!element) {
+      element = build(container.ownerDocument, content, store);
       element.addEventListener("focusin", onFocusIn);
       container.append(element);
+      // May notify (and so re-enter render) with the entrance decided.
+      banner.rendered();
     }
+    element.toggleAttribute(CONSENT_ANIMATING, banner.getState().animate);
   };
   const unsubscribe = banner.subscribe(render);
   const stop = banner.start();
@@ -75,12 +81,7 @@ export function mountConsentBanner(
   };
 }
 
-function build(
-  doc: Document,
-  content: ConsentBannerContent,
-  animate: boolean,
-  store: ConsentStore,
-): HTMLElement {
+function build(doc: Document, content: ConsentBannerContent, store: ConsentStore): HTMLElement {
   const part = <K extends keyof HTMLElementTagNameMap>(
     tag: K,
     name: string,
@@ -93,7 +94,6 @@ function build(
   };
   const root = part("section", CONSENT_PARTS.root);
   root.setAttribute("aria-label", content.label);
-  if (animate) root.setAttribute(CONSENT_ANIMATING, "");
   const actions = part("div", CONSENT_PARTS.actions);
   if (content.privacyHref !== undefined) {
     const link = part("a", CONSENT_PARTS.privacy, content.privacyLabel);
