@@ -357,6 +357,7 @@ Validates and returns a frozen `Timeline` (`script`, `steps` with `key`/`index`/
 | `submitHoldMs` | `Span` | After typing, before submit |
 | `flashMs` | `number` | Submit flash length |
 | `thinkingAfterUser` | `Span \| false` | Thinking after a user step when another non-thinking step follows |
+| `thinkingOnSubmit` | `boolean` | Whether that thinking starts at submit, alongside the composer flash, instead of once the flash ends (default false). Its length counts from submit either way |
 | `thinkingMs` | `Span` | A `thinking` step without its own `ms` |
 | `streamUnit` | `"char" \| "word" \| "line"` | What agent text streams by |
 | `streamLeadMs` | `number` | Before the first streamed unit |

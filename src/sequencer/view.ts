@@ -105,11 +105,11 @@ function userPhase<TData>(entry: Mutable<TData>, track: Track<TData>, t: number)
     return;
   }
   entry.visibleText = track.units.join("");
-  if (t < track.flashEnd) entry.phase = "submitted";
-  else if (t < track.thinkingEnd) {
+  if (t >= track.thinkingStart && t < track.thinkingEnd) {
     entry.phase = "thinking";
-    entry.progress = fraction(t, track.flashEnd, track.thinkingEnd);
-  } else entry.phase = "done";
+    entry.progress = fraction(t, track.thinkingStart, track.thinkingEnd);
+  } else if (t < track.flashEnd) entry.phase = "submitted";
+  else entry.phase = "done";
 }
 
 function linesEntry<TData>(entry: Mutable<TData>, track: Track<TData>, t: number): void {

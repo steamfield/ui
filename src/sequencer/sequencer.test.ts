@@ -200,6 +200,20 @@ describe("user steps", () => {
     expect(span).toBeLessThanOrEqual(300);
   });
 
+  test("thinkingOnSubmit thinks from submit, while the composer still flashes", () => {
+    const t = compile(chatScript, { composer: true, timing: { thinkingOnSubmit: true } });
+    const end = t.steps[0]?.end ?? 0;
+    const phases = sweep(t, 3)
+      .filter((ms) => ms < end)
+      .map((ms) => stateAt(t, { ms }))
+      .filter((v) => entry(v, 0));
+    expect(phases[0]?.entries[0]?.phase).toBe("thinking");
+    expect(phases[0]?.composer?.flash).toBe(true);
+    expect(phases.every((v) => v.entries[0]?.phase === "thinking")).toBe(true);
+    // The same total: thinking still counts from submit.
+    expect(end).toBe(chat().steps[0]?.end);
+  });
+
   test("no thinking after the last step, so the final user step ends after its flash", () => {
     const timeline = compile({ steps: [{ kind: "user", text: "hi", composer: true }] });
     const [step] = timeline.steps;

@@ -31,6 +31,11 @@ export interface Timing<TData = unknown> {
   readonly flashMs: number;
   /** Thinking after a user step, when another (non-thinking) step follows. `false` for none. */
   readonly thinkingAfterUser: Span | false;
+  /**
+   * Whether that thinking starts at submit, alongside the composer flash, rather than once the
+   * flash ends. Its length counts from submit either way.
+   */
+  readonly thinkingOnSubmit: boolean;
   /** A `thinking` step without its own `ms`. */
   readonly thinkingMs: Span;
   /** What agent text streams by. Words stream as words and the whitespace between them. */
@@ -71,6 +76,7 @@ const chat: Timing = Object.freeze({
   submitHoldMs: [350, 700],
   flashMs: 300,
   thinkingAfterUser: [800, 1400],
+  thinkingOnSubmit: false,
   thinkingMs: [800, 1400],
   streamUnit: "word",
   streamLeadMs: 80,
@@ -97,6 +103,7 @@ const terminal: Timing = Object.freeze({
   submitHoldMs: 0,
   flashMs: 300,
   thinkingAfterUser: 500,
+  thinkingOnSubmit: false,
   thinkingMs: 700,
   streamUnit: "word",
   streamLeadMs: 0,
@@ -119,6 +126,7 @@ const instant: Timing = Object.freeze({
   submitHoldMs: 0,
   flashMs: 0,
   thinkingAfterUser: false,
+  thinkingOnSubmit: false,
   thinkingMs: 0,
   streamUnit: "word",
   streamLeadMs: 0,
@@ -159,6 +167,7 @@ const checks: Record<keyof Timing, (value: unknown) => boolean> = {
   submitHoldMs: isSpan,
   flashMs: isMs,
   thinkingAfterUser: (v) => v === false || isSpan(v),
+  thinkingOnSubmit: (v) => typeof v === "boolean",
   thinkingMs: isSpan,
   streamUnit: (v) => v === "char" || v === "word" || v === "line",
   streamLeadMs: isMs,

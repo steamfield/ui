@@ -61,9 +61,10 @@ export interface Track<TData = unknown> extends TimedStep {
   /** Output lines, each with the time it appears. */
   readonly lines: readonly Line[];
   readonly lineTimes: readonly number[];
-  /** User steps: submit time, end of the submit flash, end of thinking. */
+  /** User steps: submit time, end of the submit flash, start and end of thinking. */
   readonly submit: number;
   readonly flashEnd: number;
+  readonly thinkingStart: number;
   readonly thinkingEnd: number;
   /** Tool calls: when the call resolves. */
   readonly runEnd: number;
@@ -173,6 +174,7 @@ function emptyTrack<TData>(step: Step<TData>, index: number, start: number): Dra
     lineTimes: [],
     submit: start,
     flashEnd: start,
+    thinkingStart: start,
     thinkingEnd: start,
     runEnd: start,
     composer: false,
@@ -207,6 +209,8 @@ function buildUser<TData>(
   const { thinkingAfterUser } = b.timing;
   const think = thinkingAfterUser !== false && next !== undefined && next.kind !== "thinking";
   track.thinkingEnd = b.t + (think ? b.span(thinkingAfterUser) : 0);
+  // Without thinking this is its end, so no time reads as thinking.
+  track.thinkingStart = think && b.timing.thinkingOnSubmit ? b.t : track.flashEnd;
   if (track.composer) track.appear = track.submit;
   b.t = Math.max(track.flashEnd, track.thinkingEnd);
   track.settle = b.t;
