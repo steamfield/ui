@@ -2,8 +2,13 @@
 // `getStoredConsent()` read through a fresh `createConsentStore()` (what a page reload does) and
 // the setters mapped to the store's commands. `hasConsent` has no counterpart here.
 import { beforeEach, describe, expect, type MockInstance, test, vi } from "vitest";
-import { setDocumentCookie } from "../../tests/helpers/dom.ts";
+import { setDocumentCookie, stubCookieJar } from "../../tests/helpers/dom.ts";
 import { createConsentStore } from "./store.ts";
+
+// Every test runs on a jar that deletes `Max-Age=0` cookies at once, as browsers do.
+beforeEach(() => {
+  stubCookieJar();
+});
 
 /** What a page load would read: a new store over the current cookies. */
 const getStoredConsent = () => createConsentStore().getState();
@@ -249,26 +254,14 @@ describe("a shared domain, on the real cookie jar", () => {
   });
 });
 
-/** The real `document.cookie` setter, from wherever the prototype chain defines it. */
-function cookieSetter(): (value: string) => void {
-  for (let proto: object | null = document; proto; proto = Object.getPrototypeOf(proto)) {
-    const set = Object.getOwnPropertyDescriptor(proto, "cookie")?.set;
-    if (set) return (value) => set.call(document, value);
-  }
-  throw new Error("document.cookie has no setter");
-}
-
 describe("when the browser refuses a write", () => {
   let writes: MockInstance<(value: string) => void>;
   const goTo = (url: string): void => {
     (window as unknown as { happyDOM: { setURL: (url: string) => void } }).happyDOM.setURL(url);
   };
-  /** Passes every write to the real jar except those `refuse` matches, as a browser would. */
+  /** Passes every write to the jar except those `refuse` matches, as a browser would. */
   function refuseWrites(refuse: (value: string) => boolean): void {
-    const real = cookieSetter();
-    writes = vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
-      if (!refuse(value)) real(value);
-    });
+    writes = stubCookieJar(refuse);
   }
   beforeEach(() => {
     const start = location.href;
@@ -287,7 +280,7 @@ describe("when the browser refuses a write", () => {
     const listener = vi.fn();
     store.subscribe(listener);
     store.accept();
-    expect(writes).toHaveBeenCalled();
+    expect(writes.mock.calls.at(-1)?.[0]).toMatch(/^sf-consent=granted;/);
     expect(store.getState()).toBe("granted");
     expect(listener).toHaveBeenCalledWith("granted");
     expect(createConsentStore().getState()).toBeNull();

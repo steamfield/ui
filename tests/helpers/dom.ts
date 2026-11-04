@@ -1,7 +1,7 @@
 // Browser APIs that happy-dom lacks or can't drive, faked the same way for every library test.
 // Each stub goes through vi.stubGlobal or vi.spyOn (undone by unstubGlobals/restoreMocks in
 // vitest.config.ts) or onTestFinished, so nothing leaks into the next test.
-import { onTestFinished, vi } from "vitest";
+import { type MockInstance, onTestFinished, vi } from "vitest";
 
 type Report = { readonly target: Element; readonly isIntersecting: boolean };
 
@@ -202,4 +202,29 @@ export function stubResponseBytes(): void {
 export function setDocumentCookie(cookie: string): void {
   // biome-ignore lint/suspicious/noDocumentCookie: tests set up the cookie jar the code reads.
   document.cookie = cookie;
+}
+
+/** `document.cookie`'s own setter, from the prototype chain (below any spy on `document`). */
+function nativeCookieSetter(): (value: string) => void {
+  for (let proto = Object.getPrototypeOf(document); proto; proto = Object.getPrototypeOf(proto)) {
+    const set = Object.getOwnPropertyDescriptor(proto, "cookie")?.set;
+    if (set) return (value) => set.call(document, value);
+  }
+  throw new Error("document.cookie has no setter");
+}
+
+/**
+ * Makes `document.cookie` delete a `Max-Age=0` cookie at once, as RFC 6265 (5.2.2) and browsers
+ * do. happy-dom keeps it, empty, until the clock moves past the millisecond it was written in, so
+ * a clear and a write in the same millisecond can leave an empty cookie listed ahead of the new
+ * one. `refuse`, when given, drops matching writes, as a browser refusing a cookie would. Returns
+ * the setter spy; undone with the other mocks.
+ */
+export function stubCookieJar(
+  refuse: (value: string) => boolean = () => false,
+): MockInstance<(value: string) => void> {
+  const native = nativeCookieSetter();
+  return vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
+    if (!refuse(value)) native(value.replace(/;\s*Max-Age=0(?=;|$)/i, "; Max-Age=-1"));
+  });
 }
