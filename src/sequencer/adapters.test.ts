@@ -1,7 +1,9 @@
 // OpenData's chat demo keeps its own `Turn` type and converts it with an adapter that will live in
 // @opendata/shared. This test carries a copy of that adapter to show the shared API is enough:
-// tool turns become tool-calls with a custom body, and the per-turn `typingMs` and `timeMs` drive
-// the `typeMsPerChar` and `toolMs` hooks, so the pacing matches use-chat-sequencer.ts.
+// tool turns become tool-calls with a custom body, each turn's `typingMs` rides on its step, and
+// `typeMsPerChar` (with the original's 18ms floor) and `toolMs` read the step, so the pacing
+// matches use-chat-sequencer.ts. `thinkingOnSubmit` shows the dots as the message posts, and the
+// reduced-motion view lists the last text above the last chart, as the original did.
 import { describe, expect, test } from "vitest";
 import type { DemoScript, Step } from "../script/types.ts";
 import { compile } from "./compile.ts";
@@ -31,17 +33,15 @@ function fromTurns(turns: readonly Turn[]): {
   script: DemoScript<ToolTurn>;
   timing: Partial<Timing<ToolTurn>>;
 } {
-  const typingMs = new WeakMap<object, number>();
   const steps = turns.map((turn): Step<ToolTurn> => {
     if (turn.kind === "user") {
-      const step: Step<ToolTurn> = {
+      return {
         kind: "user",
         text: turn.text,
         composer: true,
+        typingMs: turn.typingMs,
         ...(turn.preTyped === undefined ? {} : { preTyped: turn.preTyped }),
       };
-      typingMs.set(step, turn.typingMs);
-      return step;
     }
     if (turn.kind === "assistant-text") return { kind: "agent-text", text: turn.text };
     return {
@@ -56,8 +56,9 @@ function fromTurns(turns: readonly Turn[]): {
     timing: {
       typeMsPerChar: (step) => {
         const typed = step.text.length - (step.kind === "user" ? (step.preTyped?.length ?? 0) : 0);
-        return Math.max(18, Math.floor((typingMs.get(step) ?? 0) / Math.max(1, typed)));
+        return Math.max(18, Math.floor((step.typingMs ?? 0) / Math.max(1, typed)));
       },
+      thinkingOnSubmit: true,
       toolMs: (step) =>
         step.body?.kind === "custom" ? clamp(step.body.data.timeMs + 200, 800, 1800) : 1000,
     },
@@ -139,7 +140,7 @@ describe("an MCD-style script through the adapter", () => {
     }
   });
 
-  test("plays in MCD's order: type, submit, think, load tools, stream the answer", () => {
+  test("plays in MCD's order: type, submit and think, load tools, stream the answer", () => {
     const timeline = compile(script, { timing });
     const story: string[] = [];
     const marks = Array.from({ length: Math.ceil(timeline.duration / 5) }, (_, i) => i * 5);
@@ -154,7 +155,6 @@ describe("an MCD-style script through the adapter", () => {
     expect(story).toEqual([
       "composer:empty",
       "composer:typing",
-      "0:submitted",
       "0:thinking",
       "1:running",
       "1:done",
@@ -177,7 +177,16 @@ describe("an MCD-style script through the adapter", () => {
     );
   });
 
-  test('"last" keeps the last chart and the last text in script order (the MCD bug, fixed)', () => {
+  test("a listed pick puts the last text above the last chart, as MCD's reduced motion did", () => {
+    const pick = (steps: readonly Step<unknown>[]): number[] => [
+      steps.findLastIndex((s) => s.kind === "agent-text" || s.kind === "user"),
+      steps.findLastIndex((s) => s.kind === "tool-call" && s.name === "openchart"),
+    ];
+    const view = finalState(compile(script, { timing }), { policy: { pick, order: "listed" } });
+    expect(view.entries.map((e) => e.index)).toEqual([5, 3]);
+  });
+
+  test('"last" keeps the last chart and the last text in script order', () => {
     const view = finalState(compile(script, { timing }), { policy: "last" });
     expect(view.entries.map((e) => e.index)).toEqual([3, 4]);
   });

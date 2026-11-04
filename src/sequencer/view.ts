@@ -105,10 +105,12 @@ function userPhase<TData>(entry: Mutable<TData>, track: Track<TData>, t: number)
     return;
   }
   entry.visibleText = track.units.join("");
+  // Once thinking has started (at submit or after the flash) the step never goes back to
+  // "submitted", even when a short thinking span ends before the flash does.
   if (t >= track.thinkingStart && t < track.thinkingEnd) {
     entry.phase = "thinking";
     entry.progress = fraction(t, track.thinkingStart, track.thinkingEnd);
-  } else if (t < track.flashEnd) entry.phase = "submitted";
+  } else if (t < track.flashEnd && t < track.thinkingStart) entry.phase = "submitted";
   else entry.phase = "done";
 }
 

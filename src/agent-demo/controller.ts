@@ -97,6 +97,15 @@ export interface DemoController<TData = unknown> {
  */
 export type BeforeStart = "final" | "start";
 
+/**
+ * A `finalPolicy` checked against the timeline now, so a bad one throws where it is passed. With
+ * `beforeStart: "start"` the final view may otherwise first be computed much later, under reduced
+ * motion, inside a motion-change listener.
+ */
+const checkPolicy = (timeline: Timeline<unknown>, policy: FinalPolicy | undefined): void => {
+  finalState(timeline, { policy: policy ?? "all" });
+};
+
 /** `beforeStart` as given, or `invalid_option`. */
 const checkBeforeStart = (value: unknown): void => {
   if (value !== undefined && value !== "final" && value !== "start") {
@@ -128,11 +137,19 @@ const fnKey = (fn: unknown): unknown => {
   const source = String(fn);
   return NATIVE.test(source) ? fn : source;
 };
+/** One stable key per (bound or native `pick`, order), so an inline object around it is not new. */
+const identityKeys = new WeakMap<object, Map<unknown, object>>();
 const policyKey = (policy: FinalPolicy | undefined): unknown => {
   if (typeof policy !== "object" || policy === null) return fnKey(policy);
-  const pick = fnKey(policy.pick);
   // An object policy is new on every render when written inline, so it compares by its parts.
-  return typeof pick === "string" ? `${policy.order ?? "script"}:${pick}` : policy;
+  const order = policy.order ?? "script";
+  const pick = fnKey(policy.pick);
+  if (typeof pick !== "function") return `${String(order)}:${String(pick)}`;
+  const byOrder = identityKeys.get(pick) ?? new Map<unknown, object>();
+  identityKeys.set(pick, byOrder);
+  const key = byOrder.get(order) ?? {};
+  byOrder.set(order, key);
+  return key;
 };
 
 /** A position as a comparable value, so an inline `{ click: n }` doesn't count as a change. */
@@ -219,6 +236,13 @@ export function createDemoController<TData = unknown>(
     const changed = compiled;
     compiled = true;
     return changed;
+  };
+
+  // The policy last checked against the timeline, by key.
+  let checkedPolicy: unknown;
+  const checkFinal = (): void => {
+    checkPolicy(timeline as Timeline<unknown>, options.finalPolicy);
+    checkedPolicy = policyKey(options.finalPolicy);
   };
 
   const gateOptions = (): PlaybackGateOptions => ({
@@ -445,6 +469,7 @@ export function createDemoController<TData = unknown>(
 
   checkBeforeStart(options.beforeStart);
   compileFor(initialScript);
+  checkFinal();
   bound = createBoundGate(gateOptions());
   bound.subscribe(settle);
   state = derive();
@@ -470,6 +495,7 @@ export function createDemoController<TData = unknown>(
           checkBeforeStart(next.beforeStart);
           options = next;
           const restart = compileFor(script);
+          if (restart || policyKey(next.finalPolicy) !== checkedPolicy) checkFinal();
           bound.configure(gateOptions());
           // A new script (by key) starts over.
           if (restart) bound.reset();

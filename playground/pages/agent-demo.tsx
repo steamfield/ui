@@ -81,6 +81,23 @@ const deck: DemoScript = {
   ],
 };
 
+/** A paperclip and an up arrow, for the composer slots. */
+const PinGlyph = (): ReactElement => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path
+      d="M11 4 L5 10 A2 2 0 0 0 7.8 12.8 L13 7.5 A3.5 3.5 0 0 0 8 2.5 L3 7.5"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+const UpGlyph = (): ReactElement => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 13 L8 3 M3.5 7.5 L8 3 L12.5 7.5" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
+
 const tools = {
   query_sql: { label: "Ran query", runningLabel: "Running query", icon: "≡" },
   list_issues: { label: "Listed issues", runningLabel: "Listing issues" },
@@ -226,6 +243,25 @@ export function AgentDemoPage(): ReactElement {
           labels={{ transcript: "Collapsible transcript", working: "Running…" }}
           collapsible
           transcript={{ as: "region" }}
+        />
+      </section>
+      <section className="pg-section" aria-labelledby="ad-start-empty">
+        <h2 id="ad-start-empty">Starts empty, composer icons</h2>
+        <AgentDemo
+          script={chat}
+          layout="chat"
+          tools={tools}
+          beforeStart="start"
+          leaveGraceMs={Number.POSITIVE_INFINITY}
+          timing={{ thinkingOnSubmit: true }}
+          labels={{ transcript: "Empty-start chat transcript" }}
+          composerStart={<PinGlyph />}
+          submitIcon={<UpGlyph />}
+          renderToolBody={(ctx) =>
+            ctx.step.body?.kind === "custom" ? (
+              <RainfallBars rows={ctx.step.body.data} />
+            ) : undefined
+          }
         />
       </section>
       <section className="pg-section" aria-labelledby="ad-chat-collapsible">

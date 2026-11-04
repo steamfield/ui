@@ -214,6 +214,27 @@ describe("user steps", () => {
     expect(end).toBe(chat().steps[0]?.end);
   });
 
+  test("with thinkingOnSubmit, thinking shorter than the flash never goes back to submitted", () => {
+    const t = compile(
+      {
+        steps: [
+          { kind: "user", text: "ab" },
+          { kind: "agent-text", text: "ok" },
+        ],
+      },
+      {
+        composer: true,
+        timing: { ...presets.terminal, thinkingOnSubmit: true, thinkingAfterUser: 100 },
+      },
+    );
+    const end = t.steps[0]?.end ?? 0;
+    const order = sweep(t, 3)
+      .filter((ms) => ms < end)
+      .map((ms) => entry(stateAt(t, { ms }), 0)?.phase ?? "composer")
+      .filter((p, i, all) => p !== all[i - 1]);
+    expect(order).toEqual(["composer", "thinking", "done"]);
+  });
+
   test("no thinking after the last step, so the final user step ends after its flash", () => {
     const timeline = compile({ steps: [{ kind: "user", text: "hi", composer: true }] });
     const [step] = timeline.steps;
@@ -619,6 +640,11 @@ describe("options", () => {
     ["a non-function toolMs", { timing: { toolMs: 5 } }, "timing.toolMs"],
     ["a bad typeMsPerChar", { timing: { typeMsPerChar: "fast" } }, "timing.typeMsPerChar"],
     ["thinkingAfterUser true", { timing: { thinkingAfterUser: true } }, "timing.thinkingAfterUser"],
+    [
+      "a non-boolean thinkingOnSubmit",
+      { timing: { thinkingOnSubmit: 1 } },
+      "timing.thinkingOnSubmit",
+    ],
     ["a non-object timing", { timing: 3 }, "timing"],
     ["a non-string seed", { seed: 3 }, "seed"],
     ["a non-boolean composer", { composer: "yes" }, "composer"],

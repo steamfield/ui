@@ -10,6 +10,7 @@ import {
   AgentDemo,
   type AgentDemoProps,
   type AgentDemoTranscript,
+  type BeforeStart,
   StaticTranscript,
   useAgentDemo,
 } from "@steamfield/ui/react/agent-demo";
@@ -37,6 +38,7 @@ import {
   clickCount,
   compile,
   type DemoView,
+  type FinalPick,
   finalState,
   presets,
   stateAt,
@@ -48,6 +50,7 @@ import {
   AgentDemo as VueAgentDemo,
   type AgentDemoProps as VueAgentDemoProps,
   type AgentDemoTranscript as VueAgentDemoTranscript,
+  type BeforeStart as VueBeforeStart,
   StaticTranscript as VueStaticTranscript,
 } from "@steamfield/ui/vue/agent-demo";
 import { createElement } from "react";
@@ -179,6 +182,39 @@ check(
     extendedHtml.includes('class="hero"'),
   "AgentDemo extension points",
 );
+// The 0.3 options: an empty start before play, composer nodes, typingMs, a listed final pick
+// and thinking from submit.
+const beforeStart: BeforeStart = "start";
+const pickLast: FinalPick = (steps) => [steps.length - 1, 0];
+const typedScript: DemoScript = {
+  steps: [
+    { kind: "user", text: "Hi there", typingMs: 400 },
+    { kind: "agent-text", text: "Hello." },
+  ],
+};
+const startHtml = renderToStaticMarkup(
+  createElement(AgentDemo, {
+    script: typedScript,
+    beforeStart,
+    timing: { thinkingOnSubmit: true },
+    finalPolicy: { pick: pickLast, order: "listed" },
+    leaveGraceMs: Number.POSITIVE_INFINITY,
+    composerStart: createElement("svg", { id: "clip" }),
+    submitIcon: createElement("svg", { id: "arrow" }),
+  }),
+);
+check(
+  !startHtml.includes("Hello.") &&
+    startHtml.includes('data-part="composer-start"') &&
+    startHtml.includes('id="arrow"'),
+  "AgentDemo beforeStart and composer slots",
+);
+check(
+  finalState(compile(typedScript), { policy: { pick: pickLast, order: "listed" } })
+    .entries.map((e) => e.index)
+    .join() === "1,0",
+  "listed final pick",
+);
 const windowProps: DemoWindowProps = { title: "session", label: "Example" };
 check(
   renderToStaticMarkup(createElement(DemoWindow, windowProps)).includes("session"),
@@ -217,6 +253,21 @@ const vueExtendedHtml = await renderToString(
 check(
   vueExtendedHtml.includes("<section") && vueExtendedHtml.includes("<summary"),
   "Vue StaticTranscript extension points",
+);
+const vueBeforeStart: VueBeforeStart = "start";
+const vueStartHtml = await renderToString(
+  createSSRApp({
+    render: () =>
+      h(
+        VueAgentDemo,
+        { script: typedScript, beforeStart: vueBeforeStart },
+        { composerStart: () => [h("svg", { id: "clip" })] },
+      ),
+  }),
+);
+check(
+  !vueStartHtml.includes("Hello.") && vueStartHtml.includes('data-part="composer-start"'),
+  "Vue AgentDemo beforeStart and composer slot",
 );
 const vueDemoHtml = await renderToString(createSSRApp({ render: () => h(VueAgentDemo, vueProps) }));
 check(vueDemoHtml.includes("data-sf-agent-demo"), "Vue AgentDemo SSR");

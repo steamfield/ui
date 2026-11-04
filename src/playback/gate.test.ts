@@ -313,6 +313,35 @@ describe("leave grace period", () => {
     expect(g.getState().playing).toBe(false);
   });
 
+  test("a grace period past setTimeout's limit counts as infinite", () => {
+    const g = make({ leaveGraceMs: 2 ** 31 });
+    observer().fire(true);
+    observer().fire(false);
+    advance(1000);
+    expect(g.getState()).toMatchObject({ inView: true, playing: true });
+  });
+
+  test("an infinite grace period re-arms for a new element or a new grace period", () => {
+    const b = createBoundGate({ duration: 10_000, leaveGraceMs: Number.POSITIVE_INFINITY });
+    onTestFinished(() => b.destroy());
+    b.attach(el);
+    b.connect();
+    observer().fire(true);
+    observer().fire(false);
+    expect(b.getState().playing).toBe(true);
+    const next = document.createElement("div");
+    document.body.append(next);
+    onTestFinished(() => next.remove());
+    b.attach(next);
+    observer().fire(false);
+    expect(b.getState().inView).toBe(false);
+    observer().fire(true);
+    b.configure({ duration: 10_000, leaveGraceMs: 0 });
+    observer().fire(true);
+    observer().fire(false);
+    expect(b.getState().playing).toBe(false);
+  });
+
   test("with no grace period, leaving pauses at once", () => {
     const g = make();
     observer().fire(true);

@@ -179,12 +179,12 @@ The headless hook: compiles the script, gates playback and returns the view to r
 | `composer` | `boolean` | `false` in the hook; `AgentDemo` uses `true` for `layout="chat"` | Whether user steps type into the composer instead of the transcript (a step's own `composer` overrides it) |
 | `tools` | `ToolRegistry` | none | Only `hidden` is read: a hidden tool's calls take no time, so leaving them out leaves no silent gap. `AgentDemo` passes its `tools` prop. A change to the hidden set recompiles and restarts playback |
 | `finalPolicy` | `"all" \| "last" \| (steps) => number[] \| { pick, order? }` | `"all"` | What the server, the pre-hydration render and reduced motion show. A function's picks show in script order; `{ pick, order: "listed" }` shows them in the order `pick` returns them (such as an answer above the chart it explains). A function compares by its source text, like `timing`, so an inline one doesn't count as new every render; a function whose captured variables change is not seen as new (pass a different function, or hoist it). Bound and native functions compare by identity |
-| `beforeStart` | `"final" \| "start"` | `"final"` | What shows before playback starts: on the server, before hydration, and with `autoStart: false` until `play()`. `"start"` is the view at 0ms (with the `chat` preset's start delay, an empty transcript), so a demo that should appear to begin from nothing doesn't flash its final transcript first. Reduced motion still shows the `finalPolicy` view |
+| `beforeStart` | `"final" \| "start"` | `"final"` | What shows before playback starts: on the server, before hydration, and with `autoStart: false` until `play()`. `"start"` is the view at 0ms (with the `chat` preset's start delay, an empty transcript), so a demo that should appear to begin from nothing doesn't flash its final transcript first. Reduced motion still shows the `finalPolicy` view. This opts out of the no-JS final state: without JavaScript, and for crawlers, the transcript is empty, so give them `StaticTranscript` in a `<noscript>` or `transcriptText(script)` |
 | `position` | `{ ms } \| { click }` | none | Pin the view to a position, such as `{ click }` from a Slidev deck. No clock runs and no controls show |
-| `autoStart` | `boolean` | `true` | Start when in view. When false the final transcript shows until `play()` |
+| `autoStart` | `boolean` | `true` | Start when in view. When false the final transcript (or with `beforeStart: "start"`, the start) shows until `play()` |
 | `threshold` | `number` | `0.15` | In-view threshold |
 | `rootMargin` | `string` | `"0px"` | In-view root margin |
-| `leaveGraceMs` | `number` | `0` | How long the demo may be out of view before it pauses. `Infinity` never pauses for leaving once the demo has been seen, like a one-shot observer; a hidden tab still pauses |
+| `leaveGraceMs` | `number` | `0` | How long the demo may be out of view before it pauses. `Infinity` (or anything past 2^31 - 1 ms, which `setTimeout` can't wait) never pauses for leaving once the demo has been seen, like a one-shot observer; a hidden tab still pauses |
 | `motion` | `"auto" \| "reduce" \| "full" \| MotionSource` | `"auto"` | Where motion permission comes from. Keep a custom source stable |
 | `reducedPolicy` | `"end" \| "hold"` | `"end"` | What reduced motion shows: `"end"` is the `finalPolicy` view; `"hold"` freezes the frame playback reached and resumes from it when motion returns. Before playback has moved, both show the final view |
 | `speed` | `number` | `1` | Initial clock rate |
@@ -218,8 +218,8 @@ All hook options plus:
 | `layout` | `"chat" \| "terminal"` | `"chat"` | The two looks over one set of parts |
 | `labels` | `Partial<AgentDemoLabels>` | see below | Overrides for any default string |
 | `glyphs` | `Partial<AgentDemoGlyphs>` | see below | Overrides for the decorative glyphs |
-| `composerStart` | `ReactNode` | none | Shown at the start of the composer, before the typed text, in a `composer-start` part hidden from assistive tech (an attach icon, say) |
-| `submitIcon` | `ReactNode` | none | Replaces `glyphs.submit` inside the composer's `submit` part, such as an SVG arrow |
+| `composerStart` | `ReactNode` | none | Shown at the start of the composer, before the typed text, in a `composer-start` part hidden from assistive tech (an attach icon, say). Nothing renders for `null`, `false`, `true`, `""` or `[]`, like an empty Vue slot |
+| `submitIcon` | `ReactNode` | none | Replaces `glyphs.submit` inside the composer's `submit` part, such as an SVG arrow. An empty node (as for `composerStart`) keeps the glyph |
 | `tools` | `ToolRegistry` | none | Per tool `name`: `label`, `runningLabel`, `icon`, `accent` (any CSS color, sets `--sf-tool-accent`), `hidden` (leave its calls out; they take no playback time either). A tool without an entry gets its name humanized ("query_sql" reads "Query sql"). The terminal layout ignores the labels and shows `server name` |
 | `renderToolCall` | `(ctx) => ReactNode \| undefined` | none | Replaces a whole tool card. Return `undefined`, `null` or `false` for the default |
 | `renderToolBody` | `(ctx) => ReactNode \| undefined` | none | Renders a tool body (`custom` bodies, or any kind you override) |
@@ -284,7 +284,7 @@ The transcript is a `column-reverse` scroller around a column, so the newest lin
 
 #### Without JavaScript
 
-- Server and first client render: `finalState(finalPolicy)`, the whole transcript, with no controls and no composer text (with `beforeStart: "start"`, the view at 0ms instead). Entrance and typing animation only applies under `[data-sf-animating]`, which is set after hydration.
+- Server and first client render: `finalState(finalPolicy)`, the whole transcript, with no controls and no composer text (with `beforeStart: "start"`, the view at 0ms instead, which with the `chat` preset is empty: pair it with a `<noscript>` `StaticTranscript` or `transcriptText` when the content matters without JavaScript). Entrance and typing animation only applies under `[data-sf-animating]`, which is set after hydration.
 - Reduced motion (media query or a `motion` source that says reduce): the same final transcript, no controls, no animation.
 - `StaticTranscript` is the fully server-safe option; `AgentDemo` also renders on the server because it reads no browser state during render.
 - Screen readers get one `role="status"` message ("Example agent session.", then "Demo complete.") rather than a live region on moving content.
@@ -351,13 +351,13 @@ Validates and returns a frozen `Timeline` (`script`, `steps` with `key`/`index`/
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `startDelay` | `Span` | Before the first step |
-| `typeMsPerChar` | `number \| (step) => number` | Per typed character of user and command steps. A number gives way to a step's `typingMs`, spread over the characters it types; a function gets the step (its `typingMs` too) and always decides |
+| `typeMsPerChar` | `number \| (step) => number` | Per typed character of user and command steps. A number gives way to a step's `typingMs`, spread over the characters it types; a function gets the step (its `typingMs` too) and always decides. `jitter` still varies each character, so a `typingMs` total is approximate |
 | `jitter` | `number` | ± ms per typed character |
 | `preTypedHoldMs` | `Span` | How long `preTyped` text sits before typing resumes |
 | `submitHoldMs` | `Span` | After typing, before submit |
 | `flashMs` | `number` | Submit flash length |
 | `thinkingAfterUser` | `Span \| false` | Thinking after a user step when another non-thinking step follows |
-| `thinkingOnSubmit` | `boolean` | Whether that thinking starts at submit, alongside the composer flash, instead of once the flash ends (default false). Its length counts from submit either way |
+| `thinkingOnSubmit` | `boolean` (optional) | Whether that thinking starts at submit, alongside the composer flash, instead of once the flash ends (default false). Its length counts from submit either way |
 | `thinkingMs` | `Span` | A `thinking` step without its own `ms` |
 | `streamUnit` | `"char" \| "word" \| "line"` | What agent text streams by |
 | `streamLeadMs` | `number` | Before the first streamed unit |
@@ -973,7 +973,7 @@ The finished transcript with no playback, controls or composer, in the same part
 
 ### Without JavaScript
 
-The same as React: the server render and the render before mount are `finalState(finalPolicy)`, controls show only once mounted, and reduced motion shows the final transcript. Click mode renders `stateAt` the given position on the server too.
+The same as React: the server render and the render before mount are `finalState(finalPolicy)` (the view at 0ms with `beforeStart: "start"`), controls show only once mounted, and reduced motion shows the final transcript. Click mode renders `stateAt` the given position on the server too.
 
 ## Errors
 

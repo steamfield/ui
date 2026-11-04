@@ -18,7 +18,8 @@ export interface Timing<TData = unknown> {
   readonly startDelay: Span;
   /**
    * Base ms per typed character of user and command steps. A number gives way to a step's
-   * `typingMs`; a function gets the step (`typingMs` included) and always decides.
+   * `typingMs`; a function gets the step (`typingMs` included) and always decides. `jitter`
+   * still applies per character, so a `typingMs` total is approximate.
    */
   readonly typeMsPerChar: number | ((step: TypedStep) => number);
   /** ± ms added to each typed character, from the seeded PRNG. */
@@ -33,9 +34,10 @@ export interface Timing<TData = unknown> {
   readonly thinkingAfterUser: Span | false;
   /**
    * Whether that thinking starts at submit, alongside the composer flash, rather than once the
-   * flash ends. Its length counts from submit either way.
+   * flash ends. Its length counts from submit either way. Default false; optional, so a
+   * hand-written `Timing` from before it existed still type-checks.
    */
-  readonly thinkingOnSubmit: boolean;
+  readonly thinkingOnSubmit?: boolean;
   /** A `thinking` step without its own `ms`. */
   readonly thinkingMs: Span;
   /** What agent text streams by. Words stream as words and the whitespace between them. */

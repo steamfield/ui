@@ -48,7 +48,10 @@ export interface UseAgentDemoOptions<TData = unknown> {
    * renders `stateAt` there, runs no clock and shows no controls.
    */
   readonly position?: Position;
-  /** Start once in view. When false, the final transcript shows until `play()`. Default true. */
+  /**
+   * Start once in view. When false, the final transcript (or with `beforeStart: "start"`, the
+   * start) shows until `play()`. Default true.
+   */
   readonly autoStart?: boolean;
   /** In-view threshold. Default 0.15. */
   readonly threshold?: number;
@@ -131,7 +134,8 @@ export interface UseAgentDemoResult<TData = unknown> {
 /**
  * The headless agent demo: compiles a script, gates playback on visibility, tab and motion, and
  * returns the view to render with its controls. The server and pre-hydration render are
- * `finalState(finalPolicy)`, as is reduced motion; `position` pins the view for click-paced decks.
+ * `finalState(finalPolicy)` (the view at 0ms with `beforeStart: "start"`), and reduced motion is
+ * always `finalState(finalPolicy)`; `position` pins the view for click-paced decks.
  */
 export function useAgentDemo<TData = unknown>(
   script: DemoScript<TData>,

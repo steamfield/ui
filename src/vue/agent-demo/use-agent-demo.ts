@@ -70,7 +70,10 @@ export interface UseAgentDemoOptions<TData = unknown> {
    * inactive to active bumps `playCount`. Default always active.
    */
   readonly active?: MaybeRefOrGetter<boolean | undefined>;
-  /** Start once in view. When false, the final transcript shows until `play()`. Default true. */
+  /**
+   * Start once in view. When false, the final transcript (or with `beforeStart: "start"`, the
+   * start) shows until `play()`. Default true.
+   */
   readonly autoStart?: boolean | undefined;
   /** In-view threshold. Default 0.15. */
   readonly threshold?: number | undefined;
@@ -161,8 +164,9 @@ export interface UseAgentDemoResult<TData = unknown> {
 
 /**
  * The headless agent demo for Vue: compiles a script and returns the reactive view to render with
- * its controls. Call it in `setup`. The server and pre-mount render are `finalState(finalPolicy)`,
- * as is reduced motion. With `position` it follows a click index; otherwise a playback gate,
+ * its controls. Call it in `setup`. The server and pre-mount render are `finalState(finalPolicy)`
+ * (the view at 0ms with `beforeStart: "start"`), and reduced motion is always
+ * `finalState(finalPolicy)`. With `position` it follows a click index; otherwise a playback gate,
  * created on mount, runs the clock while the element is in view, the tab is visible and motion is
  * allowed.
  *

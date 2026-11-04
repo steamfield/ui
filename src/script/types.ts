@@ -45,8 +45,9 @@ export type Step<TData = unknown> = At &
         /** Type into the composer and post on submit, instead of typing into the transcript. */
         readonly composer?: boolean;
         /**
-         * How long typing the text after `preTyped` takes, spread evenly over its characters. A
-         * `typeMsPerChar` function receives the step and decides instead.
+         * About how long typing the text after `preTyped` takes, spread over its characters
+         * (`jitter` still varies each one). A `typeMsPerChar` function receives the step and
+         * decides instead.
          */
         readonly typingMs?: number;
       }

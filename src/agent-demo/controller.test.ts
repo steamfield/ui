@@ -118,6 +118,56 @@ describe("before mount", () => {
     expect(before.view.entries.map((e) => e.index)).toEqual([4, 0]);
   });
 
+  test("a bound pick inside an inline object policy keeps the state across updates", () => {
+    const pick = function (this: unknown): number[] {
+      return [4, 0];
+    }.bind(null);
+    const c = make({ finalPolicy: { pick, order: "listed" } }, { mount: false });
+    const before = c.getState();
+    c.update(script, { ...options, finalPolicy: { pick, order: "listed" } });
+    expect(c.getState()).toBe(before);
+    c.update(script, { ...options, finalPolicy: { pick, order: "script" } });
+    expect(c.getState().view.entries.map((e) => e.index)).toEqual([0, 4]);
+  });
+
+  test("a bad finalPolicy throws where it is passed, even with beforeStart start", () => {
+    expect(() =>
+      make({ beforeStart: "start", finalPolicy: { order: "listed" } as never }, { mount: false }),
+    ).toThrow(expect.objectContaining({ code: "invalid_option", field: "policy" }));
+    const c = make({ beforeStart: "start" }, { mount: false });
+    expect(() =>
+      c.update(script, { ...options, beforeStart: "start", finalPolicy: () => [99] }),
+    ).toThrow(expect.objectContaining({ code: "invalid_option", field: "policy" }));
+  });
+
+  test("update checks beforeStart, and switching it on a live controller changes the view", () => {
+    const c = make({ autoStart: false });
+    expect(c.getState().view.entries).toHaveLength(script.steps.length);
+    expect(() => c.update(script, { ...options, beforeStart: "later" as never })).toThrow(
+      expect.objectContaining({ code: "invalid_option", field: "beforeStart" }),
+    );
+    c.update(script, { ...options, autoStart: false, beforeStart: "start" });
+    expect(c.getState().view).toEqual(stateAt(timeline, { ms: 0 }));
+  });
+
+  test('beforeStart "start" with reducedPolicy "hold" holds the frame playback reached', () => {
+    const motion = { allowed: true, listeners: new Set<() => void>() };
+    const source: MotionSource = {
+      get: () => motion.allowed,
+      subscribe: (cb) => {
+        motion.listeners.add(cb);
+        return () => motion.listeners.delete(cb);
+      },
+    };
+    const c = make({ beforeStart: "start", reducedPolicy: "hold", motion: source });
+    advance(startOf(2) + 10);
+    const held = c.getState().view.elapsed;
+    motion.allowed = false;
+    for (const cb of motion.listeners) cb();
+    expect(c.getState().view.elapsed).toBe(held);
+    expect(c.getState().view.entries.length).toBeLessThan(script.steps.length);
+  });
+
   test("the speed option shows before mount; controls do nothing", () => {
     const c = make({ speed: 3 }, { mount: false });
     c.getState().controls.play();

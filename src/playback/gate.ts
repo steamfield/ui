@@ -12,9 +12,10 @@ export interface PlaybackGateOptions {
   readonly rootMargin?: string;
   /**
    * How long the element may be out of view before playback pauses. Coming back inside the
-   * grace period resumes at once, as if it never left. `Infinity` never pauses for leaving: once
-   * the element has been in view, it counts as in view until the next element or option change,
-   * like a one-shot observer. Default 0.
+   * grace period resumes at once, as if it never left. `Infinity` (or anything past 2^31 - 1, the
+   * longest `setTimeout` delay) never pauses for leaving: once the element has been in view, it
+   * counts as in view until the next element or option change, like a one-shot observer.
+   * Default 0.
    */
   readonly leaveGraceMs?: number;
   /**
@@ -73,6 +74,9 @@ export interface PlaybackGate {
   readonly getState: () => GateState;
   readonly subscribe: (callback: () => void) => () => void;
 }
+
+/** The longest delay `setTimeout` honors; longer ones fire at once. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 /** The longest step one frame may advance, so a throttled or stalled tab never jumps ahead. */
 const MAX_STEP_MS = 100;
@@ -235,8 +239,9 @@ function build(
   const onIntersect = (visible: boolean): void => {
     clearTimeout(grace);
     grace = undefined;
-    // Seen once is enough when the grace never runs out.
-    if (!visible && inView && config.leaveGraceMs === Number.POSITIVE_INFINITY) return;
+    // Seen once is enough when the grace never runs out: `Infinity`, or anything past what
+    // `setTimeout` can wait (it fires at once past 2^31 - 1 ms).
+    if (!visible && inView && config.leaveGraceMs > MAX_TIMEOUT_MS) return;
     if (visible || !inView || config.leaveGraceMs === 0) {
       inView = visible;
       update();

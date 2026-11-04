@@ -51,6 +51,23 @@ const extended = (): ReturnType<typeof h> =>
     transcript: { as: "region" },
   });
 
+const startEmpty = (): ReturnType<typeof h> =>
+  h(
+    AgentDemo,
+    {
+      script,
+      layout: "chat",
+      beforeStart: "start",
+      leaveGraceMs: Number.POSITIVE_INFINITY,
+      timing: { thinkingOnSubmit: true },
+      labels: { transcript: "Vue empty-start chat transcript" },
+    },
+    {
+      composerStart: () => [h("span", null, "+")],
+      submitIcon: () => [h("span", null, "↑")],
+    },
+  );
+
 const chatCollapsible = (): ReturnType<typeof h> =>
   h(AgentDemo, {
     script,
@@ -127,6 +144,10 @@ export function VueAgentDemoPage(): ReactElement {
       <section className="pg-section" aria-labelledby="vue-extensions">
         <h2 id="vue-extensions">Working line, collapsible calls, region transcript</h2>
         <VueIsland render={extended} />
+      </section>
+      <section className="pg-section" aria-labelledby="vue-start-empty">
+        <h2 id="vue-start-empty">Starts empty, composer icons</h2>
+        <VueIsland render={startEmpty} />
       </section>
       <section className="pg-section" aria-labelledby="vue-chat-collapsible">
         <h2 id="vue-chat-collapsible">Collapsible chat cards</h2>

@@ -48,6 +48,10 @@ export type ToolRenderer<TData = unknown> = (ctx: ToolCallContext<TData>) => Rea
 /** `undefined`, `null` and `false` from a `ToolRenderer` all mean "use the built-in rendering". */
 const fallsBack = (node: ReactNode | undefined): boolean => node == null || node === false;
 
+/** A slot that renders nothing (like Vue's empty slot), so the composer keeps its default. */
+const emptySlot = (node: ReactNode | undefined): boolean =>
+  fallsBack(node) || node === true || node === "" || (Array.isArray(node) && node.length === 0);
+
 /** Everything the parts need besides the view. */
 export interface PartsConfig<TData> {
   readonly layout: AgentDemoLayout;
@@ -527,7 +531,7 @@ export function Composer({
   return (
     <div data-part="composer" data-flash={flash ? "" : undefined} aria-hidden="true">
       {layout === "terminal" ? <Glyph>{glyphs.user}</Glyph> : null}
-      {start == null || start === false ? null : (
+      {emptySlot(start) ? null : (
         <span data-part="composer-start" aria-hidden="true">
           {start}
         </span>
@@ -543,7 +547,7 @@ export function Composer({
         )}
       </span>
       <span data-part="submit" data-flash={flash ? "" : undefined}>
-        {submitIcon == null || submitIcon === false ? glyphs.submit : submitIcon}
+        {emptySlot(submitIcon) ? glyphs.submit : submitIcon}
       </span>
     </div>
   );

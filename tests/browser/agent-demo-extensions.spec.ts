@@ -218,3 +218,38 @@ for (const c of clickCases) {
     });
   }
 }
+
+// beforeStart "start" and the composer slots: the transcript is empty before play (and below the
+// fold until scrolled to), the composer-start part is hidden from assistive tech, and the
+// finished demo passes axe.
+const startCases = [
+  { page: "agent-demo", section: "ad-start-empty", name: "Empty-start chat transcript" },
+  { page: "vue-agent-demo", section: "vue-start-empty", name: "Vue empty-start chat transcript" },
+] as const;
+
+for (const c of startCases) {
+  const selector = `[aria-labelledby="${c.section}"]`;
+
+  test(`${c.page}: starts empty, then plays with the composer icons`, async ({ page: tab }) => {
+    await tab.clock.install();
+    await tab.emulateMedia({ reducedMotion: "no-preference" });
+    await tab.goto(`/#/${c.page}`);
+    const demo = tab.locator(selector);
+    const transcript = demo.getByRole("group", { name: c.name });
+    await expect(transcript.locator('[data-part="turns"] > *')).toHaveCount(0);
+    const start = demo.locator('[data-part="composer-start"]');
+    await expect(start).toBeVisible();
+    await expect(start).toHaveAttribute("aria-hidden", "true");
+    await demo.scrollIntoViewIfNeeded();
+    await tab.clock.runFor(60_000);
+    await expect(transcript.locator('[data-part="turns"] > *').first()).toBeVisible();
+    expect(await violations(tab, selector)).toEqual([]);
+  });
+
+  test(`${c.page}: reduced motion shows the final state at once`, async ({ page: tab }) => {
+    await tab.emulateMedia({ reducedMotion: "reduce" });
+    await tab.goto(`/#/${c.page}`);
+    const transcript = tab.locator(selector).getByRole("group", { name: c.name });
+    await expect(transcript.locator('[data-part="turns"] > *').first()).toBeVisible();
+  });
+}
