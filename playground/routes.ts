@@ -10,6 +10,7 @@ export const ROUTES = [
   "reveal",
   "playback",
   "markdown",
+  "consent",
 ] as const;
 
 export type Route = (typeof ROUTES)[number];

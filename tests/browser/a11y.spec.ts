@@ -72,6 +72,8 @@ for (const page of PAGES) {
       await tab.setViewportSize({ width: 390, height: 844 });
       await tab.goto(`/?theme=${mode.theme}#/${page}`);
       await tab.locator("main h1").waitFor();
+      // The consent banners open after their page-load delay; scan them once they are in.
+      if (page === "consent") await expect(tab.locator('[data-part="consent"]')).toHaveCount(2);
       await settle(tab);
 
       if (mode.motion === "reduce") {

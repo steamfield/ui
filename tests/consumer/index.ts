@@ -2,6 +2,13 @@
 // (plus the peers listed in CONSUMER_PEERS; tests/consumer-no-peers/ covers a consumer with
 // none) next to this file, typechecks it under strict NodeNext resolution, then runs it with
 // Node. Keep it importing by package name, one block per subpath, and add each new subpath here.
+import {
+  type ConsentBannerOptions,
+  type ConsentState,
+  type ConsentStoreOptions,
+  createConsentStore,
+  mountConsentBanner,
+} from "@steamfield/ui/consent";
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
 import { createHastPlugins, createShikiConfig, type TablesOptions } from "@steamfield/ui/markdown";
@@ -14,6 +21,12 @@ import {
   StaticTranscript,
   useAgentDemo,
 } from "@steamfield/ui/react/agent-demo";
+import {
+  ConsentBanner,
+  type ConsentBannerProps,
+  type UseConsentResult,
+  useConsent,
+} from "@steamfield/ui/react/consent";
 import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
 import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-tabs";
 import { type PlaybackRef, useCountUp, usePlayback } from "@steamfield/ui/react/playback";
@@ -66,6 +79,32 @@ function check(condition: boolean, message: string): void {
 const code: LibraryErrorCode = "invalid_script";
 const error = new LibraryError(code, { field: "steps[0]" });
 check(isLibraryError(error) && error.field === "steps[0]", "LibraryError carries its field");
+
+// consent: the store is SSR-safe, so on Node it is undecided and its commands don't throw.
+const consentOptions: ConsentStoreOptions = { domain: "example.com", maxAgeDays: 30 };
+const consent = createConsentStore(consentOptions);
+const decided: ConsentState[] = [];
+consent.subscribe((state) => decided.push(state));
+check(consent.getState() === null, "consent is undecided without a document");
+consent.accept();
+check(consent.getState() === "granted" && decided[0] === "granted", "consent accept");
+const bannerOptions: ConsentBannerOptions = { privacyHref: "/privacy", delayMs: 0 };
+mountConsentBanner(consent, bannerOptions)();
+try {
+  createConsentStore({ maxAgeDays: 0 });
+  check(false, "maxAgeDays 0 should throw");
+} catch (thrown) {
+  check(isLibraryError(thrown) && thrown.field === "maxAgeDays", "consent invalid_option");
+}
+
+// react/consent: the banner renders nothing on the server; the hook reads undecided.
+const bannerProps: ConsentBannerProps = { store: createConsentStore(), label: "Cookies" };
+check(renderToStaticMarkup(createElement(ConsentBanner, bannerProps)) === "", "ConsentBanner SSR");
+function ConsentProbe(): ReturnType<typeof createElement> {
+  const result: UseConsentResult = useConsent(createConsentStore());
+  return createElement("span", null, String(result.consent));
+}
+check(renderToStaticMarkup(createElement(ConsentProbe)) === "<span>null</span>", "useConsent SSR");
 
 // copy: framework-free and safe to import where there is no DOM.
 const detail: CopyEventDetail = { id: "x", label: "Copy", ok: true };

@@ -1,6 +1,7 @@
 import { type ReactElement, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AgentDemoPage } from "./pages/agent-demo.tsx";
+import { ConsentPage } from "./pages/consent.tsx";
 import { CopyPage } from "./pages/copy.tsx";
 import { InstallTabsPage } from "./pages/install-tabs.tsx";
 import { MarkdownPage } from "./pages/markdown.tsx";
@@ -24,6 +25,7 @@ const pages: Record<Route, () => ReactElement> = {
   reveal: RevealPage,
   playback: PlaybackPage,
   markdown: MarkdownPage,
+  consent: ConsentPage,
 };
 
 function current(): Route {

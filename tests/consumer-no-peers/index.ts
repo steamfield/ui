@@ -3,6 +3,7 @@
 // typechecks it (so no declaration may reference a peer) and runs it with Node. Every subpath
 // whose area imports no package is imported here; tests/package-shape.test.ts keeps the list
 // complete. The DOM controllers need a document, so they are only imported and type-checked.
+import { createConsentStore, mountConsentBanner } from "@steamfield/ui/consent";
 import { copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath, spyToc } from "@steamfield/ui/docs";
 import { createPlaybackGate } from "@steamfield/ui/playback";
@@ -37,6 +38,11 @@ check(transcriptText(script).includes("Hello there."), "transcriptText");
 const gate = createPlaybackGate(null, { duration: 1000, motion: "full", autoStart: false });
 check(typeof gate.getState().elapsed === "number", "gate state");
 gate.destroy();
+
+// consent: undecided without a document, and mounting the banner is a no-op.
+const consent = createConsentStore({ domain: "example.com" });
+check(consent.getState() === null, "consent without a document");
+mountConsentBanner(consent)();
 
 // copy
 check((await copyText("x")) === false, "copyText reports false without a clipboard or DOM");

@@ -9,6 +9,11 @@
   ],
   "exports": {
     "./agent-demo/styles.css": "./dist/agent-demo/styles.css",
+    "./consent": {
+      "types": "./dist/consent/index.d.ts",
+      "default": "./dist/consent/index.js"
+    },
+    "./consent/styles.css": "./dist/consent/styles.css",
     "./copy": {
       "types": "./dist/copy/index.d.ts",
       "default": "./dist/copy/index.js"
@@ -30,6 +35,10 @@
     "./react/agent-demo": {
       "types": "./dist/react/agent-demo/index.d.ts",
       "default": "./dist/react/agent-demo/index.js"
+    },
+    "./react/consent": {
+      "types": "./dist/react/consent/index.d.ts",
+      "default": "./dist/react/consent/index.js"
     },
     "./react/copy": {
       "types": "./dist/react/copy/index.d.ts",

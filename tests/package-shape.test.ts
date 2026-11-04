@@ -38,11 +38,13 @@ const ALLOWED: Record<string, string[]> = {
   reveal: [],
   markdown: ["copy"],
   docs: [],
+  consent: [],
   "react/playback": ["playback"],
   "react/copy": ["copy"],
   "react/tabs": ["tabs"],
   "react/install-tabs": ["react/tabs", "react/copy", "copy", "tabs"],
   "react/window": [],
+  "react/consent": ["consent"],
   "react/agent-demo": [
     "script",
     "sequencer",

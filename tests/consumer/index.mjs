@@ -2,6 +2,7 @@
 // it with Node after installing the packed tarball.
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createConsentStore } from "@steamfield/ui/consent";
 import { copyText } from "@steamfield/ui/copy";
 import { isLibraryError, LibraryError } from "@steamfield/ui/script";
 
@@ -11,6 +12,19 @@ function check(condition, message) {
 
 check(isLibraryError(new LibraryError("invalid_option")), "LibraryError round trip");
 check((await copyText("x")) === false, "copyText without a DOM");
+// A misspelled or mistyped option fails loudly instead of being ignored.
+for (const [options, field] of [
+  [{ cookiename: "x" }, "cookiename"],
+  [{ domain: ".example.com" }, "domain"],
+  [{ maxAgeDays: "365" }, "maxAgeDays"],
+]) {
+  try {
+    createConsentStore(options);
+    check(false, `consent ${field} should throw`);
+  } catch (error) {
+    check(isLibraryError(error) && error.field === field, `consent ${field}`);
+  }
+}
 
 // Only "exports" is reachable: there is no root entry and the build's files stay private.
 for (const spec of ["@steamfield/ui", "@steamfield/ui/dist/copy/index.js"]) {

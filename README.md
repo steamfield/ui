@@ -1,6 +1,6 @@
 # @steamfield/ui
 
-Generic landing and docs components shared across several sites: one agent/terminal demo (a scripted chat or shell session), a playback gate that plays only while the demo is on screen, copy buttons, tabs, install tabs, scroll-reveal motion, and Markdown and docs helpers.
+Generic landing and docs components shared across several sites: one agent/terminal demo (a scripted chat or shell session), a playback gate that plays only while the demo is on screen, copy buttons, tabs, install tabs, scroll-reveal motion, Markdown and docs helpers, and an analytics consent store and banner.
 
 The design rules:
 
@@ -26,7 +26,7 @@ Nothing is installed for you. Add the peers for the subpaths you use.
 
 | Subpath | Needs |
 | --- | --- |
-| `script`, `sequencer`, `playback`, `copy`, `tabs`, `reveal`, `docs` | nothing |
+| `script`, `sequencer`, `playback`, `copy`, `tabs`, `reveal`, `docs`, `consent` | nothing |
 | `react/*` | `react` `^19.2` (and `react-dom` to render; `@types/react` `^19.2` for TypeScript) |
 | `markdown` | `satteri` `^0.10.5`, `github-slugger` `^2.0.0`; `shiki` `^4.5.0` for its types |
 | `vue/*` | `vue` `^3.5` |
@@ -45,6 +45,7 @@ import "@steamfield/ui/tabs/styles.css";
 import "@steamfield/ui/react/install-tabs/styles.css";
 import "@steamfield/ui/reveal/styles.css";
 import "@steamfield/ui/markdown/styles.css";
+import "@steamfield/ui/consent/styles.css";
 ```
 
 | Stylesheet | For |
@@ -56,6 +57,7 @@ import "@steamfield/ui/markdown/styles.css";
 | `react/install-tabs/styles.css` | `react/install-tabs` |
 | `reveal/styles.css` | `reveal` |
 | `markdown/styles.css` | `markdown` |
+| `consent/styles.css` | `consent`, `react/consent` |
 
 The package has `"sideEffects": ["**/*.css"]`, so unused JavaScript tree-shakes and stylesheets are kept.
 
@@ -890,6 +892,95 @@ Marks the "On this page" link for the section being read with `aria-current="loc
 ### Without JavaScript
 
 `createDocs` and the helpers are pure and run on the server, which is where route files use them. `spyToc` is the only browser part; without it (or without `IntersectionObserver`) the TOC links still work and none is marked. There is no stylesheet and no animation.
+
+## consent
+
+```ts
+import "@steamfield/ui/consent/styles.css";
+import { createConsentStore, mountConsentBanner } from "@steamfield/ui/consent";
+import type {
+  ConsentBannerOptions,
+  ConsentState,
+  ConsentStore,
+  ConsentStoreOptions,
+  MountConsentBannerOptions,
+} from "@steamfield/ui/consent";
+```
+
+One analytics consent decision, kept in a first-party cookie and shared by every subdomain of a site, plus a banner that asks for it. It knows nothing about any analytics SDK: wire the store to yours.
+
+```ts
+const consent = createConsentStore({ domain: "example.com" });
+initAnalytics({ consent: consent.getState() });
+consent.subscribe((state) => (state === "granted" ? optIn() : state === "denied" ? optOut() : undefined));
+mountConsentBanner(consent, { privacyHref: "https://example.com/privacy" });
+```
+
+### `createConsentStore(options?)`
+
+Returns a `ConsentStore`: `getState()` (`"granted" | "denied" | null`, null while undecided), `subscribe(listener)` (called with the new state after each change; returns an unsubscribe function), `accept()`, `decline()`, `reset()` (clears the cookie, so the visitor is undecided again) and `destroy()` (drops every subscriber; a later `subscribe` is inert, while the commands still write the cookie).
+
+The state is read from the cookie when the store is created. The cookie is `Path=/`, `SameSite=Lax`, `Max-Age` from `maxAgeDays`, and `Secure` on https. It is safe on the server: without a `document`, `getState()` is null and the commands write nothing.
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `cookieName` | `string` | `"sf-consent"` | The cookie that holds the decision |
+| `domain` | `string` | none | A registrable domain such as `"example.com"`. On that host or a subdomain of it the cookie gets `Domain=.example.com`, so every subdomain shares one decision; anywhere else (localhost, a preview host) it is host-only. Without it the cookie is host-only everywhere |
+| `maxAgeDays` | `number` | `365` | How long the decision is kept |
+
+A cookie name that isn't a cookie token, a `domain` with a leading dot or other non-host characters, a `maxAgeDays` that isn't a positive finite number, or an unknown key throws `LibraryError` `invalid_option` naming the field. A cookie value other than `granted` or `denied` reads as undecided.
+
+### `mountConsentBanner(store, options?)`
+
+Appends the banner to `container` (default `document.body`) while the store is undecided, and returns a function that removes it and stops following the store. It is a non-modal labelled region (`<section aria-label>`, not a dialog): it has no focus trap and never takes focus. It sits last in the tab order, with the privacy link, Decline and Accept in that order. The buttons call `store.decline()` and `store.accept()`. Any decision, from the banner or anywhere else, removes it; `store.reset()` brings it back at once.
+
+On page load the banner waits `delayMs`, then slides in. Under `prefers-reduced-motion: reduce` or a `[data-sf-motion="reduce"]` ancestor of the container it shows at once, with no delay and no animation. Mounting again for a store that already has a banner adds no second one; the banner goes when every returned function has been called. Without a `document` it does nothing.
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `message` | `string` | `"This site uses analytics to understand how it is used."` | The banner's text |
+| `acceptLabel` | `string` | `"Accept"` | |
+| `declineLabel` | `string` | `"Decline"` | |
+| `privacyHref` | `string` | none | The privacy link's target. Without it there is no link |
+| `privacyLabel` | `string` | `"Privacy"` | The privacy link's text |
+| `label` | `string` | `"Analytics consent"` | The region's accessible name |
+| `delayMs` | `number` | `1200` | Milliseconds before it slides in on page load, 0 to 2^31 - 1 |
+| `container` | `Element` | `document.body` | Where it is appended |
+
+A bad `delayMs`, a non-string text option or an unknown key throws `invalid_option` naming the field.
+
+Hooks: `data-part` values `consent` (`data-sf-animating` while it slides in), `consent-message`, `consent-actions`, `consent-privacy`, `consent-decline`, `consent-accept`. The stylesheet places it as a bottom-right card, full width with a 16px gutter below 40rem. Its variables each fall back to a base token, then to a system color:
+
+| Variable | Default | Used for |
+| --- | --- | --- |
+| `--sf-consent-background` | `--sf-surface` | Card background |
+| `--sf-consent-foreground` | `--sf-fg` | Message text |
+| `--sf-consent-muted` | `--sf-muted` | Privacy link |
+| `--sf-consent-border` | `--sf-border` | Card and Decline borders |
+| `--sf-consent-accent` | `--sf-accent` | Accept background, focus ring |
+| `--sf-consent-accent-foreground` | `--sf-bg` | Accept text |
+| `--sf-consent-radius` | `--sf-radius` | Card corners; buttons use half |
+| `--sf-consent-shadow` | a soft drop shadow | Card shadow |
+| `--sf-consent-font` | `inherit` | Font family |
+
+### Without JavaScript
+
+There is no banner and no cookie is written, so the visitor stays undecided. On the server the store is undecided.
+
+## react/consent
+
+```ts
+import { ConsentBanner, useConsent } from "@steamfield/ui/react/consent";
+import type { ConsentBannerProps, UseConsentResult } from "@steamfield/ui/react/consent";
+```
+
+`useConsent(store)` follows a store from `createConsentStore` and returns `{ consent, accept, decline, reset }`. It reads null on the server and in hydration, then the stored decision.
+
+`<ConsentBanner store={store} />` renders the same markup and follows the same rules as `mountConsentBanner`, and takes the same options as props (all but `container`; it renders where you put it). It renders nothing on the server and in the first client render, so a visitor who has decided never sees it flash. A bad prop throws `invalid_option` during render.
+
+### Without JavaScript
+
+Nothing renders.
 
 ## vue/agent-demo
 

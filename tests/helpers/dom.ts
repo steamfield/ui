@@ -194,3 +194,12 @@ export function stubResponseBytes(): void {
     Reflect.deleteProperty(Response.prototype, "bytes");
   });
 }
+
+/**
+ * Assigns one cookie string to `document.cookie`, as a server's Set-Cookie or another page's
+ * script would. One place for the assignment that Biome's noDocumentCookie flags.
+ */
+export function setDocumentCookie(cookie: string): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: tests set up the cookie jar the code reads.
+  document.cookie = cookie;
+}

@@ -7,6 +7,7 @@
 @import "@steamfield/ui/react/install-tabs/styles.css";
 @import "@steamfield/ui/reveal/styles.css";
 @import "@steamfield/ui/markdown/styles.css";
+@import "@steamfield/ui/consent/styles.css";
 
 @layer playground {
   :root {
@@ -76,6 +77,13 @@
 
   .pg-section {
     margin-block: 2rem;
+  }
+
+  /* The React banner sits in the page flow so it doesn't cover the fixed DOM one. */
+  .pg-consent-inline [data-part="consent"] {
+    position: static;
+    width: auto;
+    max-width: 25rem;
   }
 
   .pg-row {

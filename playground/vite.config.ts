@@ -40,5 +40,7 @@ export default defineConfig({
   },
   server: { port: 5199, strictPort: true },
   // The browser suite previews on its own port, so it never collides with a running dev server.
-  preview: { port: 5200, strictPort: true },
+  // tests/browser/consent.spec.ts maps *.steamfield.test to this server to check a decision is
+  // shared across subdomains, so those hosts are allowed.
+  preview: { port: 5200, strictPort: true, allowedHosts: [".steamfield.test"] },
 });

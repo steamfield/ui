@@ -8,6 +8,7 @@ import { expect, test } from "vitest";
 import { entries, typeExports } from "./package-shape.ts";
 
 const api: Record<string, string[]> = {
+  "consent/index.ts": ["createConsentStore", "mountConsentBanner"],
   "copy/index.ts": ["copyText", "enhanceCopyButtons"],
   "docs/index.ts": [
     "absoluteLinks",
@@ -35,6 +36,7 @@ const api: Record<string, string[]> = {
   ],
   "playback/index.ts": ["createPlaybackGate"],
   "react/agent-demo/index.ts": ["AgentDemo", "StaticTranscript", "useAgentDemo"],
+  "react/consent/index.ts": ["ConsentBanner", "useConsent"],
   "react/copy/index.ts": ["CopyButton", "CopyCommand", "useCopy"],
   "react/playback/index.ts": ["useCountUp", "usePlayback"],
   "reveal/index.ts": ["initReveal", "motionTokens", "revealGateHash", "revealGateScript"],
@@ -56,6 +58,13 @@ const api: Record<string, string[]> = {
 
 /** Type-only exports (`export type { ... }`, `export { type ... }`), which land in the .d.ts. */
 const types: Record<string, string[]> = {
+  "consent/index.ts": [
+    "ConsentBannerOptions",
+    "ConsentState",
+    "ConsentStore",
+    "ConsentStoreOptions",
+    "MountConsentBannerOptions",
+  ],
   "copy/index.ts": ["CopyEventDetail", "CopyMessages", "EnhanceCopyOptions"],
   "docs/index.ts": [
     "DocEntry",
@@ -105,6 +114,13 @@ const types: Record<string, string[]> = {
     "ToolRenderer",
     "UseAgentDemoOptions",
     "UseAgentDemoResult",
+  ],
+  "react/consent/index.ts": [
+    "ConsentBannerOptions",
+    "ConsentBannerProps",
+    "ConsentState",
+    "ConsentStore",
+    "UseConsentResult",
   ],
   "react/copy/index.ts": ["CopyButtonProps", "CopyCommandProps", "UseCopyOptions", "UseCopyResult"],
   "react/install-tabs/index.ts": ["InstallOption", "InstallTabsLabels", "InstallTabsProps"],

@@ -7,7 +7,13 @@
   {
     "entry": "copy-vanilla.ts",
     "present": ["data-copy-command"],
-    "absent": ["react.transitional.element", "data-sf-agent-demo", "tab-panel", "sf:reveal-ready"]
+    "absent": [
+      "react.transitional.element",
+      "data-sf-agent-demo",
+      "tab-panel",
+      "sf:reveal-ready",
+      "consent-accept"
+    ]
   },
   {
     "entry": "agent-demo-only.tsx",
@@ -28,5 +34,16 @@
     "entry": "reveal-only.ts",
     "present": ["sf:reveal-ready"],
     "absent": ["react.transitional.element", "data-sf-agent-demo", "data-copy-command", "tab-panel"]
+  },
+  {
+    "entry": "consent-vanilla.ts",
+    "present": ["consent-accept"],
+    "absent": [
+      "react.transitional.element",
+      "data-sf-agent-demo",
+      "data-copy-command",
+      "tab-panel",
+      "sf:reveal-ready"
+    ]
   }
 ]

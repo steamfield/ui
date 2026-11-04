@@ -40,10 +40,12 @@ src/
                   internal createBoundGate adds attach/configure (the element-binding rules)
   copy/           copyText, enhanceCopyButtons; internal createCopyState and the markup constants
   tabs/           createTabs; internal createTabsState (selection, hash, events) and key rules
+  consent/        createConsentStore (cookie decision shared across subdomains), mountConsentBanner;
+                  internal createConsentBannerState (delay, motion, open/close) and cookie.ts
   reveal/ markdown/ docs/   framework-free cores (plain DOM or pure functions)
   agent-demo/     no entry: controller.ts (createDemoController, the state machine both bindings
                   adapt), core.ts (labels, glyphs, beat text) and styles.css (the data-part contract)
-  react/          React wrappers: agent-demo, window, playback, copy, tabs, install-tabs
+  react/          React wrappers: agent-demo, window, playback, copy, tabs, install-tabs, consent
   vue/            Vue binding for the agent demo (decks)
   internal/       private helpers; never exported from an entry
 tests/            tooling tests (export map, dependency graph, public API pins, boundaries, CSS contract)
