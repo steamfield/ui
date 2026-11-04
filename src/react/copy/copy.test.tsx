@@ -231,3 +231,15 @@ test("useCopy drops a result that lands after unmount", async () => {
   expect(await copying).toBe(true);
   expect(onCopy).not.toHaveBeenCalled();
 });
+
+test("useCopy clears its pending reset timer on unmount", async () => {
+  vi.useFakeTimers();
+  const { result, unmount } = renderHook(() => useCopy(), strict);
+  await act(async () => {
+    await result.current.copy("x");
+  });
+  expect(result.current.copied).toBe(true);
+  expect(vi.getTimerCount()).toBe(1);
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});

@@ -168,6 +168,22 @@ test("destroy cancels the pending reset", async () => {
   expect(state.getState()).toBe("copied");
 });
 
+test("reset cancels the pending reset, returns to idle, and leaves the controller usable", async () => {
+  const state = createCopyState({ resetMs: 1000 });
+  const listener = vi.fn();
+  state.subscribe(listener);
+  await state.copy("x");
+  listener.mockClear();
+  state.reset();
+  expect(state.getState()).toBe("idle");
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+  state.reset();
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(await state.copy("y")).toBe(true);
+  expect(state.getState()).toBe("copied");
+});
+
 test("destroy ignores a copy still in flight", async () => {
   const state = createCopyState();
   const listener = vi.fn();

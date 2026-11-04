@@ -25,7 +25,8 @@ export function useCopy(options: UseCopyOptions = {}): UseCopyResult {
   const resetMs = checkResetMs(options.resetMs ?? 2000, "resetMs");
   // One controller for the component's life: a resetMs change applies to the next attempt and
   // never drops one in flight. It is never destroyed, so a StrictMode or <Activity> remount
-  // keeps working; `mounted` drops results that land while unmounted instead.
+  // keeps working: unmounting resets it (no reset timer outlives the component) and `mounted`
+  // drops results that land while unmounted.
   const [store] = useState(createCopyState);
   const mounted = useRef(true);
   const onCopyRef = useRef(onCopy);
@@ -35,8 +36,9 @@ export function useCopy(options: UseCopyOptions = {}): UseCopyResult {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      store.reset();
     };
-  }, []);
+  }, [store]);
 
   const state = useSyncExternalStore(store.subscribe, store.getState, idle);
   const copy = useCallback(

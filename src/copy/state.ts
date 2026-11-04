@@ -50,6 +50,11 @@ export interface CopyState {
    * controller is still alive and `isCurrent` (when given) still holds.
    */
   readonly copy: (text: string, options?: CopyAttemptOptions) => Promise<boolean>;
+  /**
+   * Cancels the pending reset and returns to `idle`, notifying subscribers, while staying usable.
+   * For a binding that unmounts but may mount again (React StrictMode, `<Activity>`).
+   */
+  readonly reset: () => void;
   /** Cancels the pending reset and ignores copies still in flight. */
   readonly destroy: () => void;
 }
@@ -86,6 +91,11 @@ export function createCopyState(options: CopyStateOptions = {}): CopyState {
       timer = ok && ms !== false ? setTimeout(() => set("idle"), ms) : undefined;
       set(ok ? "copied" : "failed");
       return ok;
+    },
+    reset() {
+      clearTimeout(timer);
+      timer = undefined;
+      if (state !== "idle") set("idle");
     },
     destroy() {
       destroyed = true;
