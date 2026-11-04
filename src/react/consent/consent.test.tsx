@@ -5,7 +5,7 @@ import { userEvent } from "@testing-library/user-event";
 import { type ReactElement, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToStaticMarkup, renderToString } from "react-dom/server";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, onTestFinished, test, vi } from "vitest";
 import { setDocumentCookie, stubReducedMotion } from "../../../tests/helpers/dom.ts";
 import { mountConsentBanner } from "../../consent/banner.ts";
 import { type ConsentStore, createConsentStore } from "../../consent/store.ts";
@@ -190,6 +190,7 @@ describe("<ConsentBanner> with reduced motion", () => {
   });
 
   test("switching to a decided store returns focus too", () => {
+    onTestFinished(() => setDocumentCookie("other=; Path=/; Max-Age=0"));
     const store = createConsentStore();
     setDocumentCookie("other=granted; Path=/");
     const decided = createConsentStore({ cookieName: "other" });
@@ -201,7 +202,6 @@ describe("<ConsentBanner> with reduced motion", () => {
     rerender(<ConsentBanner store={decided} />);
     expect(region()).toBeNull();
     expect(document.activeElement).toBe(before);
-    setDocumentCookie("other=; Path=/; Max-Age=0");
   });
 
   test("survives StrictMode's double mount with one banner", () => {
@@ -249,6 +249,29 @@ describe("<ConsentBanner> with motion allowed", () => {
   beforeEach(() => {
     stubReducedMotion(false);
     vi.useFakeTimers();
+  });
+
+  test.each([500, 0])("under StrictMode it slides in after delayMs %i", (delayMs) => {
+    const store = createConsentStore();
+    render(
+      <StrictMode>
+        <ConsentBanner store={store} delayMs={delayMs} />
+      </StrictMode>,
+    );
+    act(() => {
+      vi.advanceTimersByTime(delayMs);
+    });
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    expect(region()?.hasAttribute("data-sf-animating")).toBe(true);
+  });
+
+  test("reopening after reset slides in again", () => {
+    const store = createConsentStore();
+    render(<ConsentBanner store={store} delayMs={0} />);
+    act(() => store.accept());
+    expect(region()).toBeNull();
+    act(() => store.reset());
+    expect(region()?.hasAttribute("data-sf-animating")).toBe(true);
   });
 
   test("slides in after delayMs, and an accept while animating removes it", () => {

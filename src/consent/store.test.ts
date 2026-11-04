@@ -328,4 +328,18 @@ describe("when document.cookie throws (an opaque origin)", () => {
     expect(read).toHaveBeenCalled();
     expect(write).toHaveBeenCalled();
   });
+
+  test("any other error from the getter or setter propagates", () => {
+    const bug = new TypeError("not a cookie problem");
+    const read = vi.spyOn(document, "cookie", "get").mockImplementation(() => {
+      throw bug;
+    });
+    expect(() => createConsentStore()).toThrow(bug);
+    read.mockReturnValue("");
+    const store = createConsentStore();
+    vi.spyOn(document, "cookie", "set").mockImplementation(() => {
+      throw bug;
+    });
+    expect(() => store.accept()).toThrow(bug);
+  });
 });

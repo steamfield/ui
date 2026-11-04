@@ -74,6 +74,19 @@ describe("with motion allowed", () => {
     expect(banner()).toBeNull();
     store.reset();
     expect(banner()).not.toBeNull();
+    // A reopening slides in too.
+    expect(banner()?.hasAttribute("data-sf-animating")).toBe(true);
+  });
+
+  test("a container that turns to reduced motion during the delay opens without animation", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    mountConsentBanner(createConsentStore(), { container });
+    vi.advanceTimersByTime(600);
+    container.setAttribute("data-sf-motion", "reduce");
+    vi.advanceTimersByTime(600);
+    expect(banner()).not.toBeNull();
+    expect(banner()?.hasAttribute("data-sf-animating")).toBe(false);
   });
 
   test("unmount during the delay cancels it", () => {

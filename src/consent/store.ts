@@ -114,22 +114,30 @@ export function createConsentStore(options: ConsentStoreOptions = {}): ConsentSt
 
 // `document.cookie` throws a SecurityError where the page may not use cookies (an opaque origin,
 // such as a sandboxed iframe). That is the same outcome as cookies being blocked, handled the same
-// way: reads find no decision, writes persist nothing, and the decision lives in memory.
+// way: reads find no decision, writes persist nothing, and the decision lives in memory. Any
+// other error is a bug and propagates.
+
+const isSecurityError = (error: unknown): boolean =>
+  error instanceof DOMException && error.name === "SecurityError";
 
 function readCookie(name: string): ConsentState {
   if (typeof document === "undefined") return null;
+  let cookies: string;
   try {
-    return readConsentCookie(document.cookie, name);
-  } catch {
+    cookies = document.cookie;
+  } catch (error) {
+    if (!isSecurityError(error)) throw error;
     return null;
   }
+  return readConsentCookie(cookies, name);
 }
 
 function setCookie(assignment: string): void {
   try {
     // biome-ignore lint/suspicious/noDocumentCookie: the async Cookie Store API is missing from older Safari and Firefox, and this write must be synchronous.
     document.cookie = assignment;
-  } catch {
+  } catch (error) {
     // Cookies are unavailable here; the store keeps the decision in memory (see above).
+    if (!isSecurityError(error)) throw error;
   }
 }
