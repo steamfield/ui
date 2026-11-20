@@ -1,0 +1,29 @@
+import { MotionPreference, MotionSource } from "../../internal/motion.js";
+import { PlaybackRef } from "./use-playback.js";
+export interface UseCountUpOptions {
+  /** Length of the count in ms. Default 2000. */
+  readonly duration?: number;
+  /** Set false to hold at 0 until something else (a tab, a step) says go. Default true. */
+  readonly enabled?: boolean;
+  /** Maps progress 0..1 to 0..1. Default ease-out cubic. */
+  readonly easing?: (progress: number) => number;
+  /** Default `"auto"`. Under reduced motion the value is `end` straight away. */
+  readonly motion?: MotionPreference | MotionSource;
+  /** In-view threshold for the attached element. Default 0.15. */
+  readonly threshold?: number;
+  readonly rootMargin?: string;
+}
+export interface UseCountUpResult<T extends Element> {
+  /** Optional: attach it to count only while the element is on screen. */
+  readonly ref: PlaybackRef<T>;
+  readonly value: number;
+  readonly complete: boolean;
+}
+/**
+ * Counts from 0 up to `end` once. It runs while the element is in view and the tab is visible,
+ * keeps its progress across pauses, and snaps to `end` under reduced motion. The value is derived
+ * from the gate's clock on every render, so a StrictMode re-run or a new `end` never freezes it
+ * mid-count. The server and first client render return `end`, so markup without JavaScript shows
+ * the real number. Intermediate values are floored; the last one is exactly `end`.
+ */
+export declare function useCountUp<T extends Element = HTMLElement>(end: number, options?: UseCountUpOptions): UseCountUpResult<T>;

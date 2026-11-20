@@ -1,0 +1,113 @@
+/* @steamfield/ui/consent/styles.css: the consent banner's data-part contract, for
+   mountConsentBanner and React ConsentBanner. Layered and zero-specificity, so any consumer class
+   or utility wins.
+
+   Component tokens, each falling back to a base token, then to a system color:
+   --sf-consent-background         card background (--sf-surface)
+   --sf-consent-foreground         message text (--sf-fg)
+   --sf-consent-muted              privacy link (--sf-muted)
+   --sf-consent-border             card and decline button border (--sf-border)
+   --sf-consent-accent             accept button background (--sf-accent)
+   --sf-consent-accent-foreground  accept button text (--sf-bg)
+   --sf-consent-radius             card corners; buttons use half (--sf-radius)
+   --sf-consent-shadow             card shadow
+   --sf-consent-font               font family (inherit)
+   --sf-consent-z-index            stacking order (50)
+
+   A bottom-right card 1rem from the corner, full width with a 1rem gutter on narrow screens.
+   It slides in only under [data-sf-animating], with motion allowed by both the media query and
+   any [data-sf-motion="reduce"] ancestor. */
+@layer sf {
+  :where([data-part="consent"]) {
+    position: fixed;
+    inset-block-end: 1rem;
+    inset-inline-end: 1rem;
+    z-index: var(--sf-consent-z-index, 50);
+    box-sizing: border-box;
+    width: min(25rem, calc(100vw - 2rem));
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    font-family: var(--sf-consent-font, inherit);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--sf-consent-foreground, var(--sf-fg, CanvasText));
+    background: var(--sf-consent-background, var(--sf-surface, Canvas));
+    border: 1px solid var(--sf-consent-border, var(--sf-border, GrayText));
+    border-radius: var(--sf-consent-radius, var(--sf-radius, 0.5rem));
+    box-shadow: var(
+      --sf-consent-shadow,
+      0 10px 15px -3px rgb(0 0 0 / 0.1),
+      0 4px 6px -4px rgb(0 0 0 / 0.1)
+    );
+  }
+
+  @media (max-width: 40rem) {
+    :where([data-part="consent"]) {
+      inset-inline: 1rem;
+      inset-block-end: 1rem;
+      width: auto;
+    }
+  }
+
+  :where([data-part="consent"] [data-part="consent-message"]) {
+    margin: 0;
+  }
+
+  :where([data-part="consent"] [data-part="consent-actions"]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  :where([data-part="consent"] [data-part="consent-privacy"]) {
+    margin-inline-end: auto;
+    font-size: 0.8125rem;
+    color: var(--sf-consent-muted, var(--sf-muted, inherit));
+  }
+
+  :where([data-part="consent"] :is([data-part="consent-decline"], [data-part="consent-accept"])) {
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--sf-consent-border, var(--sf-border, GrayText));
+    border-radius: calc(var(--sf-consent-radius, var(--sf-radius, 0.5rem)) / 2);
+  }
+
+  :where([data-part="consent"] [data-part="consent-decline"]) {
+    color: inherit;
+    background: transparent;
+  }
+
+  :where([data-part="consent"] [data-part="consent-accept"]) {
+    color: var(--sf-consent-accent-foreground, var(--sf-bg, Canvas));
+    background: var(--sf-consent-accent, var(--sf-accent, CanvasText));
+    border-color: var(--sf-consent-accent, var(--sf-accent, CanvasText));
+  }
+
+  :where([data-part="consent"] :is(a, button):focus-visible) {
+    outline: 2px solid var(--sf-consent-accent, var(--sf-accent, currentColor));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :where(
+        [data-part="consent"][data-sf-animating]:not(
+          [data-sf-motion="reduce"],
+          [data-sf-motion="reduce"] *
+        )
+      ) {
+      animation: sf-consent-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+
+  @keyframes sf-consent-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+  }
+}
