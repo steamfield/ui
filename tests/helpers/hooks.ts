@@ -9,6 +9,12 @@ import { join } from "node:path";
 
 export const REPO = realpathSync(join(import.meta.dirname, "..", ".."));
 
+// Under a git hook (the pre-push gate), git exports GIT_DIR, GIT_INDEX_FILE and the like, which
+// would point every git the hooks and tests spawn at this repo instead of the fixture's.
+for (const name of Object.keys(process.env)) {
+  if (name.startsWith("GIT_")) delete process.env[name];
+}
+
 // The literal text settings.json uses, expanded by the shell Claude Code runs hooks in.
 const PROJECT_DIR_VAR = "$" + "{CLAUDE_PROJECT_DIR}";
 
