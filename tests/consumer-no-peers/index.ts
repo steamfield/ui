@@ -6,6 +6,7 @@
 import { createConsentStore, mountConsentBanner } from "@steamfield/ui/consent";
 import { copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath, spyToc } from "@steamfield/ui/docs";
+import { createHumanGate, humanGate } from "@steamfield/ui/human-gate";
 import { createPlaybackGate } from "@steamfield/ui/playback";
 import { initReveal, motionTokens, revealGateHash, revealGateScript } from "@steamfield/ui/reveal";
 import { type DemoScript, isLibraryError, validateScript } from "@steamfield/ui/script";
@@ -43,6 +44,13 @@ gate.destroy();
 const consent = createConsentStore({ domain: "example.com" });
 check(consent.getState() === null, "consent without a document");
 mountConsentBanner(consent)();
+
+// human-gate: without a window it stays closed until markHuman, then lets events through.
+check(!humanGate.isHuman(), "human-gate starts closed");
+const visitorGate = createHumanGate();
+visitorGate.markHuman();
+const viewed = { event: "item_viewed", properties: {} };
+check(visitorGate.filter(viewed) === viewed, "human-gate passes events once open");
 
 // copy
 check((await copyText("x")) === false, "copyText reports false without a clipboard or DOM");

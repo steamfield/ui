@@ -1,6 +1,6 @@
 # @steamfield/ui
 
-Generic landing and docs components shared across several sites: one agent/terminal demo (a scripted chat or shell session), a playback gate that plays only while the demo is on screen, copy buttons, tabs, install tabs, scroll-reveal motion, Markdown and docs helpers, and an analytics consent store and banner.
+Generic landing and docs components shared across several sites: one agent/terminal demo (a scripted chat or shell session), a playback gate that plays only while the demo is on screen, copy buttons, tabs, install tabs, scroll-reveal motion, Markdown and docs helpers, an analytics consent store and banner, and a gate that holds analytics events until the visitor interacts.
 
 The design rules:
 
@@ -26,7 +26,7 @@ Nothing is installed for you. Add the peers for the subpaths you use.
 
 | Subpath | Needs |
 | --- | --- |
-| `script`, `sequencer`, `playback`, `copy`, `tabs`, `reveal`, `docs`, `consent` | nothing |
+| `script`, `sequencer`, `playback`, `copy`, `tabs`, `reveal`, `docs`, `consent`, `human-gate` | nothing |
 | `react/*` | `react` `^19.2` (and `react-dom` to render; `@types/react` `^19.2` for TypeScript) |
 | `markdown` | `satteri` `^0.10.5`, `github-slugger` `^2.0.0`; `shiki` `^4.5.0` for its types |
 | `vue/*` | `vue` `^3.5` |
@@ -991,6 +991,57 @@ Pass a stable store, created once outside render (at module level or in `useStat
 ### Without JavaScript
 
 Nothing renders.
+
+## human-gate
+
+```ts
+import { createHumanGate, HUMAN_SIGNALS, humanGate, UNGATED_EVENTS } from "@steamfield/ui/human-gate";
+import type {
+  DeferredCaptureOptions,
+  GatedEvent,
+  HumanGate,
+  HumanGateCaptureOptions,
+  HumanGateClient,
+} from "@steamfield/ui/human-gate";
+```
+
+Holds analytics events in the browser until the visitor gives a trusted input, so headless crawlers that get past the analytics SDK's own bot filter send nothing. Those crawlers look like ordinary desktop browsers, but they never move a pointer, press a key, touch the screen or turn a wheel. It is written against posthog-js's `before_send` and `capture`, declared structurally, so it imports no analytics SDK.
+
+```ts
+import posthog from "posthog-js";
+import { humanGate } from "@steamfield/ui/human-gate";
+
+posthog.init(key, { before_send: [humanGate.filter], capture_pageview: false });
+humanGate.attach(posthog);
+// Captured when the visitor first interacts, and stamped with the time of this call.
+humanGate.whenHuman((options) => posthog.capture("$pageview", {}, options));
+```
+
+`humanGate` is the page's gate: it starts listening on `window` when the module is first imported and does nothing without a `window`. `createHumanGate(target?)` returns a separate gate listening on `target` (default `window`).
+
+| Member | Behavior |
+| --- | --- |
+| `filter(event)` | A `before_send` filter. Before a signal it holds behavioral events (at most 100; later ones are dropped), drops `$pageleave`, and passes `UNGATED_EVENTS`. Once open it passes everything, and hands back a replayed event's original payload |
+| `whenHuman(callback, since?)` | Runs `callback(undefined)` now if the gate is open. Otherwise runs it on the first signal with `{ uuid }`; pass that to `capture`, and the event shipped under that uuid gets `since` (default: now) as its timestamp |
+| `attach(client)` | The client held events are replayed through. Replays anything already waiting |
+| `isHuman()` | Whether the gate is open |
+| `markHuman()` | Opens the gate, as a signal does |
+| `reset()` | For tests: closes the gate and forgets everything held, queued and attached |
+
+- **Signals** (`HUMAN_SIGNALS`): `pointermove`, `pointerdown`, `keydown`, `wheel`, `touchstart` and `click`, listened for in the capture phase, and only when `isTrusted`, so a page script dispatching events can't open the gate. `click` counts because screen readers activate controls with a synthesized click and no pointer or key event. `scroll` is not a signal (rendering crawlers scroll to load lazy content), and neither are `focus` and `focusin` (a script's `element.focus()` fires trusted ones).
+- **Ungated** (`UNGATED_EVENTS`): `$exception`, `$identify`, `$create_alias`, `$merge_dangerously`, `$set`, `$groupidentify` and `$snapshot` pass before a signal. A crash may be why there was no interaction, the identity events have merge semantics a re-capture would not reproduce, and session replay must not stall.
+- **Replay**: on the first signal, deferred `whenHuman` callbacks run first, then each held event is re-captured under its own `uuid` with `skip_client_rate_limiting` and no `timestamp` (a stale timestamp would rewind the SDK's session). `filter` swaps the SDK's fresh copy for the held one, so the original timestamp, session and properties ship; a held event without `$pageview_id` takes the deferred pageview's.
+- **Pageviews**: never let `filter` hold a `$pageview`; re-capturing one corrupts the SDK's `$prev_pageview_*` bookkeeping. Turn off automatic pageviews and capture them through `whenHuman`. The gate backdates such a pageview and adds the dwell before the signal back to the next event's `$prev_pageview_duration`.
+- **Errors**: a `whenHuman` callback or replayed `capture` that throws does not stop the rest. Its error is rethrown from a microtask, so it reaches the page's global error handler.
+- **Without `crypto.randomUUID`** (insecure origins, old browsers), a deferred capture is sent with the time it is sent.
+
+### The trade-off
+
+A visitor who lands and leaves without touching the page is never counted. That includes a screen reader user reading in browse mode (NVDA or JAWS browse mode, VoiceOver, TalkBack swipes) who never activates a control, since virtual-cursor reading fires none of the signals. In the data that population can't be told apart from a crawler, so the gate gives it up.
+
+### Without JavaScript
+
+Nothing is captured, so nothing is held.
 
 ## vue/agent-demo
 

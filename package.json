@@ -23,6 +23,10 @@
       "types": "./dist/docs/index.d.ts",
       "default": "./dist/docs/index.js"
     },
+    "./human-gate": {
+      "types": "./dist/human-gate/index.d.ts",
+      "default": "./dist/human-gate/index.js"
+    },
     "./markdown": {
       "types": "./dist/markdown/index.d.ts",
       "default": "./dist/markdown/index.js"

@@ -24,6 +24,12 @@
     "limit": "2.3 kB"
   },
   {
+    "name": "human-gate",
+    "path": "dist/human-gate/index.js",
+    "import": "{ humanGate }",
+    "limit": "1 kB"
+  },
+  {
     "name": "copy",
     "path": "dist/copy/index.js",
     "import": "{ enhanceCopyButtons, copyText }",

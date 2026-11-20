@@ -11,6 +11,15 @@ import {
 } from "@steamfield/ui/consent";
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
+import {
+  createHumanGate,
+  type GatedEvent,
+  HUMAN_SIGNALS,
+  type HumanGate,
+  type HumanGateClient,
+  humanGate,
+  UNGATED_EVENTS,
+} from "@steamfield/ui/human-gate";
 import { createHastPlugins, createShikiConfig, type TablesOptions } from "@steamfield/ui/markdown";
 import { createPlaybackGate, type GateState } from "@steamfield/ui/playback";
 import {
@@ -96,6 +105,23 @@ try {
 } catch (thrown) {
   check(isLibraryError(thrown) && thrown.field === "maxAgeDays", "consent invalid_option");
 }
+
+// human-gate: without a window nothing opens the gate but markHuman, and held events replay
+// through the attached client under their own uuid.
+check(!humanGate.isHuman() && HUMAN_SIGNALS.includes("keydown"), "the page gate starts closed");
+const visitorGate: HumanGate = createHumanGate();
+const replayed: string[] = [];
+const analytics: HumanGateClient = { capture: (name) => replayed.push(name) };
+visitorGate.attach(analytics);
+const held: GatedEvent = { event: "item_viewed", properties: {}, uuid: "u1" };
+check(visitorGate.filter(held) === null, "human-gate holds before a signal");
+const exception = { event: "$exception", properties: {}, uuid: "u2" };
+check(
+  visitorGate.filter(exception) === exception && UNGATED_EVENTS.has("$exception"),
+  "ungated passes",
+);
+visitorGate.markHuman();
+check(replayed.join() === "item_viewed", "human-gate replays after a signal");
 
 // react/consent: the banner renders nothing on the server; the hook reads undecided.
 const bannerProps: ConsentBannerProps = { store: createConsentStore(), label: "Cookies" };

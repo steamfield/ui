@@ -23,6 +23,7 @@ const api: Record<string, string[]> = {
     "pageMarkdown",
     "spyToc",
   ],
+  "human-gate/index.ts": ["HUMAN_SIGNALS", "UNGATED_EVENTS", "createHumanGate", "humanGate"],
   "markdown/index.ts": [
     "callouts",
     "codeBlocks",
@@ -77,6 +78,13 @@ const types: Record<string, string[]> = {
     "RewriteContext",
     "RewriteLink",
     "SpyTocOptions",
+  ],
+  "human-gate/index.ts": [
+    "DeferredCaptureOptions",
+    "GatedEvent",
+    "HumanGate",
+    "HumanGateCaptureOptions",
+    "HumanGateClient",
   ],
   "markdown/index.ts": [
     "CalloutKind",

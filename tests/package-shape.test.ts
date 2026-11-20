@@ -39,6 +39,7 @@ const ALLOWED: Record<string, string[]> = {
   markdown: ["copy"],
   docs: [],
   consent: [],
+  "human-gate": [],
   "react/playback": ["playback"],
   "react/copy": ["copy"],
   "react/tabs": ["tabs"],
