@@ -11,6 +11,7 @@ export const ROUTES = [
   "playback",
   "markdown",
   "consent",
+  "gif",
 ] as const;
 
 export type Route = (typeof ROUTES)[number];

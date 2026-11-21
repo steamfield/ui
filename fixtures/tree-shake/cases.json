@@ -45,5 +45,27 @@
       "tab-panel",
       "sf:reveal-ready"
     ]
+  },
+  {
+    "entry": "gif-only.tsx",
+    "present": ["gif-fallback", "react.transitional.element"],
+    "absent": [
+      "i.giphy.com",
+      "data-sf-agent-demo",
+      "data-copy-command",
+      "tab-panel",
+      "sf:reveal-ready"
+    ]
+  },
+  {
+    "entry": "gif-inline-only.ts",
+    "present": ["tMPSeKEplOfK0"],
+    "absent": [
+      "media.giphy.com",
+      "react.transitional.element",
+      "data-sf-agent-demo",
+      "data-copy-command",
+      "tab-panel"
+    ]
   }
 ]

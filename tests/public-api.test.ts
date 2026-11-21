@@ -23,6 +23,13 @@ const api: Record<string, string[]> = {
     "pageMarkdown",
     "spyToc",
   ],
+  "gif/index.ts": [
+    "GIF_COLLECTIONS",
+    "GIF_THEME_META",
+    "INLINE_ERROR_GIFS",
+    "pickGif",
+    "pickInlineGif",
+  ],
   "human-gate/index.ts": ["HUMAN_SIGNALS", "UNGATED_EVENTS", "createHumanGate", "humanGate"],
   "markdown/index.ts": [
     "callouts",
@@ -39,6 +46,7 @@ const api: Record<string, string[]> = {
   "react/agent-demo/index.ts": ["AgentDemo", "StaticTranscript", "useAgentDemo"],
   "react/consent/index.ts": ["ConsentBanner", "useConsent"],
   "react/copy/index.ts": ["CopyButton", "CopyCommand", "useCopy"],
+  "react/gif/index.ts": ["Gif"],
   "react/playback/index.ts": ["useCountUp", "usePlayback"],
   "reveal/index.ts": ["initReveal", "motionTokens", "revealGateHash", "revealGateScript"],
   "react/install-tabs/index.ts": ["InstallTabs"],
@@ -79,6 +87,7 @@ const types: Record<string, string[]> = {
     "RewriteLink",
     "SpyTocOptions",
   ],
+  "gif/index.ts": ["GifTheme", "GifThemeMeta", "InlineGifKind", "PickGifOptions"],
   "human-gate/index.ts": [
     "DeferredCaptureOptions",
     "GatedEvent",
@@ -131,6 +140,7 @@ const types: Record<string, string[]> = {
     "UseConsentResult",
   ],
   "react/copy/index.ts": ["CopyButtonProps", "CopyCommandProps", "UseCopyOptions", "UseCopyResult"],
+  "react/gif/index.ts": ["GifLoadState", "GifProps", "GifReducedBehavior"],
   "react/install-tabs/index.ts": ["InstallOption", "InstallTabsLabels", "InstallTabsProps"],
   "react/playback/index.ts": [
     "PlaybackRef",

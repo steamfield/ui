@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createConsentStore } from "@steamfield/ui/consent";
 import { copyText } from "@steamfield/ui/copy";
+import { pickGif, pickInlineGif } from "@steamfield/ui/gif";
 import { isLibraryError, LibraryError } from "@steamfield/ui/script";
 
 function check(condition, message) {
@@ -12,6 +13,19 @@ function check(condition, message) {
 
 check(isLibraryError(new LibraryError("invalid_option")), "LibraryError round trip");
 check((await copyText("x")) === false, "copyText without a DOM");
+check(pickGif("network-error", { seed: "js" }).endsWith(".mp4"), "pickGif");
+check(pickInlineGif("network").endsWith(".mp4"), "pickInlineGif");
+for (const [fn, field] of [
+  [() => pickGif("bogus"), "theme"],
+  [() => pickInlineGif("bogus"), "kind"],
+]) {
+  try {
+    fn();
+    check(false, `gif ${field} should throw`);
+  } catch (error) {
+    check(isLibraryError(error) && error.field === field, `gif ${field}`);
+  }
+}
 // A misspelled or mistyped option fails loudly instead of being ignored.
 for (const [options, field] of [
   [{ cookiename: "x" }, "cookiename"],

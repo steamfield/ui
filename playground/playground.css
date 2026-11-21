@@ -8,6 +8,7 @@
 @import "@steamfield/ui/reveal/styles.css";
 @import "@steamfield/ui/markdown/styles.css";
 @import "@steamfield/ui/consent/styles.css";
+@import "@steamfield/ui/gif/styles.css";
 
 @layer playground {
   :root {

@@ -12,6 +12,17 @@ import {
 import { type CopyEventDetail, copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath } from "@steamfield/ui/docs";
 import {
+  GIF_COLLECTIONS,
+  GIF_THEME_META,
+  type GifTheme,
+  type GifThemeMeta,
+  INLINE_ERROR_GIFS,
+  type InlineGifKind,
+  type PickGifOptions,
+  pickGif,
+  pickInlineGif,
+} from "@steamfield/ui/gif";
+import {
   createHumanGate,
   type GatedEvent,
   HUMAN_SIGNALS,
@@ -37,6 +48,12 @@ import {
   useConsent,
 } from "@steamfield/ui/react/consent";
 import { CopyCommand, type CopyCommandProps, useCopy } from "@steamfield/ui/react/copy";
+import {
+  Gif,
+  type GifLoadState,
+  type GifProps,
+  type GifReducedBehavior,
+} from "@steamfield/ui/react/gif";
 import { type InstallOption, InstallTabs } from "@steamfield/ui/react/install-tabs";
 import { type PlaybackRef, useCountUp, usePlayback } from "@steamfield/ui/react/playback";
 import { Tab, TabList, TabPanel, Tabs } from "@steamfield/ui/react/tabs";
@@ -400,3 +417,26 @@ const docs = createDocs(docsConfig);
 check(docs.llmsIndex([], "https://example.com").includes("Start with the quickstart."), "intro");
 check(typeof docs.llmsFull([], "https://example.com") === "string", "docs llmsFull");
 check(docPath("intro", "always").endsWith("/"), "docPath trailing slash");
+
+// gif + react/gif
+const gifTheme: GifTheme = "network-error";
+const gifMeta: GifThemeMeta = GIF_THEME_META[gifTheme];
+const gifOpts: PickGifOptions = { seed: "consumer" };
+const gifSrc = pickGif(gifTheme, gifOpts);
+const inlineKind: InlineGifKind = "timeout";
+check(
+  GIF_COLLECTIONS[gifTheme].includes(gifSrc) &&
+    gifMeta.filename.endsWith(".mp4") &&
+    pickInlineGif(inlineKind) === INLINE_ERROR_GIFS[inlineKind],
+  "gif catalog selection",
+);
+const reducedBehavior: GifReducedBehavior = "fallback";
+const loadStates: GifLoadState[] = [];
+const gifProps: GifProps = {
+  src: gifSrc,
+  reducedBehavior,
+  label: "Offline preview",
+  onLoadStateChange: (s) => loadStates.push(s),
+};
+const gifHtml = renderToStaticMarkup(createElement(Gif, gifProps));
+check(gifHtml.includes('data-part="gif"') && gifHtml.includes("Offline preview"), "Gif SSR");

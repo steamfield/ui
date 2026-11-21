@@ -1127,6 +1127,28 @@ The finished transcript with no playback, controls or composer, in the same part
 
 The same as React: the server render and the render before mount are `finalState(finalPolicy)` (the view at 0ms with `beforeStart: "start"`), controls show only once mounted, and reduced motion shows the final transcript. Click mode renders `stateAt` the given position on the server too.
 
+## Gif (`@steamfield/ui/gif` & `@steamfield/ui/react/gif`)
+
+A playback-gated, reduced-motion-aware video-as-GIF component (`<Gif />`) and a tree-shakeable curated catalog of contextual error and status MP4 clips (`GIF_COLLECTIONS`, `INLINE_ERROR_GIFS`, `GIF_THEME_META`, `pickGif`, `pickInlineGif`).
+
+```tsx
+import { pickGif } from "@steamfield/ui/gif";
+import { Gif } from "@steamfield/ui/react/gif";
+import "@steamfield/ui/gif/styles.css";
+
+<Gif
+  src={pickGif("network-error", { seed: "host-offline" })}
+  fallback={<span>Offline</span>}
+  className="h-28 w-44"
+/>;
+```
+
+- **Subpaths**:
+  - `@steamfield/ui/gif` (no peers): `GIF_COLLECTIONS`, `INLINE_ERROR_GIFS`, `GIF_THEME_META`, `pickGif(theme, { seed?, collections? })`, `pickInlineGif(kind)`.
+  - `@steamfield/ui/react/gif` (`react` peer): `Gif` (`src`, `poster`, `fallback`, `reducedBehavior` (`"pause" | "fallback"`), `motion`, `rootMargin`, `active`, `restartOnActive`, `label`, `onDurationChange`, `onLoadStateChange`, `className`, `videoClassName`, `style`). Automatically renders `<video>` for `.mp4`/`.webm` and `<img>` for `.webp`/`.gif`. Importing `<Gif />` alone does not bundle `GIF_COLLECTIONS`.
+  - `@steamfield/ui/gif/styles.css`: optional zero-specificity defaults inside `@layer sf` (`--sf-gif-radius`, `--sf-gif-bg`, `--sf-radius`, `--sf-surface`; parts `gif`, `gif-video`, `gif-image`, `gif-fallback`).
+- **Accessibility & Offline**: Decorative (`aria-hidden="true"`) unless `label` is passed (`role="img"` + `aria-label`). Pauses automatically when out of view, when the tab hides, when `active={false}`, or when reduced motion is active (`reducedBehavior="pause"` or `"fallback"`). Swaps cleanly to `fallback` when offline or when media fails to load.
+
 ## Errors
 
 The package throws one error on purpose, `LibraryError`, from `@steamfield/ui/script`. `error.code` is a `LibraryErrorCode` and `error.field` names the argument or option at fault, never its value. Anything else escaping a call is a bug.

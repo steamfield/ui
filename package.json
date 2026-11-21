@@ -23,6 +23,11 @@
       "types": "./dist/docs/index.d.ts",
       "default": "./dist/docs/index.js"
     },
+    "./gif": {
+      "types": "./dist/gif/index.d.ts",
+      "default": "./dist/gif/index.js"
+    },
+    "./gif/styles.css": "./dist/gif/styles.css",
     "./human-gate": {
       "types": "./dist/human-gate/index.d.ts",
       "default": "./dist/human-gate/index.js"
@@ -47,6 +52,10 @@
     "./react/copy": {
       "types": "./dist/react/copy/index.d.ts",
       "default": "./dist/react/copy/index.js"
+    },
+    "./react/gif": {
+      "types": "./dist/react/gif/index.d.ts",
+      "default": "./dist/react/gif/index.js"
     },
     "./react/install-tabs": {
       "types": "./dist/react/install-tabs/index.d.ts",

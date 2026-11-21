@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { AgentDemoPage } from "./pages/agent-demo.tsx";
 import { ConsentPage } from "./pages/consent.tsx";
 import { CopyPage } from "./pages/copy.tsx";
+import { GifPage } from "./pages/gif.tsx";
 import { InstallTabsPage } from "./pages/install-tabs.tsx";
 import { MarkdownPage } from "./pages/markdown.tsx";
 import { PlaybackPage } from "./pages/playback.tsx";
@@ -26,6 +27,7 @@ const pages: Record<Route, () => ReactElement> = {
   playback: PlaybackPage,
   markdown: MarkdownPage,
   consent: ConsentPage,
+  gif: GifPage,
 };
 
 function current(): Route {

@@ -60,6 +60,12 @@
     "limit": "1.6 kB"
   },
   {
+    "name": "gif",
+    "path": "dist/gif/index.js",
+    "import": "{ GIF_COLLECTIONS, INLINE_ERROR_GIFS, pickGif, pickInlineGif }",
+    "limit": "2.5 kB"
+  },
+  {
     "name": "markdown",
     "path": "dist/markdown/index.js",
     "import": "{ createHastPlugins, createShikiConfig }",
@@ -79,6 +85,13 @@
     "import": "{ CopyCommand, useCopy }",
     "ignore": ["react", "react-dom"],
     "limit": "1.35 kB"
+  },
+  {
+    "name": "react/gif",
+    "path": "dist/react/gif/index.js",
+    "import": "{ Gif }",
+    "ignore": ["react", "react-dom"],
+    "limit": "3.5 kB"
   },
   {
     "name": "react/playback",

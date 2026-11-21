@@ -1,0 +1,28 @@
+/* @steamfield/ui/gif/styles.css: optional zero-specificity defaults for <Gif />.
+   Layered inside @layer sf and :where(), so consumer utilities always win when @layer sf is
+   ordered before them. Tokens: --sf-gif-radius, --sf-gif-bg, --sf-gif-border, --sf-radius,
+   --sf-surface, --sf-border. */
+@layer sf {
+  :where([data-part="gif"]) {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--sf-gif-radius, var(--sf-radius, 0.75rem));
+    background: var(--sf-gif-bg, var(--sf-surface, transparent));
+  }
+
+  :where([data-part="gif-video"]),
+  :where([data-part="gif-image"]) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  :where([data-part="gif-fallback"]) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+}

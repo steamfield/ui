@@ -6,6 +6,13 @@
 import { createConsentStore, mountConsentBanner } from "@steamfield/ui/consent";
 import { copyText, enhanceCopyButtons } from "@steamfield/ui/copy";
 import { createDocs, type DocsConfig, docPath, spyToc } from "@steamfield/ui/docs";
+import {
+  GIF_COLLECTIONS,
+  GIF_THEME_META,
+  INLINE_ERROR_GIFS,
+  pickGif,
+  pickInlineGif,
+} from "@steamfield/ui/gif";
 import { createHumanGate, humanGate } from "@steamfield/ui/human-gate";
 import { createPlaybackGate } from "@steamfield/ui/playback";
 import { initReveal, motionTokens, revealGateHash, revealGateScript } from "@steamfield/ui/reveal";
@@ -71,6 +78,14 @@ const docsConfig: DocsConfig = {
 };
 check(createDocs(docsConfig).llmsIndex([], "https://example.com").includes("Acme"), "llmsIndex");
 check(docPath("intro", "always").endsWith("/"), "docPath");
+
+// gif
+check(
+  GIF_COLLECTIONS["network-error"].includes(pickGif("network-error", { seed: 0 })) &&
+    GIF_THEME_META["network-error"].filename.endsWith(".mp4") &&
+    pickInlineGif("server") === INLINE_ERROR_GIFS.server,
+  "gif",
+);
 
 // DOM controllers
 for (const controller of [enhanceCopyButtons, createTabs, initReveal, spyToc]) {
