@@ -54,6 +54,11 @@ const GIF_TRAFFIC_JAM = "https://i.giphy.com/ifxLK48cnyDDi/giphy.mp4";
 const GIF_EVERYTHING_IS_FINE = "https://i.giphy.com/z9AUvhAEiXOqA/giphy.mp4";
 const GIF_SERVER_ON_FIRE = "https://i.giphy.com/l4FGuhL4U2WSOXsmI/giphy.mp4";
 
+const GIF_PICARD_FAIL = "https://i.giphy.com/RKMm7X3HGKZMuoZlMF/giphy.mp4";
+const GIF_SAD_VINCE_MCMAHON = "https://i.giphy.com/rvxMJNyHAgwlW4YWpJ/giphy.mp4";
+const GIF_FRUSTRATED_MICHAEL_SCOTT = "https://i.giphy.com/7VHV66bRjGRSo/giphy.mp4";
+const GIF_DISAPPOINTED_CHRIS_FARLEY = "https://i.giphy.com/1JyWrrkCIUQyQ/giphy.mp4";
+
 /** Semantic state categories with curated MP4 clip collections. */
 export type GifTheme =
   | "not-found"
@@ -87,6 +92,8 @@ export const GIF_COLLECTIONS: Readonly<Record<GifTheme, readonly string[]>> =
       GIF_RON_BURGUNDY_NOOOO,
       GIF_OLD_MAN_DELETES_COMPUTER,
       GIF_CONFUSED_TRAVOLTA,
+      GIF_SAD_VINCE_MCMAHON,
+      GIF_DISAPPOINTED_CHRIS_FARLEY,
     ]),
     "server-error": /* @__PURE__ */ Object.freeze([
       GIF_TYPING_CAT,
@@ -98,6 +105,8 @@ export const GIF_COLLECTIONS: Readonly<Record<GifTheme, readonly string[]>> =
       GIF_GORDON_RAMSEY_FACEPALM,
       GIF_DARTH_VADER_NOOOO,
       GIF_BUDDY_THE_ELF_NOOO,
+      GIF_PICARD_FAIL,
+      GIF_FRUSTRATED_MICHAEL_SCOTT,
     ]),
     "dataset-error": /* @__PURE__ */ Object.freeze([
       GIF_KEVIN_SCOTT_NO_DEAR_GOD_NO,
@@ -106,18 +115,24 @@ export const GIF_COLLECTIONS: Readonly<Record<GifTheme, readonly string[]>> =
       GIF_CONFUSED_TRAVOLTA,
       GIF_FLAMING_ELMO,
       GIF_MAN_BANGING_KEYBOARD,
+      GIF_DISAPPOINTED_CHRIS_FARLEY,
     ]),
     "network-error": /* @__PURE__ */ Object.freeze([
       GIF_KEVIN_SCOTT_WE_TRIED_FAILED,
       GIF_BEAUTIFUL_OPSIES,
       GIF_WELL_DO_IT_LIVE,
       GIF_THROW_AWAY_COMPUTER,
+      GIF_PICARD_FAIL,
+      GIF_SAD_VINCE_MCMAHON,
+      GIF_DISAPPOINTED_CHRIS_FARLEY,
     ]),
     timeout: /* @__PURE__ */ Object.freeze([
       GIF_TRUMAN_SHOW_OOPS,
       GIF_TRAFFIC_JAM,
       GIF_KEVIN_SCOTT_WE_TRIED_FAILED,
       GIF_WHAT_ARE_YOU_GUNNA_DO,
+      GIF_SAD_VINCE_MCMAHON,
+      GIF_FRUSTRATED_MICHAEL_SCOTT,
     ]),
     "rate-limit": /* @__PURE__ */ Object.freeze([
       GIF_RATE_LIMIT_1,
@@ -141,6 +156,7 @@ export const GIF_COLLECTIONS: Readonly<Record<GifTheme, readonly string[]>> =
       GIF_EVERYTHING_IS_FINE,
       GIF_SERVER_ON_FIRE,
       GIF_THROW_AWAY_COMPUTER,
+      GIF_FRUSTRATED_MICHAEL_SCOTT,
     ]),
   });
 
