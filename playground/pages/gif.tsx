@@ -14,7 +14,7 @@ export function GifPage(): ReactElement {
         <Gif
           label="Offline graphic fallback"
           fallback={<span>Offline fallback content</span>}
-          style={{ width: 220, height: 140 }}
+          style={{ width: 220, maxWidth: "100%", height: 140 }}
         />
       </section>
       <section className="pg-section" aria-labelledby="gif-window">
@@ -25,13 +25,15 @@ export function GifPage(): ReactElement {
             motion="reduce"
             reducedBehavior="fallback"
             fallback={<span>Paused fallback ({GIF_THEME_META["network-error"].filename})</span>}
-            style={{ width: 280, height: 160 }}
+            style={{ width: 280, maxWidth: "100%", height: 160 }}
           />
         </DemoWindow>
       </section>
       <section className="pg-section" aria-labelledby="gif-inline">
         <h2 id="gif-inline">Inline catalog selection</h2>
-        <p data-testid="gif-inline-url">{inlineUrl}</p>
+        <p data-testid="gif-inline-url" style={{ overflowWrap: "anywhere" }}>
+          {inlineUrl}
+        </p>
       </section>
     </>
   );
